@@ -72,7 +72,7 @@ export class D1ClientAdapter {
 	async createClient(
 		client: Omit<OAuthClient, "created_at" | "updated_at">,
 	): Promise<OAuthClient> {
-		const now = Math.floor(Date.now() / 1000)
+		const now = Date.now()
 
 		try {
 			const result = await this.db
@@ -123,7 +123,7 @@ export class D1ClientAdapter {
 			Omit<OAuthClient, "client_id" | "created_at" | "updated_at">
 		>,
 	): Promise<OAuthClient | null> {
-		const now = Math.floor(Date.now() / 1000)
+		const now = Date.now()
 
 		try {
 			// Build update query dynamically

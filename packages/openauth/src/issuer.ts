@@ -774,6 +774,7 @@ export function issuer<
         mode: "access",
         type: value.type,
         properties: value.properties,
+        jti: crypto.randomUUID(),
         aud: value.clientID,
         iss: issuer(ctx),
         sub: value.subject,
@@ -1357,7 +1358,10 @@ export function issuer<
       })
 
       // Extract JTI from token for revocation check
-      const tokenId = crypto.randomUUID() // In production, this should come from the JWT's jti claim
+      const tokenId = result.payload.jti as string
+      if (!tokenId) {
+        return c.json({ active: false })
+      }
 
       // Check if token has been revoked
       const isRevoked = await revocationService.isAccessTokenRevoked(tokenId)
@@ -1496,7 +1500,11 @@ export function issuer<
       })
 
       // Extract JTI from token for revocation
-      const tokenId = crypto.randomUUID() // In production, this should come from the JWT's jti claim
+      const tokenId = result.payload.jti as string
+      if (!tokenId) {
+        // Token doesn't have JTI, can't revoke - but return success per RFC 7009
+        return c.json({})
+      }
 
       // Revoke the access token
       await revocationService.revokeAccessToken(tokenId)
