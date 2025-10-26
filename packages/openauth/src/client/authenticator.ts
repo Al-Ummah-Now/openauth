@@ -152,6 +152,8 @@ export class ClientAuthenticator {
 
 	/**
 	 * Update client secret
+	 *
+	 * Note: The updated_at timestamp is automatically updated by the adapter.
 	 */
 	async updateClientSecret(
 		clientId: string,

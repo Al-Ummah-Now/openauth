@@ -1372,7 +1372,9 @@ export function issuer<
       // Token is active
       return c.json({
         active: true,
-        scope: "openid profile", // Default scope
+        scope: Array.isArray(result.payload.scope)
+          ? result.payload.scope.join(" ")
+          : (result.payload.scope || ""), // Use scope from token, or empty string if missing
         client_id: result.payload.aud,
         username: result.payload.sub,
         token_type: "Bearer",

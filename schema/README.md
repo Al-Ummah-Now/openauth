@@ -155,7 +155,13 @@ npx wrangler d1 execute openauth-audit --command="SELECT * FROM token_usage WHER
 
 ```bash
 # Delete logs older than 90 days (example)
+
+# For Linux (GNU date):
 CUTOFF_TIMESTAMP=$(date -d '90 days ago' +%s)000
+
+# For macOS/BSD (BSD date):
+CUTOFF_TIMESTAMP=$(date -v-90d +%s)000
+
 npx wrangler d1 execute openauth-audit --command="DELETE FROM token_usage WHERE timestamp < $CUTOFF_TIMESTAMP"
 ```
 
