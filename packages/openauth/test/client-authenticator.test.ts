@@ -80,7 +80,7 @@ describe("ClientAuthenticator", () => {
   })
 
   describe("validateClient", () => {
-    test("returns true for valid credentials", async () => {
+    test("returns valid=true for valid confidential client credentials", async () => {
       const clientId = "test-client"
       const clientSecret = "my-secret"
 
@@ -98,13 +98,34 @@ describe("ClientAuthenticator", () => {
         created_at: Date.now(),
       })
 
-      const isValid = await authenticator.validateClient(clientId, clientSecret)
+      const result = await authenticator.validateClient(clientId, clientSecret)
 
-      expect(isValid).toBe(true)
+      expect(result.valid).toBe(true)
+      expect(result.isPublicClient).toBe(false)
       expect(getClientSpy).toHaveBeenCalledWith(clientId)
     })
 
-    test("returns false for invalid credentials", async () => {
+    test("returns valid=true for public client (no secret hash)", async () => {
+      const clientId = "public-client"
+
+      // Mock adapter to return public client (no client_secret_hash)
+      spyOn(adapter, "getClient").mockResolvedValue({
+        client_id: clientId,
+        client_secret_hash: null,
+        client_name: "Public Client",
+        redirect_uris: ["http://localhost:3000/callback"],
+        grant_types: ["authorization_code"],
+        scopes: ["openid"],
+        created_at: Date.now(),
+      })
+
+      const result = await authenticator.validateClient(clientId)
+
+      expect(result.valid).toBe(true)
+      expect(result.isPublicClient).toBe(true)
+    })
+
+    test("returns valid=false for invalid credentials", async () => {
       const clientId = "test-client"
       const clientSecret = "my-secret"
       const wrongSecret = "wrong-secret"
@@ -123,24 +144,50 @@ describe("ClientAuthenticator", () => {
         created_at: Date.now(),
       })
 
-      const isValid = await authenticator.validateClient(
+      const result = await authenticator.validateClient(
         clientId,
         wrongSecret,
       )
 
-      expect(isValid).toBe(false)
+      expect(result.valid).toBe(false)
+      expect(result.isPublicClient).toBe(false)
     })
 
-    test("returns false for non-existent client", async () => {
+    test("returns valid=false for confidential client without secret", async () => {
+      const clientId = "confidential-client"
+
+      // Create hash for the secret
+      const { hash } = await authenticator.hashSecret("secret")
+
+      // Mock adapter to return confidential client (has secret hash)
+      spyOn(adapter, "getClient").mockResolvedValue({
+        client_id: clientId,
+        client_secret_hash: hash,
+        client_name: "Confidential Client",
+        redirect_uris: ["http://localhost:3000/callback"],
+        grant_types: ["authorization_code"],
+        scopes: ["openid"],
+        created_at: Date.now(),
+      })
+
+      // No secret provided for confidential client
+      const result = await authenticator.validateClient(clientId)
+
+      expect(result.valid).toBe(false)
+      expect(result.isPublicClient).toBe(false)
+    })
+
+    test("returns valid=false for non-existent client", async () => {
       const clientId = "non-existent"
       const clientSecret = "any-secret"
 
       // Mock adapter to return null (client not found)
       spyOn(adapter, "getClient").mockResolvedValue(null)
 
-      const isValid = await authenticator.validateClient(clientId, clientSecret)
+      const result = await authenticator.validateClient(clientId, clientSecret)
 
-      expect(isValid).toBe(false)
+      expect(result.valid).toBe(false)
+      expect(result.isPublicClient).toBe(false)
     })
 
     test("performs timing-safe comparison (always hashes even if client not found)", async () => {
@@ -158,7 +205,7 @@ describe("ClientAuthenticator", () => {
       expect(hashSecretSpy).toHaveBeenCalledWith(clientSecret)
     })
 
-    test("returns false for malformed stored hash", async () => {
+    test("returns valid=false for malformed stored hash", async () => {
       const clientId = "test-client"
       const clientSecret = "my-secret"
 
@@ -173,14 +220,15 @@ describe("ClientAuthenticator", () => {
         created_at: Date.now(),
       })
 
-      const isValid = await authenticator.validateClient(clientId, clientSecret)
+      const result = await authenticator.validateClient(clientId, clientSecret)
 
-      expect(isValid).toBe(false)
+      expect(result.valid).toBe(false)
+      expect(result.isPublicClient).toBe(false)
     })
   })
 
   describe("authenticateClient", () => {
-    test("returns client for valid credentials", async () => {
+    test("returns client for valid confidential client credentials", async () => {
       const clientId = "test-client"
       const clientSecret = "my-secret"
       const { hash } = await authenticator.hashSecret(clientSecret)
@@ -197,12 +245,34 @@ describe("ClientAuthenticator", () => {
 
       spyOn(adapter, "getClient").mockResolvedValue(mockClient)
 
-      const client = await authenticator.authenticateClient(
+      const result = await authenticator.authenticateClient(
         clientId,
         clientSecret,
       )
 
-      expect(client).toEqual(mockClient)
+      expect(result.client).toEqual(mockClient)
+      expect(result.isPublicClient).toBe(false)
+    })
+
+    test("returns client for valid public client (no secret)", async () => {
+      const clientId = "public-client"
+
+      const mockClient: OAuthClient = {
+        client_id: clientId,
+        client_secret_hash: null,
+        client_name: "Public Client",
+        redirect_uris: ["http://localhost:3000/callback"],
+        grant_types: ["authorization_code"],
+        scopes: ["openid"],
+        created_at: Date.now(),
+      }
+
+      spyOn(adapter, "getClient").mockResolvedValue(mockClient)
+
+      const result = await authenticator.authenticateClient(clientId)
+
+      expect(result.client).toEqual(mockClient)
+      expect(result.isPublicClient).toBe(true)
     })
 
     test("returns null for invalid credentials", async () => {
@@ -221,12 +291,13 @@ describe("ClientAuthenticator", () => {
         created_at: Date.now(),
       })
 
-      const client = await authenticator.authenticateClient(
+      const result = await authenticator.authenticateClient(
         clientId,
         wrongSecret,
       )
 
-      expect(client).toBeNull()
+      expect(result.client).toBeNull()
+      expect(result.isPublicClient).toBe(false)
     })
   })
 

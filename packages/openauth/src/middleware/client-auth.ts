@@ -149,7 +149,8 @@ export function clientAuth(options: ClientAuthMiddlewareOptions) {
 
       // Validate credentials if provided
       if (clientId && clientSecret) {
-        client = await authenticator.authenticateClient(clientId, clientSecret)
+        const authResult = await authenticator.authenticateClient(clientId, clientSecret)
+        client = authResult.client
         authenticated = client !== null
 
         if (!authenticated && !optional) {

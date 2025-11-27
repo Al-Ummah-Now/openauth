@@ -23,7 +23,11 @@ import { SQLValidator } from "../security/sql-validator.js"
 
 export interface OAuthClient {
   client_id: string
-  client_secret_hash: string
+  /**
+   * Hash of the client secret for confidential clients.
+   * NULL for public clients (SPAs, mobile apps) that cannot securely store secrets.
+   */
+  client_secret_hash: string | null
   client_name: string
   redirect_uris?: string[]
   grant_types?: string[]

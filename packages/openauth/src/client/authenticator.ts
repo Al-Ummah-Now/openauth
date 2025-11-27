@@ -89,25 +89,47 @@ export class ClientAuthenticator {
 
 	/**
 	 * Validate client credentials
+	 *
+	 * Supports two client types per OAuth 2.0 spec:
+	 * - Confidential clients: Have client_secret_hash, require secret validation
+	 * - Public clients: No client_secret_hash, authenticate by client_id only
 	 */
 	async validateClient(
 		clientId: string,
-		clientSecret: string,
-	): Promise<boolean> {
+		clientSecret?: string,
+	): Promise<{ valid: boolean; isPublicClient: boolean }> {
 		try {
 			// Get client from database
 			const client = await this.adapter.getClient(clientId)
 			if (!client) {
 				// Perform dummy hash to prevent timing attacks
-				await this.hashSecret(clientSecret)
-				return false
+				if (clientSecret) await this.hashSecret(clientSecret)
+				return { valid: false, isPublicClient: false }
+			}
+
+			// ============================================
+			// PATH 1: PUBLIC CLIENT (no secret hash stored)
+			// ============================================
+			// Public clients (SPAs, mobile apps) cannot securely store secrets.
+			// They authenticate by client_id only per RFC 7009.
+			if (!client.client_secret_hash) {
+				return { valid: true, isPublicClient: true }
+			}
+
+			// ============================================
+			// PATH 2: CONFIDENTIAL CLIENT (has secret hash)
+			// ============================================
+			// Confidential clients MUST provide a valid secret.
+			if (!clientSecret) {
+				// Confidential client but no secret provided
+				return { valid: false, isPublicClient: false }
 			}
 
 			// Extract salt and hash from stored value
 			const [storedSalt, storedHash] = client.client_secret_hash.split(":")
 			if (!storedSalt || !storedHash) {
 				console.error("Invalid stored hash format for client:", clientId)
-				return false
+				return { valid: false, isPublicClient: false }
 			}
 
 			// Hash the provided secret with the stored salt
@@ -119,24 +141,32 @@ export class ClientAuthenticator {
 			const [, computedHashOnly] = computedHash.split(":")
 
 			// Constant-time comparison
-			return this.constantTimeCompare(storedHash, computedHashOnly)
+			const valid = this.constantTimeCompare(storedHash, computedHashOnly)
+			return { valid, isPublicClient: false }
 		} catch (error) {
 			console.error("ClientAuthenticator: Error validating client:", error)
-			return false
+			return { valid: false, isPublicClient: false }
 		}
 	}
 
 	/**
 	 * Get client if credentials are valid
+	 *
+	 * Returns the client for:
+	 * - Public clients: When client_id exists (no secret needed)
+	 * - Confidential clients: When client_id + client_secret are valid
 	 */
 	async authenticateClient(
 		clientId: string,
-		clientSecret: string,
-	): Promise<OAuthClient | null> {
-		const isValid = await this.validateClient(clientId, clientSecret)
-		if (!isValid) return null
+		clientSecret?: string,
+	): Promise<{ client: OAuthClient | null; isPublicClient: boolean }> {
+		const result = await this.validateClient(clientId, clientSecret)
+		if (!result.valid) {
+			return { client: null, isPublicClient: false }
+		}
 
-		return this.adapter.getClient(clientId)
+		const client = await this.adapter.getClient(clientId)
+		return { client, isPublicClient: result.isPublicClient }
 	}
 
 	/**

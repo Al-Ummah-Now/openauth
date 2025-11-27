@@ -1339,14 +1339,15 @@ export function issuer<
       clientSecret = form.get("client_secret")?.toString()
     }
 
-    if (!clientId || !clientSecret) {
+    // Only client_id is required - client_secret is optional for public clients
+    if (!clientId) {
       return {
         error: c.json(
           {
             error: "invalid_request",
-            error_description: "Client authentication required",
+            error_description: "Missing client_id parameter",
           },
-          401,
+          400,
         ),
       }
     }
@@ -1421,11 +1422,13 @@ export function issuer<
     }
 
     // Authenticate the client
-    const client = await clientAuthenticator.authenticateClient(
+    // Note: Token introspection typically requires confidential clients (with secrets)
+    // since it's used by resource servers to validate tokens
+    const authResult = await clientAuthenticator.authenticateClient(
       credentials.clientId!,
-      credentials.clientSecret!,
+      credentials.clientSecret,
     )
-    if (!client) {
+    if (!authResult.client) {
       return c.json(
         {
           error: "invalid_client",
@@ -1434,6 +1437,7 @@ export function issuer<
         401,
       )
     }
+    const client = authResult.client
 
     // Apply rate limiting (60 requests per minute per client)
     const allowed = await checkRateLimit(
@@ -1550,20 +1554,40 @@ export function issuer<
       return credentials.error
     }
 
-    // Authenticate the client
-    const client = await clientAuthenticator.authenticateClient(
+    // ============================================
+    // CLIENT AUTHENTICATION (Public vs Confidential)
+    // ============================================
+    // RFC 7009: "A client's request must contain a valid client_id,
+    // in the case of a public client, or valid client credentials,
+    // in the case of a confidential client."
+
+    const authResult = await clientAuthenticator.authenticateClient(
       credentials.clientId!,
-      credentials.clientSecret!,
+      credentials.clientSecret,  // May be undefined for public clients
     )
-    if (!client) {
+
+    if (!authResult.client) {
       return c.json(
         {
           error: "invalid_client",
-          error_description: "Client authentication failed",
+          error_description: authResult.isPublicClient
+            ? "Unknown client"
+            : "Client authentication failed",
         },
         401,
       )
     }
+
+    // Log which authentication path was used
+    if (authResult.isPublicClient) {
+      // PUBLIC CLIENT PATH: Authenticated by client_id only
+      console.debug(`Token revocation: Public client ${credentials.clientId}`)
+    } else {
+      // CONFIDENTIAL CLIENT PATH: Authenticated with client_secret
+      console.debug(`Token revocation: Confidential client ${credentials.clientId}`)
+    }
+
+    const client = authResult.client
 
     // Apply rate limiting (60 requests per minute per client)
     const allowed = await checkRateLimit(credentials.clientId!, "token_revoke")
@@ -1609,6 +1633,14 @@ export function issuer<
       }>(token, () => signingKey().then((item) => item.public), {
         issuer: issuer(c),
       })
+
+      // SECURITY: Verify token belongs to requesting client
+      // This prevents clients from revoking other clients' tokens
+      if (result.payload.aud !== credentials.clientId) {
+        // Per RFC 7009: Return success even for tokens we can't/won't revoke
+        // to prevent information disclosure about token ownership
+        return c.json({})
+      }
 
       // Extract JTI from token for revocation
       const tokenId = result.payload.jti as string
