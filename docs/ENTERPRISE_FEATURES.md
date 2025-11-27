@@ -31,21 +31,29 @@ All features are **opt-in** and fully backward compatible with existing deployme
 
 ### Overview
 
-OAuth 2.0 supports confidential clients that can securely store credentials. The D1 Client Adapter provides secure storage for client credentials with industry-standard PBKDF2 password hashing.
+OAuth 2.0 defines two client types:
+
+| Client Type | Description | Examples | Secret Storage |
+|-------------|-------------|----------|----------------|
+| **Confidential** | Can securely store secrets | Backend servers, secure services | `client_secret_hash` is set |
+| **Public** | Cannot securely store secrets | SPAs, mobile apps, CLI tools | `client_secret_hash` is NULL |
+
+The D1 Client Adapter provides secure storage for both client types with industry-standard PBKDF2 password hashing for confidential clients.
 
 ### Key Features
 
 - **PBKDF2 hashing** with SHA-256 (100,000 iterations, 64-byte keys)
 - **Constant-time comparison** to prevent timing attacks
 - **D1 database storage** for client metadata
-- **Client authentication** via Basic Auth or form-based credentials
+- **Public client support** with `client_secret_hash = NULL`
+- **Client authentication** via Basic Auth, form-based credentials, or client_id only (public)
 
 ### Database Schema
 
 ```sql
 CREATE TABLE IF NOT EXISTS oauth_clients (
   client_id TEXT PRIMARY KEY,
-  client_secret_hash TEXT NOT NULL,
+  client_secret_hash TEXT,        -- NULL for public clients
   client_name TEXT NOT NULL,
   redirect_uris TEXT, -- JSON array
   grant_types TEXT,   -- JSON array
@@ -69,6 +77,8 @@ const app = issuer({
 
 ### Creating Clients
 
+#### Confidential Client (with secret)
+
 ```ts
 import { D1ClientAdapter } from "@openauthjs/openauth/client/d1-adapter"
 import { ClientAuthenticator } from "@openauthjs/openauth/client/authenticator"
@@ -76,24 +86,61 @@ import { ClientAuthenticator } from "@openauthjs/openauth/client/authenticator"
 const adapter = new D1ClientAdapter({ database: env.AUTH_DB })
 const authenticator = new ClientAuthenticator({ adapter })
 
-// Create a new client
+// Create a confidential client (backend service)
 await authenticator.createClient(
-  "my-app-client",
+  "my-backend-service",
   "super-secret-key",
-  "My Application",
+  "Backend Service",
   {
-    redirect_uris: ["https://app.example.com/callback"],
-    grant_types: ["authorization_code", "refresh_token"],
+    redirect_uris: ["https://api.example.com/callback"],
+    grant_types: ["authorization_code", "refresh_token", "client_credentials"],
     scopes: ["openid", "profile", "email"],
   },
 )
 ```
 
+#### Public Client (no secret)
+
+```sql
+-- Create a public client directly in D1 (no secret hash)
+INSERT INTO oauth_clients (
+  client_id,
+  client_secret_hash,  -- NULL for public clients
+  client_name,
+  redirect_uris,
+  grant_types,
+  scopes,
+  created_at
+) VALUES (
+  'my-spa-app',
+  NULL,
+  'My SPA Application',
+  '["https://app.example.com/callback", "http://localhost:3000/callback"]',
+  '["authorization_code", "refresh_token"]',
+  '["openid", "profile"]',
+  unixepoch() * 1000
+);
+```
+
+Or via the adapter:
+
+```ts
+// Create a public client programmatically
+await adapter.createClient({
+  client_id: "my-mobile-app",
+  client_secret_hash: null,  // Public client
+  client_name: "My Mobile App",
+  redirect_uris: ["myapp://callback"],
+  grant_types: ["authorization_code", "refresh_token"],
+  scopes: ["openid", "profile"],
+})
+```
+
 ### Client Authentication
 
-Clients can authenticate using either:
+Authentication method depends on client type:
 
-#### Basic Authentication (Recommended)
+#### Confidential Client: Basic Authentication (Recommended)
 
 ```ts
 const credentials = btoa("client_id:client_secret")
@@ -109,7 +156,7 @@ fetch("https://auth.example.com/token/introspect", {
 })
 ```
 
-#### Form-based Authentication
+#### Confidential Client: Form-based Authentication
 
 ```ts
 fetch("https://auth.example.com/token/introspect", {
@@ -124,6 +171,32 @@ fetch("https://auth.example.com/token/introspect", {
   }),
 })
 ```
+
+#### Public Client: client_id Only
+
+```ts
+// Public clients authenticate with just client_id (no secret)
+fetch("https://auth.example.com/token/revoke", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/x-www-form-urlencoded",
+  },
+  body: new URLSearchParams({
+    token: accessToken,
+    client_id: "my-spa-app",  // No client_secret needed
+    token_type_hint: "access_token",
+  }),
+})
+```
+
+### Authentication Summary
+
+| Client Type | Introspection | Revocation |
+|-------------|---------------|------------|
+| **Confidential** | Basic Auth or Form (id+secret) | Basic Auth or Form (id+secret) |
+| **Public** | Not supported (use JWT validation) | Form with client_id only |
+
+> **Note**: Public clients cannot use token introspection because they cannot securely authenticate. They should validate JWTs locally instead. However, public clients CAN revoke their own tokens using just `client_id`.
 
 ## Token Introspection (RFC 7662)
 
@@ -239,12 +312,25 @@ Token revocation allows clients to notify the authorization server that a token 
 POST /token/revoke
 ```
 
+### Client Types
+
+OAuth 2.0 defines two client types with different authentication requirements:
+
+| Client Type | Description | Authentication |
+|-------------|-------------|----------------|
+| **Confidential** | Server-side apps that can securely store secrets | `client_id` + `client_secret` |
+| **Public** | SPAs, mobile apps that cannot store secrets securely | `client_id` only |
+
 ### Requirements
 
-- Client authentication (Basic Auth or form-based)
+- `client_id` is always required
+- `client_secret` is required only for confidential clients
 - `clientDb` configuration must be provided
+- Token must belong to the requesting client (ownership verification)
 
 ### Request Format
+
+#### Confidential Client (with secret)
 
 ```http
 POST /token/revoke HTTP/1.1
@@ -254,6 +340,18 @@ Authorization: Basic Y2xpZW50X2lkOmNsaWVudF9zZWNyZXQ=
 
 token=user:abc123:refresh-token-uuid
 &token_type_hint=refresh_token
+```
+
+#### Public Client (no secret)
+
+```http
+POST /token/revoke HTTP/1.1
+Host: auth.example.com
+Content-Type: application/x-www-form-urlencoded
+
+token=eyJhbGciOiJSUzI1NiIs...
+&client_id=my-spa-app
+&token_type_hint=access_token
 ```
 
 ### Response Format
@@ -293,7 +391,7 @@ await fetch("https://auth.example.com/token/revoke", {
 Access tokens (JWTs) are added to a revocation list with TTL matching the token expiration:
 
 ```ts
-// Revoke an access token
+// Revoke an access token (confidential client)
 await fetch("https://auth.example.com/token/revoke", {
   method: "POST",
   headers: {
@@ -305,6 +403,111 @@ await fetch("https://auth.example.com/token/revoke", {
     token_type_hint: "access_token",
   }),
 })
+```
+
+### Public Client Examples
+
+#### JavaScript (SPA)
+
+```ts
+// Public client revocation helper
+async function revokeToken(token: string, type: "access_token" | "refresh_token" = "access_token") {
+  const response = await fetch("https://auth.example.com/token/revoke", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      token,
+      client_id: "my-spa-app",  // Required for public clients
+      token_type_hint: type,
+    }),
+  })
+
+  // RFC 7009: Always returns 200 OK
+  return response.ok
+}
+
+// Usage
+await revokeToken(accessToken, "access_token")
+await revokeToken(refreshToken, "refresh_token")
+```
+
+#### React Native / Mobile
+
+```ts
+// Mobile app logout with token revocation
+async function logout() {
+  const accessToken = await SecureStore.getItemAsync("access_token")
+  const refreshToken = await SecureStore.getItemAsync("refresh_token")
+
+  // Revoke both tokens
+  await Promise.all([
+    fetch("https://auth.example.com/token/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        token: accessToken,
+        client_id: "my-mobile-app",
+        token_type_hint: "access_token",
+      }),
+    }),
+    fetch("https://auth.example.com/token/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        token: refreshToken,
+        client_id: "my-mobile-app",
+        token_type_hint: "refresh_token",
+      }),
+    }),
+  ])
+
+  // Clear local storage
+  await SecureStore.deleteItemAsync("access_token")
+  await SecureStore.deleteItemAsync("refresh_token")
+}
+```
+
+#### Complete Auth Client for Public Apps
+
+```ts
+// auth-client.ts - Reusable auth client for SPAs/mobile apps
+class AuthClient {
+  constructor(
+    private issuer: string,
+    private clientId: string,
+  ) {}
+
+  async revokeToken(token: string, type: "access_token" | "refresh_token") {
+    await fetch(`${this.issuer}/token/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        token,
+        client_id: this.clientId,
+        token_type_hint: type,
+      }),
+    })
+  }
+
+  async logout(accessToken?: string, refreshToken?: string) {
+    const revocations = []
+
+    if (accessToken) {
+      revocations.push(this.revokeToken(accessToken, "access_token"))
+    }
+    if (refreshToken) {
+      revocations.push(this.revokeToken(refreshToken, "refresh_token"))
+    }
+
+    await Promise.all(revocations)
+  }
+}
+
+// Usage
+const auth = new AuthClient("https://auth.example.com", "my-spa-app")
+await auth.logout(accessToken, refreshToken)
 ```
 
 ### Revocation Strategy
