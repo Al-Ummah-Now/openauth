@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `TwitchProvider`.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -18,15 +23,18 @@ export default issuer({
   providers: {
     twitch: TwitchProvider({
       clientID: "1234567890",
-      clientSecret: "0987654321"
-    })
-  }
+      clientSecret: "0987654321",
+    }),
+  },
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### TwitchProvider
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -69,11 +77,13 @@ TwitchProvider({
 The client ID.
 
 This is just a string to identify your app.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="twitchconfig.clientsecret" Tag="h4" parent="TwitchConfig.">clientSecret</NestedTitle>
 <Segment>
@@ -85,11 +95,13 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
+
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
+
 </Segment>
 <NestedTitle id="twitchconfig.pkce" Tag="h4" parent="TwitchConfig.">pkce?</NestedTitle>
 <Segment>

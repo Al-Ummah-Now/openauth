@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `KeycloakProvider`.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -20,15 +25,18 @@ export default issuer({
       baseUrl: "https://your-keycloak-domain",
       realm: "your-realm",
       clientID: "1234567890",
-      clientSecret: "0987654321"
-    })
-  }
+      clientSecret: "0987654321",
+    }),
+  },
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### KeycloakProvider
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -89,11 +97,13 @@ The base URL of the Keycloak server.
 The client ID.
 
 This is just a string to identify your app.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="keycloakconfig.clientsecret" Tag="h4" parent="KeycloakConfig.">clientSecret</NestedTitle>
 <Segment>
@@ -105,11 +115,13 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
+
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
+
 </Segment>
 <NestedTitle id="keycloakconfig.pkce" Tag="h4" parent="KeycloakConfig.">pkce?</NestedTitle>
 <Segment>
@@ -153,11 +165,13 @@ The realm in the Keycloak server to authenticate against.
 
 A realm in Keycloak is like a tenant or namespace that manages a set of
 users, credentials, roles, and groups.
+
 ```ts
 {
   realm: "your-realm"
 }
 ```
+
 </Segment>
 <NestedTitle id="keycloakconfig.scopes" Tag="h4" parent="KeycloakConfig.">scopes</NestedTitle>
 <Segment>

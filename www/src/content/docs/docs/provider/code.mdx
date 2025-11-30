@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `CodeProvider`.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -21,11 +26,11 @@ export default issuer({
     code: CodeProvider(
       CodeUI({
         copy: {
-          code_info: "We'll send a pin code to your email"
+          code_info: "We'll send a pin code to your email",
         },
-        sendCode: (claims, code) => console.log(claims.email, code)
-      })
-    )
+        sendCode: (claims, code) => console.log(claims.email, code),
+      }),
+    ),
   },
   // ...
 })
@@ -40,9 +45,7 @@ const ui = CodeUI({
 
 export default issuer({
   providers: {
-    code: CodeProvider(
-      { ...ui, length: 4 }
-    )
+    code: CodeProvider({ ...ui, length: 4 }),
   },
   // ...
 })
@@ -54,15 +57,18 @@ that generate the UI for the following.
 ```ts
 CodeProvider({
   // ...
-  request: (req, state, form, error) => Promise<Response>
+  request: (req, state, form, error) => Promise<Response>,
 })
 ```
 
 This allows you to create your own UI.
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### CodeProvider
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -115,6 +121,7 @@ Also passes in the current `state` of the flow and any `error` that occurred.
 
 Expects the [`Response`](https://developer.mozilla.org/en-US/docs/Web/API/Response) object
 in return.
+
 </Segment>
 <NestedTitle id="codeproviderconfig.sendcode" Tag="h4" parent="CodeProviderConfig.">sendCode</NestedTitle>
 <Segment>
@@ -141,10 +148,11 @@ Callback to send the pin code to the user.
 </Section>
 The errors that can happen on the code flow.
 
-| Error | Description |
-| ----- | ----------- |
-| `invalid_code` | The code is invalid. |
+| Error           | Description                                     |
+| --------------- | ----------------------------------------------- |
+| `invalid_code`  | The code is invalid.                            |
 | `invalid_claim` | The _claim_, email or phone number, is invalid. |
+
 </Segment>
 ## CodeProviderState
 <Segment>
@@ -155,9 +163,10 @@ The errors that can happen on the code flow.
 </Section>
 The state of the code flow.
 
-| State | Description |
-| ----- | ----------- |
+| State   | Description                                                                       |
+| ------- | --------------------------------------------------------------------------------- |
 | `start` | The user is asked to enter their email address or phone number to start the flow. |
-| `code` | The user needs to enter the pin code to verify their _claim_. |
+| `code`  | The user needs to enter the pin code to verify their _claim_.                     |
+
 </Segment>
 </div>

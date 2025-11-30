@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `SlackProvider`.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -20,15 +25,18 @@ export default issuer({
       team: "T1234567890",
       clientID: "1234567890",
       clientSecret: "0987654321",
-      scopes: ["openid", "email", "profile"]
-    })
-  }
+      scopes: ["openid", "email", "profile"],
+    }),
+  },
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### SlackProvider
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -74,11 +82,13 @@ SlackProvider({
 The client ID.
 
 This is just a string to identify your app.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="slackconfig.clientsecret" Tag="h4" parent="SlackConfig.">clientSecret</NestedTitle>
 <Segment>
@@ -90,11 +100,13 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
+
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
+
 </Segment>
 <NestedTitle id="slackconfig.pkce" Tag="h4" parent="SlackConfig.">pkce?</NestedTitle>
 <Segment>
@@ -136,11 +148,12 @@ Any additional parameters that you want to pass to the authorization endpoint.
 </Section>
 The scopes to request from the user.
 
-| Scope | Description |
-|-|-|
-| `email` | Grants permission to access the user's email address. |
-| `profile` | Grants permission to access the user's profile information. |
-| `openid` | Grants permission to use OpenID Connect to verify the user's identity. |
+| Scope     | Description                                                            |
+| --------- | ---------------------------------------------------------------------- |
+| `email`   | Grants permission to access the user's email address.                  |
+| `profile` | Grants permission to access the user's profile information.            |
+| `openid`  | Grants permission to use OpenID Connect to verify the user's identity. |
+
 </Segment>
 <NestedTitle id="slackconfig.team" Tag="h4" parent="SlackConfig.">team</NestedTitle>
 <Segment>
@@ -153,5 +166,6 @@ The workspace the user is intending to authenticate.
 
 If that workspace has been previously authenticated, the user will be signed in directly,
 bypassing the consent screen.
+
 </Segment>
 </div>

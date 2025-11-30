@@ -71,7 +71,7 @@ export default issuer({
   success: async (ctx, value) => {
     if (value.provider === "code") {
       return ctx.subject("user", {
-        id: await getUser(value.claims.email)
+        id: await getUser(value.claims.email),
       })
     }
     throw new Error("Invalid provider")
@@ -210,7 +210,10 @@ export async function login() {
   const headers = await getHeaders()
   const host = headers.get("host")
   const protocol = host?.includes("localhost") ? "http" : "https"
-  const { url } = await client.authorize(`${protocol}://${host}/api/callback`, "code")
+  const { url } = await client.authorize(
+    `${protocol}://${host}/api/callback`,
+    "code",
+  )
   redirect(url)
 }
 

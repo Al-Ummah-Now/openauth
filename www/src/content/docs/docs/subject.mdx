@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for creating subjects.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -19,8 +24,8 @@ import { object, string } from "valibot"
 
 const subjects = createSubjects({
   user: object({
-    userID: string()
-  })
+    userID: string(),
+  }),
 })
 ```
 
@@ -93,10 +98,13 @@ console.log(verified.subject.properties.userID)
 ```
 
 All this is typesafe based on the shape of the subjects you defined.
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### createSubjects
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -122,10 +130,10 @@ const subjects = createSubjects({
 })
 ```
 
-
 This is using [valibot](https://github.com/fabian-hiller/valibot) to define the shape of the
 subjects. You can use any validation library that's following the
 [standard-schema specification](https://github.com/standard-schema/standard-schema).
+
 </Segment>
 ## SubjectSchema
 <Segment>

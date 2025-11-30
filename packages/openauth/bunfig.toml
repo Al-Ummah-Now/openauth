@@ -1,2 +1,6 @@
+# JSX configuration for Hono
+jsx = "react-jsx"
+jsxImportSource = "hono/jsx"
+
 [test]
 root = "./test"

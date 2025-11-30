@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `Select` UI.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -19,20 +24,23 @@ export default issuer({
   select: Select({
     providers: {
       github: {
-        hide: true
+        hide: true,
       },
       google: {
-        display: "Google"
-      }
-    }
-  })
+        display: "Google",
+      },
+    },
+  }),
   // ...
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### Select
+
 <Segment>
 <Section type="signature">
 ```ts

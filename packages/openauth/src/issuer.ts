@@ -202,6 +202,11 @@ import { DynamoStorage } from "./storage/dynamo.js"
 import { MemoryStorage } from "./storage/memory.js"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
+import type { D1Database } from "@cloudflare/workers-types"
+import { D1ClientAdapter } from "./client/d1-adapter.js"
+import { ClientAuthenticator } from "./client/authenticator.js"
+import { AuditService, type TokenUsageEvent } from "./services/audit.js"
+import { RevocationService } from "./revocation.js"
 
 /** @internal */
 export const aws = awsHandle
@@ -436,6 +441,68 @@ export interface IssuerInput<
     },
     req: Request,
   ): Promise<boolean>
+  /**
+   * D1 database for client credentials (optional).
+   * If provided, enables client authentication for confidential clients.
+   *
+   * @example
+   * ```ts
+   * issuer({
+   *   clientDb: env.AUTH_DB,
+   *   // ... other config
+   * })
+   * ```
+   */
+  clientDb?: D1Database
+  /**
+   * Audit configuration for token usage logging (optional).
+   * Provides async, non-blocking audit logging to D1.
+   *
+   * @example
+   * ```ts
+   * issuer({
+   *   audit: {
+   *     service: new AuditService({ database: env.AUTH_DB }),
+   *     hooks: {
+   *       onTokenGenerated: true,
+   *       onTokenRefreshed: true,
+   *       onTokenRevoked: true,
+   *       onTokenReused: true
+   *     }
+   *   }
+   * })
+   * ```
+   */
+  audit?: {
+    service: AuditService
+    hooks?: {
+      onTokenGenerated?: boolean
+      onTokenRefreshed?: boolean
+      onTokenRevoked?: boolean
+      onTokenReused?: boolean
+    }
+  }
+  /**
+   * CORS configuration for cross-origin requests (optional).
+   * Applies globally to all endpoints.
+   *
+   * @example
+   * ```ts
+   * issuer({
+   *   cors: {
+   *     origins: env.ALLOWED_ORIGINS.split(','),
+   *     credentials: true
+   *   }
+   * })
+   * ```
+   */
+  cors?: {
+    origins: string[]
+    credentials?: boolean
+    methods?: string[]
+    headers?: string[]
+    maxAge?: number
+  }
 }
 
 /**
@@ -452,6 +519,14 @@ export function issuer<
     >
   }[keyof Providers],
 >(input: IssuerInput<Providers, Subjects, Result>) {
+  // Default TTL constants (in seconds)
+  const DEFAULT_ACCESS_TOKEN_TTL = 60 * 60 * 24 * 30 // 30 days
+  const DEFAULT_REFRESH_TOKEN_TTL = 60 * 60 * 24 * 365 // 1 year
+  const DEFAULT_REFRESH_REUSE_WINDOW = 60 // 60 seconds
+  const DEFAULT_REFRESH_RETENTION = 0 // No retention
+  const AUTHORIZATION_CODE_TTL = 60 // 60 seconds
+  const AUTHORIZATION_COOKIE_TTL = 60 * 60 * 24 // 24 hours
+
   const error =
     input.error ??
     function (err) {
@@ -462,10 +537,10 @@ export function issuer<
         },
       })
     }
-  const ttlAccess = input.ttl?.access ?? 60 * 60 * 24 * 30
-  const ttlRefresh = input.ttl?.refresh ?? 60 * 60 * 24 * 365
-  const ttlRefreshReuse = input.ttl?.reuse ?? 60
-  const ttlRefreshRetention = input.ttl?.retention ?? 0
+  const ttlAccess = input.ttl?.access ?? DEFAULT_ACCESS_TOKEN_TTL
+  const ttlRefresh = input.ttl?.refresh ?? DEFAULT_REFRESH_TOKEN_TTL
+  const ttlRefreshReuse = input.ttl?.reuse ?? DEFAULT_REFRESH_REUSE_WINDOW
+  const ttlRefreshRetention = input.ttl?.retention ?? DEFAULT_REFRESH_RETENTION
   if (input.theme) {
     setTheme(input.theme)
   }
@@ -510,6 +585,23 @@ export function issuer<
   const allEncryption = lazy(() => encryptionKeys(storage))
   const signingKey = lazy(() => allSigning().then((all) => all[0]))
   const encryptionKey = lazy(() => allEncryption().then((all) => all[0]))
+
+  // Initialize client authentication if clientDb is provided
+  let clientAuthenticator: ClientAuthenticator | undefined
+  if (input.clientDb) {
+    const clientAdapter = new D1ClientAdapter({
+      database: input.clientDb,
+    })
+    clientAuthenticator = new ClientAuthenticator({
+      adapter: clientAdapter,
+    })
+  }
+
+  // Initialize revocation service
+  const revocationService = new RevocationService({
+    storage,
+    revocationTTL: ttlAccess, // Match access token TTL
+  })
 
   const auth: Omit<ProviderOptions<any>, "name"> = {
     async success(ctx: Context, properties: any, successOpts) {
@@ -560,7 +652,7 @@ export function issuer<
                     refresh: subjectOpts?.ttl?.refresh ?? ttlRefresh,
                   },
                 },
-                60,
+                AUTHORIZATION_CODE_TTL,
               )
               const location = new URL(authorization.redirect_uri)
               location.searchParams.set("code", code)
@@ -669,8 +761,11 @@ export function issuer<
       /**
        * Generate and store the next refresh token after the one we are currently returning.
        * Reserving these in advance avoids concurrency issues with multiple refreshes.
-       * Similar treatment should be given to any other values that may have race conditions,
-       * for example if a jti claim was added to the access token.
+       *
+       * The access token includes a `jti` (JWT ID) claim which is used for token revocation tracking.
+       * This allows access tokens to be revoked before expiration via the /token/revoke endpoint (RFC 7009).
+       * The jti is stored in the revocation list when a token is explicitly revoked, and checked during
+       * token introspection to determine if the token is still active.
        */
       const refreshValue = {
         ...value,
@@ -685,11 +780,12 @@ export function issuer<
       )
     }
     const accessTimeUsed = Math.floor((value.timeUsed ?? Date.now()) / 1000)
-    return {
+    const tokens = {
       access: await new SignJWT({
         mode: "access",
         type: value.type,
         properties: value.properties,
+        jti: crypto.randomUUID(),
         aud: value.clientID,
         iss: issuer(ctx),
         sub: value.subject,
@@ -708,6 +804,19 @@ export function issuer<
       ),
       refresh: [value.subject, refreshToken].join(":"),
     }
+
+    // Fire audit event for token generation if configured
+    if (input.audit?.hooks?.onTokenGenerated) {
+      void input.audit.service.logTokenUsage({
+        token_id: refreshToken,
+        subject: value.subject,
+        event_type: "generated",
+        client_id: value.clientID,
+        timestamp: Date.now(),
+      })
+    }
+
+    return tokens
   }
 
   async function decrypt(value: string) {
@@ -730,6 +839,26 @@ export function issuer<
       authorization: AuthorizationState
     }
   }>().use(logger())
+
+  // Apply global CORS if configured
+  if (input.cors) {
+    app.use(
+      "*",
+      cors({
+        origin: input.cors.origins,
+        credentials: input.cors.credentials ?? true,
+        allowMethods: input.cors.methods ?? [
+          "GET",
+          "POST",
+          "PUT",
+          "DELETE",
+          "OPTIONS",
+        ],
+        allowHeaders: input.cors.headers ?? ["Content-Type", "Authorization"],
+        maxAge: input.cors.maxAge,
+      }),
+    )
+  }
 
   for (const [name, value] of Object.entries(input.providers)) {
     const route = new Hono<any>()
@@ -782,6 +911,11 @@ export function issuer<
         token_endpoint: `${iss}/token`,
         jwks_uri: `${iss}/.well-known/jwks.json`,
         response_types_supported: ["code", "token"],
+        grant_types_supported: [
+          "authorization_code",
+          "refresh_token",
+          "client_credentials",
+        ],
       })
     },
   )
@@ -881,6 +1015,7 @@ export function issuer<
         await Storage.remove(storage, key)
         return c.json({
           access_token: tokens.access,
+          token_type: "bearer",
           expires_in: tokens.expiresIn,
           refresh_token: tokens.refresh,
         })
@@ -921,11 +1056,11 @@ export function issuer<
             400,
           )
         }
-        const generateRefreshToken = !payload.timeUsed
+        const generateRefreshToken = payload.timeUsed === undefined
         if (ttlRefreshReuse <= 0) {
           // no reuse interval, remove the refresh token immediately
           await Storage.remove(storage, key)
-        } else if (!payload.timeUsed) {
+        } else if (payload.timeUsed === undefined) {
           payload.timeUsed = Date.now()
           await Storage.set(
             storage,
@@ -936,6 +1071,18 @@ export function issuer<
         } else if (Date.now() > payload.timeUsed + ttlRefreshReuse * 1000) {
           // token was reused past the allowed interval
           await auth.invalidate(subject)
+
+          // Fire audit event for token reuse detection if configured
+          if (input.audit?.hooks?.onTokenReused) {
+            void input.audit.service.logTokenUsage({
+              token_id: token,
+              subject,
+              event_type: "reused",
+              client_id: payload.clientID,
+              timestamp: Date.now(),
+            })
+          }
+
           return c.json(
             {
               error: "invalid_grant",
@@ -947,8 +1094,21 @@ export function issuer<
         const tokens = await generateTokens(c, payload, {
           generateRefreshToken,
         })
+
+        // Fire audit event for token refresh if configured
+        if (input.audit?.hooks?.onTokenRefreshed) {
+          void input.audit.service.logTokenUsage({
+            token_id: token,
+            subject,
+            event_type: "refreshed",
+            client_id: payload.clientID,
+            timestamp: Date.now(),
+          })
+        }
+
         return c.json({
           access_token: tokens.access,
+          token_type: "bearer",
           refresh_token: tokens.refresh,
           expires_in: tokens.expiresIn,
         })
@@ -1061,7 +1221,7 @@ export function issuer<
       ))
     )
       throw new UnauthorizedClientError(client_id, redirect_uri)
-    await auth.set(c, "authorization", 60 * 60 * 24, authorization)
+    await auth.set(c, "authorization", AUTHORIZATION_COOKIE_TTL, authorization)
     if (provider) return c.redirect(`/${provider}/authorize`)
     const providers = Object.keys(input.providers)
     if (providers.length === 1) return c.redirect(`/${providers[0]}/authorize`)
@@ -1134,6 +1294,421 @@ export function issuer<
       error: "invalid_token",
       error_description: "Invalid token",
     })
+  })
+
+  /**
+   * Helper function to extract and validate client credentials from request.
+   * Supports both Authorization header (Basic auth) and form data.
+   *
+   * @param requireSecret - If true, requires client_secret (for introspection).
+   *                        If false, only requires client_id (for revocation with public clients).
+   */
+  function extractClientCredentials(
+    c: Context,
+    form: FormData,
+    requireSecret: boolean = true,
+  ): {
+    clientId?: string
+    clientSecret?: string
+    error?: Response
+  } {
+    const authHeader = c.req.header("Authorization")
+    let clientId: string | undefined
+    let clientSecret: string | undefined
+
+    if (authHeader) {
+      const [type, credentials] = authHeader.split(" ")
+      if (type === "Basic" && credentials) {
+        try {
+          const decoded = atob(credentials)
+          const colonIndex = decoded.indexOf(":")
+          if (colonIndex === -1) {
+            return {
+              error: c.json(
+                {
+                  error: "invalid_client",
+                  error_description: "Invalid client credentials format",
+                },
+                401,
+              ),
+            }
+          }
+          clientId = decoded.substring(0, colonIndex)
+          clientSecret = decoded.substring(colonIndex + 1)
+        } catch (error) {
+          console.error("Failed to decode Basic auth:", error)
+          return {
+            error: c.json(
+              {
+                error: "invalid_client",
+                error_description: "Invalid Authorization header encoding",
+              },
+              401,
+            ),
+          }
+        }
+      }
+    }
+
+    // Fall back to form data if not in header
+    if (!clientId || !clientSecret) {
+      clientId = form.get("client_id")?.toString()
+      clientSecret = form.get("client_secret")?.toString()
+    }
+
+    // Validate required credentials based on endpoint type
+    if (requireSecret) {
+      // Introspection: Requires both client_id and client_secret (confidential clients only)
+      if (!clientId || !clientSecret) {
+        return {
+          error: c.json(
+            {
+              error: "invalid_request",
+              error_description: "Client authentication required",
+            },
+            401,
+          ),
+        }
+      }
+    } else {
+      // Revocation: Only requires client_id (public clients allowed)
+      if (!clientId) {
+        return {
+          error: c.json(
+            {
+              error: "invalid_request",
+              error_description: "Missing client_id parameter",
+            },
+            400,
+          ),
+        }
+      }
+    }
+
+    return { clientId, clientSecret }
+  }
+
+  /**
+   * Simple rate limiting using sliding window.
+   * Tracks requests per client_id with configurable limits.
+   */
+  async function checkRateLimit(
+    clientId: string,
+    endpoint: string,
+    limit: number = 60, // requests per minute
+    window: number = 60, // seconds
+  ): Promise<boolean> {
+    if (!storage) return true // Skip rate limiting if no storage
+
+    const now = Date.now()
+    const key = ["ratelimit", endpoint, clientId]
+
+    // Get current request log
+    const log = (await Storage.get<number[]>(storage, key)) || []
+
+    // Remove old entries (outside the window)
+    const windowStart = now - window * 1000
+    const recentRequests = log.filter((timestamp) => timestamp > windowStart)
+
+    // Check if limit exceeded
+    if (recentRequests.length >= limit) {
+      return false
+    }
+
+    // Add current request and save
+    recentRequests.push(now)
+    await Storage.set(storage, key, recentRequests, window)
+
+    return true
+  }
+
+  // RFC 7662: Token Introspection Endpoint
+  app.post("/token/introspect", async (c) => {
+    // Client authentication is required for introspection
+    if (!clientAuthenticator) {
+      return c.json(
+        {
+          error: "unsupported_operation",
+          error_description: "Token introspection is not enabled",
+        },
+        501,
+      )
+    }
+
+    const form = await c.req.formData()
+    const token = form.get("token")?.toString()
+
+    if (!token) {
+      return c.json(
+        {
+          error: "invalid_request",
+          error_description: "Missing token parameter",
+        },
+        400,
+      )
+    }
+
+    // Extract and validate client credentials
+    const credentials = extractClientCredentials(c, form)
+    if (credentials.error) {
+      return credentials.error
+    }
+
+    // Authenticate the client
+    // Note: Token introspection typically requires confidential clients (with secrets)
+    // since it's used by resource servers to validate tokens
+    const authResult = await clientAuthenticator.authenticateClient(
+      credentials.clientId!,
+      credentials.clientSecret,
+    )
+    if (!authResult.client) {
+      return c.json(
+        {
+          error: "invalid_client",
+          error_description: "Client authentication failed",
+        },
+        401,
+      )
+    }
+    const client = authResult.client
+
+    // Apply rate limiting (60 requests per minute per client)
+    const allowed = await checkRateLimit(
+      credentials.clientId!,
+      "token_introspect",
+    )
+    if (!allowed) {
+      return c.json(
+        {
+          error: "slow_down",
+          error_description: "Rate limit exceeded. Please try again later.",
+        },
+        429,
+      )
+    }
+
+    try {
+      // Try to verify as JWT (access token)
+      const result = await jwtVerify<{
+        mode: "access"
+        type: keyof SubjectSchema
+        properties: v1.InferInput<SubjectSchema[keyof SubjectSchema]>
+      }>(token, () => signingKey().then((item) => item.public), {
+        issuer: issuer(c),
+      })
+
+      // Extract JTI from token for revocation check
+      const tokenId = result.payload.jti as string
+      if (!tokenId) {
+        return c.json({ active: false })
+      }
+
+      /**
+       * Authorization Policy (RFC 7662 Section 2.2):
+       *
+       * Only the client (audience) that the token was issued to is allowed to introspect it.
+       * This follows the principle of least privilege - clients should only be able to verify
+       * tokens that were issued for their use.
+       *
+       * Per RFC 7662, when a client attempts to introspect a token they're not authorized to see,
+       * the endpoint returns { active: false } rather than an error, preventing information disclosure
+       * about the existence or validity of tokens issued to other clients.
+       *
+       * Alternative policies could include:
+       * - Allowing introspection based on client trust levels (e.g., resource servers)
+       * - Implementing scope-based authorization for privileged clients
+       * - Using token ownership tracking for multi-tenant scenarios
+       */
+      if (result.payload.aud !== credentials.clientId) {
+        // Per RFC 7662, return inactive for tokens the client shouldn't see
+        return c.json({ active: false })
+      }
+
+      // Check if token has been revoked
+      const isRevoked = await revocationService.isAccessTokenRevoked(tokenId)
+      if (isRevoked) {
+        return c.json({ active: false })
+      }
+
+      // Token is active
+      return c.json({
+        active: true,
+        scope: Array.isArray(result.payload.scope)
+          ? result.payload.scope.join(" ")
+          : result.payload.scope || "", // Use scope from token, or empty string if missing
+        client_id: result.payload.aud,
+        username: result.payload.sub,
+        token_type: "Bearer",
+        exp: result.payload.exp,
+        iat: result.payload.iat,
+        sub: result.payload.sub,
+        iss: result.payload.iss,
+        aud: result.payload.aud,
+      })
+    } catch (error) {
+      // Token verification failed - could be expired, invalid, or a refresh token
+      console.error("Token introspection failed:", error)
+
+      // Return inactive for invalid tokens
+      return c.json({ active: false })
+    }
+  })
+
+  // RFC 7009: Token Revocation Endpoint
+  app.post("/token/revoke", async (c) => {
+    // Client authentication is required for revocation
+    if (!clientAuthenticator) {
+      return c.json(
+        {
+          error: "unsupported_operation",
+          error_description: "Token revocation is not enabled",
+        },
+        501,
+      )
+    }
+
+    const form = await c.req.formData()
+    const token = form.get("token")?.toString()
+    const tokenTypeHint = form.get("token_type_hint")?.toString()
+
+    if (!token) {
+      return c.json(
+        {
+          error: "invalid_request",
+          error_description: "Missing token parameter",
+        },
+        400,
+      )
+    }
+
+    // Extract and validate client credentials
+    // Note: requireSecret=false allows public clients (RFC 7009)
+    const credentials = extractClientCredentials(c, form, false)
+    if (credentials.error) {
+      return credentials.error
+    }
+
+    // ============================================
+    // CLIENT AUTHENTICATION (Public vs Confidential)
+    // ============================================
+    // RFC 7009: "A client's request must contain a valid client_id,
+    // in the case of a public client, or valid client credentials,
+    // in the case of a confidential client."
+
+    const authResult = await clientAuthenticator.authenticateClient(
+      credentials.clientId!,
+      credentials.clientSecret, // May be undefined for public clients
+    )
+
+    if (!authResult.client) {
+      return c.json(
+        {
+          error: "invalid_client",
+          error_description: authResult.isPublicClient
+            ? "Unknown client"
+            : "Client authentication failed",
+        },
+        401,
+      )
+    }
+
+    // Log which authentication path was used
+    if (authResult.isPublicClient) {
+      // PUBLIC CLIENT PATH: Authenticated by client_id only
+      console.debug(`Token revocation: Public client ${credentials.clientId}`)
+    } else {
+      // CONFIDENTIAL CLIENT PATH: Authenticated with client_secret
+      console.debug(
+        `Token revocation: Confidential client ${credentials.clientId}`,
+      )
+    }
+
+    const client = authResult.client
+
+    // Apply rate limiting (60 requests per minute per client)
+    const allowed = await checkRateLimit(credentials.clientId!, "token_revoke")
+    if (!allowed) {
+      return c.json(
+        {
+          error: "slow_down",
+          error_description: "Rate limit exceeded. Please try again later.",
+        },
+        429,
+      )
+    }
+
+    // Attempt to revoke the token
+    try {
+      // If hint is refresh_token or token looks like refresh token (has colon separator)
+      if (tokenTypeHint === "refresh_token" || token.includes(":")) {
+        const splits = token.split(":")
+        const tokenId = splits.pop()!
+        const subject = splits.join(":")
+
+        await revocationService.revokeRefreshToken(subject, tokenId)
+
+        // Fire audit event if configured
+        if (input.audit?.hooks?.onTokenRevoked) {
+          void input.audit.service.logTokenUsage({
+            token_id: tokenId,
+            subject,
+            event_type: "revoked",
+            client_id: credentials.clientId!,
+            timestamp: Date.now(),
+          })
+        }
+
+        return c.json({}) // Success - return empty response per RFC 7009
+      }
+
+      // Otherwise, treat as access token (JWT)
+      const result = await jwtVerify<{
+        mode: "access"
+        type: keyof SubjectSchema
+        properties: v1.InferInput<SubjectSchema[keyof SubjectSchema]>
+      }>(token, () => signingKey().then((item) => item.public), {
+        issuer: issuer(c),
+      })
+
+      // SECURITY: Verify token belongs to requesting client
+      // This prevents clients from revoking other clients' tokens
+      if (result.payload.aud !== credentials.clientId) {
+        // Per RFC 7009: Return success even for tokens we can't/won't revoke
+        // to prevent information disclosure about token ownership
+        return c.json({})
+      }
+
+      // Extract JTI from token for revocation
+      const tokenId = result.payload.jti as string
+      if (!tokenId) {
+        // Token doesn't have JTI, can't revoke - but return success per RFC 7009
+        return c.json({})
+      }
+
+      // Revoke the access token
+      await revocationService.revokeAccessToken(tokenId)
+
+      // Optionally revoke all refresh tokens for this subject
+      // await revocationService.revokeAllRefreshTokens(result.payload.sub as string)
+
+      // Fire audit event if configured
+      if (input.audit?.hooks?.onTokenRevoked) {
+        void input.audit.service.logTokenUsage({
+          token_id: tokenId,
+          subject: result.payload.sub as string,
+          event_type: "revoked",
+          client_id: credentials.clientId!,
+          timestamp: Date.now(),
+        })
+      }
+
+      return c.json({}) // Success - return empty response per RFC 7009
+    } catch (error) {
+      // Per RFC 7009, even if revocation fails, return success
+      // to prevent information disclosure
+      console.error("Token revocation error:", error)
+      return c.json({})
+    }
   })
 
   app.onError(async (err, c) => {

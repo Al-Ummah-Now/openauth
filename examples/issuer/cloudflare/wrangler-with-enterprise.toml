@@ -1,0 +1,37 @@
+# Example wrangler.toml with optional enterprise features
+#
+# This shows the complete configuration when using all enterprise features.
+# For basic setup, see wrangler.toml (only requires KV namespace)
+
+name = "openauth-enterprise"
+main = "issuer-with-enterprise-features.ts"
+compatibility_date = "2024-01-01"
+
+# Required: KV namespace for tokens (sessions, auth codes, refresh tokens)
+[[kv_namespaces]]
+binding = "CloudflareAuthKV"
+id = "your-kv-namespace-id"
+
+# Optional: D1 database for client credentials
+# Enables: Client authentication, token introspection, token revocation
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "openauth-clients"
+database_id = "your-client-db-id"
+
+# Optional: D1 database for audit logs
+# Enables: Token usage tracking, compliance reporting
+[[d1_databases]]
+binding = "AUDIT_DB"
+database_name = "openauth-audit"
+database_id = "your-audit-db-id"
+
+# Optional: Queue for async audit logging
+# Enables: High-performance audit logging (10,000+ req/sec)
+[[queues.producers]]
+binding = "AUDIT_QUEUE"
+queue = "audit-events-queue"
+
+# Optional: Environment variables
+[vars]
+ALLOWED_ORIGINS = "https://app.example.com,https://admin.example.com"

@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference docs for themes.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -19,9 +24,7 @@ export default issuer({
 })
 ```
 
-
 Or define your own.
-
 
 ```ts
 import type { Theme } from "@openauthjs/openauth/ui/theme"
@@ -38,10 +41,13 @@ export default issuer({
   // ...
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Themes
+
 ### THEME_OPENAUTH
+
 <Segment>
 
 <InlineSection>
@@ -139,11 +145,13 @@ A type to define your custom theme.
 The background color of the theme.
 
 Takes a color or both light and dark colors.
+
 ```ts
 {
   background: "#FFF"
 }
 ```
+
 </Segment>
 <NestedTitle id="theme.css" Tag="h4" parent="Theme.">css?</NestedTitle>
 <Segment>
@@ -155,11 +163,13 @@ Takes a color or both light and dark colors.
 Custom CSS that's added to the page in a `<style>` tag.
 
 This can be used to import custom fonts.
+
 ```ts
 {
   css: `@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@100;200;300;400;500;600;700;800;900&display=swap');`
 }
 ```
+
 </Segment>
 <NestedTitle id="theme.favicon" Tag="h4" parent="Theme.">favicon?</NestedTitle>
 <Segment>
@@ -231,11 +241,13 @@ the UI.
 A URL to the logo of your app.
 
 Takes a single image or both light and dark mode versions.
+
 ```ts
 {
   logo: "https://www.example.com/logo.svg"
 }
 ```
+
 </Segment>
 <NestedTitle id="theme.primary" Tag="h4" parent="Theme.">primary</NestedTitle>
 <Segment>
@@ -247,11 +259,13 @@ Takes a single image or both light and dark mode versions.
 The primary color of the theme.
 
 Takes a color or both light and dark colors.
+
 ```ts
 {
   primary: "#FF5E00"
 }
 ```
+
 </Segment>
 <NestedTitle id="theme.radius" Tag="h4" parent="Theme.">radius?</NestedTitle>
 <Segment>

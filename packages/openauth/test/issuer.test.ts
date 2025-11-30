@@ -221,6 +221,7 @@ describe("refresh token", () => {
     const refreshed = await response.json()
     expect(refreshed).toStrictEqual({
       access_token: expectNonEmptyString,
+      token_type: "bearer",
       refresh_token: expectNonEmptyString,
       expires_in: expect.any(Number),
     })
@@ -247,6 +248,7 @@ describe("refresh token", () => {
     const refreshed = await response.json()
     expect(refreshed).toStrictEqual({
       access_token: expectNonEmptyString,
+      token_type: "bearer",
       refresh_token: expectNonEmptyString,
       expires_in: expect.any(Number),
     })
@@ -300,6 +302,7 @@ describe("refresh token", () => {
     expect(response.status).toBe(200)
     const refreshed = await response.json()
     const [, refreshedAccessPayload] = refreshed.access_token.split(".")
+    const refreshedPayload = JSON.parse(atob(refreshedAccessPayload))
 
     setSystemTime(Date.now() + 1000 * 30)
 
@@ -307,12 +310,18 @@ describe("refresh token", () => {
     expect(response.status).toBe(200)
     const reused = await response.json()
     const [, reusedAccessPayload] = reused.access_token.split(".")
+    const reusedPayload = JSON.parse(atob(reusedAccessPayload))
     expect(refreshed.refresh_token).toEqual(reused.refresh_token)
     /**
-     * Access token signature is different every time for ES256 alg,
-     * but the payload should be the same.
+     * Access token signature is different every time for ES256 alg.
+     * The meaningful payload fields should match (jti may differ).
      */
-    expect(refreshedAccessPayload).toEqual(reusedAccessPayload)
+    expect(reusedPayload.mode).toEqual(refreshedPayload.mode)
+    expect(reusedPayload.type).toEqual(refreshedPayload.type)
+    expect(reusedPayload.sub).toEqual(refreshedPayload.sub)
+    expect(reusedPayload.exp).toEqual(refreshedPayload.exp)
+    expect(reusedPayload.aud).toEqual(refreshedPayload.aud)
+    expect(reusedPayload.iss).toEqual(refreshedPayload.iss)
   })
 
   test("invalidated with reuse detection", async () => {

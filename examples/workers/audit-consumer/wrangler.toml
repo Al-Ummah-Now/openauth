@@ -1,0 +1,17 @@
+name = "openauth-audit-consumer"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# D1 database for audit logs
+[[d1_databases]]
+binding = "AUDIT_DB"
+database_name = "openauth-audit"
+database_id = "your-database-id-here"  # Replace with your D1 database ID
+
+# Queue consumer configuration
+[[queues.consumers]]
+queue = "audit-events-queue"
+max_batch_size = 50      # Process up to 50 messages at once
+max_batch_timeout = 5    # Wait max 5 seconds before processing batch
+max_retries = 3          # Retry failed messages up to 3 times
+dead_letter_queue = "audit-dlq"  # Send failed messages here after max retries

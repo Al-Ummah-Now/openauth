@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `CodeUI`.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -20,19 +25,22 @@ export default issuer({
     code: CodeAdapter(
       CodeUI({
         copy: {
-          code_info: "We'll send a pin code to your email"
+          code_info: "We'll send a pin code to your email",
         },
-        sendCode: (claims, code) => console.log(claims.email, code)
-      })
-    )
+        sendCode: (claims, code) => console.log(claims.email, code),
+      }),
+    ),
   },
   // ...
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### CodeUI
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -239,10 +247,12 @@ Callback to send the pin code to the user.
 
 The `claims` object contains the email or phone number of the user. You can send the code
 using this.
+
 ```ts
-async (claims, code) => {
+;async (claims, code) => {
   // Send the code via the claim
 }
 ```
+
 </Segment>
 </div>
