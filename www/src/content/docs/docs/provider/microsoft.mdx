@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `MicrosoftProvider`.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -21,9 +26,9 @@ export default issuer({
     microsoft: MicrosoftProvider({
       tenant: "1234567890",
       clientID: "1234567890",
-      clientSecret: "0987654321"
-    })
-  }
+      clientSecret: "0987654321",
+    }),
+  },
 })
 ```
 
@@ -35,15 +40,18 @@ import { MicrosoftOidcProvider } from "@openauthjs/openauth/provider/microsoft"
 export default issuer({
   providers: {
     microsoft: MicrosoftOidcProvider({
-      clientID: "1234567890"
-    })
-  }
+      clientID: "1234567890",
+    }),
+  },
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### MicrosoftOidcProvider
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -61,11 +69,13 @@ The config for the provider.
 Create a Microsoft OIDC provider.
 
 This is useful if you just want to verify the user's email address.
+
 ```ts
 MicrosoftOidcProvider({
-  clientID: "1234567890"
+  clientID: "1234567890",
 })
 ```
+
 </Segment>
 ### MicrosoftProvider
 <Segment>
@@ -112,11 +122,13 @@ MicrosoftProvider({
 The client ID.
 
 This is just a string to identify your app.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="microsoftconfig.clientsecret" Tag="h4" parent="MicrosoftConfig.">clientSecret</NestedTitle>
 <Segment>
@@ -128,11 +140,13 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
+
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
+
 </Segment>
 <NestedTitle id="microsoftconfig.pkce" Tag="h4" parent="MicrosoftConfig.">pkce?</NestedTitle>
 <Segment>
@@ -189,11 +203,13 @@ A list of OAuth scopes that you want to request.
 The tenant ID of the Microsoft account.
 
 This is usually the same as the client ID.
+
 ```ts
 {
   tenant: "1234567890"
 }
 ```
+
 </Segment>
 ## MicrosoftOidcConfig
 <Segment>
@@ -213,11 +229,13 @@ This is usually the same as the client ID.
 The client ID.
 
 This is just a string to identify your app.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="microsoftoidcconfig.query" Tag="h4" parent="MicrosoftOidcConfig.">query?</NestedTitle>
 <Segment>

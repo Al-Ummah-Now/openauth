@@ -190,11 +190,7 @@ describe("getMultiRegionTokenAnalytics", () => {
       },
     ]
 
-    const results = await getMultiRegionTokenAnalytics(
-      regions,
-      "user-123",
-      50,
-    )
+    const results = await getMultiRegionTokenAnalytics(regions, "user-123", 50)
 
     expect(results.length).toBeGreaterThan(0)
   })
@@ -223,11 +219,7 @@ describe("getMultiRegionTokenAnalytics", () => {
       { name: "eu", database: createMockD1("EU", euEvents) as any },
     ]
 
-    const results = await getMultiRegionTokenAnalytics(
-      regions,
-      "user-123",
-      50,
-    )
+    const results = await getMultiRegionTokenAnalytics(regions, "user-123", 50)
 
     // Should be sorted newest first
     expect(results[0].timestamp).toBeGreaterThanOrEqual(results[1].timestamp)
@@ -302,9 +294,7 @@ describe("getMultiRegionTokenFamily", () => {
 
     // Should be sorted oldest first (ascending)
     for (let i = 0; i < results.length - 1; i++) {
-      expect(results[i].timestamp).toBeLessThanOrEqual(
-        results[i + 1].timestamp,
-      )
+      expect(results[i].timestamp).toBeLessThanOrEqual(results[i + 1].timestamp)
     }
   })
 })

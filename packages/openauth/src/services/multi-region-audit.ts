@@ -10,10 +10,14 @@
  */
 
 import type { D1Database } from "@cloudflare/workers-types"
-import { AuditService, type TokenUsageEvent, type TokenEventType } from "./audit.js"
+import {
+  AuditService,
+  type TokenUsageEvent,
+  type TokenEventType,
+} from "./audit.js"
 
 export interface RegionalD1Config {
-  name: string      // e.g., "us-east", "eu-west", "apac"
+  name: string // e.g., "us-east", "eu-west", "apac"
   database: D1Database
   tableName?: string
 }
@@ -48,7 +52,7 @@ export async function queryMultiRegionAuditLogs(
         const logs = await auditService.getAuditLogs(options)
 
         // Tag each log with source region for debugging
-        return logs.map(log => ({
+        return logs.map((log) => ({
           ...log,
           _region: region.name,
         }))
@@ -93,7 +97,7 @@ export async function getMultiRegionTokenAnalytics(
 
         const analytics = await auditService.getTokenAnalytics(subject, limit)
 
-        return analytics.map(log => ({
+        return analytics.map((log) => ({
           ...log,
           _region: region.name,
         }))
@@ -136,7 +140,7 @@ export async function getMultiRegionTokenFamily(
 
         const family = await auditService.getTokenFamily(tokenId, limit)
 
-        return family.map(log => ({
+        return family.map((log) => ({
           ...log,
           _region: region.name,
         }))

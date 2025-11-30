@@ -235,8 +235,12 @@ export async function createAuthMiddleware(options: AuthMiddlewareOptions) {
     }
 
     console.log("🔐 Auth middleware initialized:")
-    console.log(`   Introspection: ${features.introspection ? "✓ Available" : "✗ Not available (using JWT)"}`)
-    console.log(`   Revocation: ${features.revocation ? "✓ Available" : "✗ Not available"}`)
+    console.log(
+      `   Introspection: ${features.introspection ? "✓ Available" : "✗ Not available (using JWT)"}`,
+    )
+    console.log(
+      `   Revocation: ${features.revocation ? "✓ Available" : "✗ Not available"}`,
+    )
     console.log(`   Validation: ${features.validation}`)
   } else {
     console.log("🔐 Auth middleware initialized:")

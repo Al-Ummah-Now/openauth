@@ -9,9 +9,7 @@ import type { ClientSyncMessage } from "../src/client/multi-region-d1-adapter.js
 const createMockD1 = () => ({
   prepare: (sql: string) => ({
     bind: (...params: any[]) => ({
-      run: mock(() =>
-        Promise.resolve({ success: true, meta: { changes: 1 } }),
-      ),
+      run: mock(() => Promise.resolve({ success: true, meta: { changes: 1 } })),
     }),
   }),
 })

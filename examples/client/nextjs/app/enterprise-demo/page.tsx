@@ -38,7 +38,9 @@ export default async function EnterpriseDemoPage() {
                 color: authInfo.features.introspection ? "green" : "orange",
               }}
             >
-              {authInfo.features.introspection ? "✓ Available" : "✗ Not Available"}
+              {authInfo.features.introspection
+                ? "✓ Available"
+                : "✗ Not Available"}
             </span>
             {!authInfo.features.introspection && (
               <span style={{ fontSize: "0.9em", color: "#666" }}>

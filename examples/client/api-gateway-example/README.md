@@ -13,6 +13,7 @@ This example demonstrates how to build an API gateway that uses OpenAuth's optio
 ## Use Cases
 
 This pattern is ideal for:
+
 - API Gateways validating tokens for backend services
 - Microservices architecture requiring token validation
 - Multi-tenant applications with varying security requirements
@@ -62,9 +63,13 @@ app.get("/api/users", authMiddleware, (req, res) => {
 })
 
 // Sensitive operations - force introspection
-app.delete("/api/users/:id", authMiddleware({ forceIntrospection: true }), (req, res) => {
-  res.json({ deleted: req.params.id })
-})
+app.delete(
+  "/api/users/:id",
+  authMiddleware({ forceIntrospection: true }),
+  (req, res) => {
+    res.json({ deleted: req.params.id })
+  },
+)
 
 app.listen(3001)
 ```
@@ -140,18 +145,21 @@ cache.set(cacheKey, result, ttl)
 ### Introspection (Server-Side)
 
 **Pros:**
+
 - Real-time validation
 - Detects revoked tokens immediately
 - Server controls token validity
 - Required for compliance in some industries
 
 **Cons:**
+
 - Requires network request
 - Higher latency
 - More server load
 - Requires client secret
 
 **Use for:**
+
 - Payment processing
 - Account changes
 - Admin operations
@@ -160,17 +168,20 @@ cache.set(cacheKey, result, ttl)
 ### JWT Verification (Local)
 
 **Pros:**
+
 - No network request (fast)
 - Lower server load
 - Works offline
 - No client secret needed
 
 **Cons:**
+
 - Can't detect revoked tokens until expiry
 - Relies on token expiration
 - No real-time validation
 
 **Use for:**
+
 - Regular API requests
 - Public data access
 - High-throughput operations
@@ -270,16 +281,19 @@ curl -H "Authorization: Bearer <token>" http://localhost:3001/api/admin/delete
 ## Performance Comparison
 
 ### JWT Verification (Local)
+
 - **Latency**: ~1-2ms
 - **Throughput**: 10,000+ req/sec
 - **Server Load**: Minimal (CPU only)
 
 ### Introspection (Server-Side)
+
 - **Latency**: ~50-100ms (with cache: ~1-2ms)
 - **Throughput**: 1,000 req/sec (with cache: 10,000+ req/sec)
 - **Server Load**: Database + network
 
 ### Hybrid Approach (Recommended)
+
 - **Regular Operations**: JWT verification (~1-2ms)
 - **Sensitive Operations**: Introspection (~50-100ms)
 - **Best of Both**: Fast and secure
@@ -287,21 +301,29 @@ curl -H "Authorization: Bearer <token>" http://localhost:3001/api/admin/delete
 ## Best Practices
 
 1. **Cache Introspection Results**
+
    ```typescript
    cache.set(token, result, 300) // 5 minutes
    ```
 
 2. **Use JWT for Regular Operations**
+
    ```typescript
    app.get("/api/data", authMiddleware, handler)
    ```
 
 3. **Use Introspection for Sensitive Operations**
+
    ```typescript
-   app.delete("/api/users/:id", authMiddleware({ forceIntrospection: true }), handler)
+   app.delete(
+     "/api/users/:id",
+     authMiddleware({ forceIntrospection: true }),
+     handler,
+   )
    ```
 
 4. **Monitor Feature Availability**
+
    ```typescript
    setInterval(async () => {
      const available = await checkIntrospectionAvailability()

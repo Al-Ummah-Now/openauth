@@ -847,7 +847,13 @@ export function issuer<
       cors({
         origin: input.cors.origins,
         credentials: input.cors.credentials ?? true,
-        allowMethods: input.cors.methods ?? ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowMethods: input.cors.methods ?? [
+          "GET",
+          "POST",
+          "PUT",
+          "DELETE",
+          "OPTIONS",
+        ],
         allowHeaders: input.cors.headers ?? ["Content-Type", "Authorization"],
         maxAge: input.cors.maxAge,
       }),
@@ -905,7 +911,11 @@ export function issuer<
         token_endpoint: `${iss}/token`,
         jwks_uri: `${iss}/.well-known/jwks.json`,
         response_types_supported: ["code", "token"],
-        grant_types_supported: ["authorization_code", "refresh_token", "client_credentials"],
+        grant_types_supported: [
+          "authorization_code",
+          "refresh_token",
+          "client_credentials",
+        ],
       })
     },
   )
@@ -1289,8 +1299,15 @@ export function issuer<
   /**
    * Helper function to extract and validate client credentials from request.
    * Supports both Authorization header (Basic auth) and form data.
+   *
+   * @param requireSecret - If true, requires client_secret (for introspection).
+   *                        If false, only requires client_id (for revocation with public clients).
    */
-  function extractClientCredentials(c: Context, form: FormData): {
+  function extractClientCredentials(
+    c: Context,
+    form: FormData,
+    requireSecret: boolean = true,
+  ): {
     clientId?: string
     clientSecret?: string
     error?: Response
@@ -1339,16 +1356,32 @@ export function issuer<
       clientSecret = form.get("client_secret")?.toString()
     }
 
-    // Only client_id is required - client_secret is optional for public clients
-    if (!clientId) {
-      return {
-        error: c.json(
-          {
-            error: "invalid_request",
-            error_description: "Missing client_id parameter",
-          },
-          400,
-        ),
+    // Validate required credentials based on endpoint type
+    if (requireSecret) {
+      // Introspection: Requires both client_id and client_secret (confidential clients only)
+      if (!clientId || !clientSecret) {
+        return {
+          error: c.json(
+            {
+              error: "invalid_request",
+              error_description: "Client authentication required",
+            },
+            401,
+          ),
+        }
+      }
+    } else {
+      // Revocation: Only requires client_id (public clients allowed)
+      if (!clientId) {
+        return {
+          error: c.json(
+            {
+              error: "invalid_request",
+              error_description: "Missing client_id parameter",
+            },
+            400,
+          ),
+        }
       }
     }
 
@@ -1502,7 +1535,7 @@ export function issuer<
         active: true,
         scope: Array.isArray(result.payload.scope)
           ? result.payload.scope.join(" ")
-          : (result.payload.scope || ""), // Use scope from token, or empty string if missing
+          : result.payload.scope || "", // Use scope from token, or empty string if missing
         client_id: result.payload.aud,
         username: result.payload.sub,
         token_type: "Bearer",
@@ -1549,7 +1582,8 @@ export function issuer<
     }
 
     // Extract and validate client credentials
-    const credentials = extractClientCredentials(c, form)
+    // Note: requireSecret=false allows public clients (RFC 7009)
+    const credentials = extractClientCredentials(c, form, false)
     if (credentials.error) {
       return credentials.error
     }
@@ -1563,7 +1597,7 @@ export function issuer<
 
     const authResult = await clientAuthenticator.authenticateClient(
       credentials.clientId!,
-      credentials.clientSecret,  // May be undefined for public clients
+      credentials.clientSecret, // May be undefined for public clients
     )
 
     if (!authResult.client) {
@@ -1584,7 +1618,9 @@ export function issuer<
       console.debug(`Token revocation: Public client ${credentials.clientId}`)
     } else {
       // CONFIDENTIAL CLIENT PATH: Authenticated with client_secret
-      console.debug(`Token revocation: Confidential client ${credentials.clientId}`)
+      console.debug(
+        `Token revocation: Confidential client ${credentials.clientId}`,
+      )
     }
 
     const client = authResult.client

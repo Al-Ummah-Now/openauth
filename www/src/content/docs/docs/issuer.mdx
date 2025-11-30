@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the OpenAuth server.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -84,8 +89,8 @@ import { createSubjects } from "@openauthjs/openauth/subject"
 
 const subjects = createSubjects({
   user: object({
-    userID: string()
-  })
+    userID: string(),
+  }),
 })
 ```
 
@@ -110,15 +115,17 @@ Since `issuer` is a Hono app, you can deploy it anywhere Hono supports.
   ```ts title="issuer.ts"
   import { serve } from "@hono/node-server"
 
-  serve(app)
-  ```
-  </TabItem>
-  <TabItem label="Lambda">
-  ```ts title="issuer.ts"
-  import { handle } from "hono/aws-lambda"
+serve(app)
 
-  export const handler = handle(app)
-  ```
+````
+</TabItem>
+<TabItem label="Lambda">
+```ts title="issuer.ts"
+import { handle } from "hono/aws-lambda"
+
+export const handler = handle(app)
+````
+
   </TabItem>
   <TabItem label="Bun">
   ```ts title="issuer.ts"
@@ -179,15 +186,16 @@ The providers that you want your OpenAuth server to support.
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 
 issuer({
-  providers: {
-    github: GithubProvider()
-  }
+providers: {
+github: GithubProvider()
+}
 })
-```
+
+````
 
 
 The key is just a string that you can use to identify the provider. It's passed back to
-the 
+the
 `success`
  callback.
 
@@ -201,7 +209,8 @@ You can also specify multiple providers.
     google: GoogleProvider()
   }
 }
-```
+````
+
 </Segment>
 <NestedTitle id="issuerinput.storage" Tag="h4" parent="IssuerInput.">storage?</NestedTitle>
 <Segment>
@@ -215,10 +224,11 @@ The storage adapter that you want to use.
 import { DynamoStorage } from "@openauthjs/openauth/storage/dynamo"
 
 issuer({
-  storage: DynamoStorage()
-  // ...
+storage: DynamoStorage()
+// ...
 })
-```
+
+````
 </Segment>
 <NestedTitle id="issuerinput.subjects" Tag="h4" parent="IssuerInput.">subjects</NestedTitle>
 <Segment>
@@ -240,7 +250,8 @@ issuer({
   })
   // ...
 })
-```
+````
+
 </Segment>
 <NestedTitle id="issuerinput.theme" Tag="h4" parent="IssuerInput.">theme?</NestedTitle>
 <Segment>
@@ -253,18 +264,17 @@ The theme you want to use for the UI.
 
 This includes the UI the user sees when selecting a provider. And the `PasswordUI` and
 `CodeUI` that are used by the `PasswordProvider` and `CodeProvider`.
+
 ```ts title="issuer.ts"
 import { THEME_SST } from "@openauthjs/openauth/ui/theme"
 
 issuer({
-  theme: THEME_SST
+  theme: THEME_SST,
   // ...
 })
 ```
 
-
 Or define your own.
-
 
 ```ts title="issuer.ts"
 import type { Theme } from "@openauthjs/openauth/ui/theme"
@@ -274,10 +284,11 @@ const MY_THEME: Theme = {
 }
 
 issuer({
-  theme: MY_THEME
+  theme: MY_THEME,
   // ...
 })
 ```
+
 </Segment>
 <NestedTitle id="issuerinput.ttl" Tag="h4" parent="IssuerInput.">ttl?</NestedTitle>
 <Segment>
@@ -363,6 +374,7 @@ By default, it uses the following:
 - Allow if the `redirectURI` is localhost.
 - Compare `redirectURI` to the request's hostname or the `x-forwarded-host` header. If they
   are from the same sub-domain level, then allow.
+
 ```ts
 {
   allow: async (input, req) => {
@@ -371,6 +383,7 @@ By default, it uses the following:
   }
 }
 ```
+
 </Segment>
 <NestedTitle id="issuerinput.select" Tag="h4" parent="IssuerInput.">select?</NestedTitle>
 <Segment>
@@ -380,11 +393,9 @@ By default, it uses the following:
 </InlineSection>
 </Section>
 
-<InlineSection>
-**Default** Select()
-</InlineSection>
-Optionally, configure the UI that's displayed when the user visits the root URL of the
-of the OpenAuth server.
+<InlineSection>**Default** Select()</InlineSection>
+Optionally, configure the UI that's displayed when the user visits the root URL
+of the of the OpenAuth server.
 
 ```ts title="issuer.ts"
 import { Select } from "@openauthjs/openauth/ui/select"
@@ -393,12 +404,13 @@ issuer({
   select: Select({
     providers: {
       github: { hide: true },
-      google: { display: "Google" }
-    }
-  })
+      google: { display: "Google" },
+    },
+  }),
   // ...
 })
 ```
+
 </Segment>
 <NestedTitle id="issuerinput.success" Tag="h4" parent="IssuerInput.">success</NestedTitle>
 <Segment>
@@ -410,6 +422,7 @@ issuer({
 The success callback that's called when the user completes the flow.
 
 This is called after the user has been redirected back to your app after the OAuth flow.
+
 ```ts
 {
   success: async (ctx, value) => {
@@ -429,6 +442,7 @@ This is called after the user has been redirected back to your app after the OAu
   // ...
 }
 ```
+
 </Segment>
 ## OnSuccessResponder
 <Segment>
@@ -439,9 +453,10 @@ Sets the subject payload in the JWT token and returns the response.
 
 ```ts
 ctx.subject("user", {
-  userID
+  userID,
 })
 ```
+
 </Segment>
 <NestedTitle id="onsuccessresponder.subject" Tag="h4" parent="OnSuccessResponder.">subject</NestedTitle>
 <Segment>
@@ -454,6 +469,7 @@ The `type` is the type of the subject, that was defined in the `subjects` field.
 
 The `properties` are the properties of the subject. This is the shape of the subject that
 you defined in the `subjects` field.
+
 </Segment>
 ## Errors
 <Section type="about">
@@ -468,9 +484,11 @@ if (err instanceof InvalidAuthorizationCodeError) {
   // handle invalid code error
 }
 ```
-</Section>
----
+
+## </Section>
+
 ### InvalidAccessTokenError
+
 <Segment>
 The given access token is invalid.
 </Segment>
@@ -508,5 +526,6 @@ The browser was in an unknown state.
 
 This can happen when certain cookies have expired. Or the browser was switched in the middle
 of the authentication flow.
+
 </Segment>
 </div>

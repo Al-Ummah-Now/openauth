@@ -4,7 +4,7 @@ description: Introduction to OpenAuth.
 ---
 
 import { Image } from "astro:assets"
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 import themeDark from "./themes-dark.png"
 import themeLight from "./themes-light.png"
@@ -202,21 +202,22 @@ const app = issuer({
 
 And now we are ready to deploy! Here's how you do that depending on your infrastructure.
 
-
 <Tabs>
   <TabItem label="Node">
   ```ts title="issuer.ts"
   import { serve } from "@hono/node-server"
 
-  serve(app)
-  ```
-  </TabItem>
-  <TabItem label="Lambda">
-  ```ts title="issuer.ts"
-  import { handle } from "hono/aws-lambda"
+serve(app)
 
-  export const handler = handle(app)
-  ```
+````
+</TabItem>
+<TabItem label="Lambda">
+```ts title="issuer.ts"
+import { handle } from "hono/aws-lambda"
+
+export const handler = handle(app)
+````
+
   </TabItem>
   <TabItem label="Bun">
   ```ts title="issuer.ts"
@@ -243,7 +244,7 @@ import { createClient } from "@openauthjs/openauth/client"
 
 const client = createClient({
   clientID: "my-client",
-  issuer: "https://auth.myserver.com" // url to the OpenAuth server
+  issuer: "https://auth.myserver.com", // url to the OpenAuth server
 })
 ```
 
@@ -299,7 +300,7 @@ const challenge = JSON.parse(localStorage.getItem("challenge"))
 const exchanged = await client.exchange(
   query.get("code"),
   redirect_uri,
-  challenge.verifier
+  challenge.verifier,
 )
 if (exchanged.err) throw new Error("Invalid code")
 localStorage.setItem("access_token", exchanged.tokens.access)
@@ -313,7 +314,7 @@ const accessToken = localStorage.getItem("access_token")
 fetch("https://auth.example.com/api/user", {
   headers: {
     Authorization: `Bearer ${accessToken}`,
-  }
+  },
 })
 ```
 

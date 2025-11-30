@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `AppleProvider`.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -20,9 +25,9 @@ export default issuer({
   providers: {
     apple: AppleProvider({
       clientID: "1234567890",
-      clientSecret: "0987654321"
-    })
-  }
+      clientSecret: "0987654321",
+    }),
+  },
 })
 ```
 
@@ -34,15 +39,18 @@ import { AppleOidcProvider } from "@openauthjs/openauth/provider/apple"
 export default issuer({
   providers: {
     apple: AppleOidcProvider({
-      clientID: "1234567890"
-    })
-  }
+      clientID: "1234567890",
+    }),
+  },
 })
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### AppleOidcProvider
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -60,11 +68,13 @@ The config for the provider.
 Create an Apple OIDC provider.
 
 This is useful if you just want to verify the user's email address.
+
 ```ts
 AppleOidcProvider({
-  clientID: "1234567890"
+  clientID: "1234567890",
 })
 ```
+
 </Segment>
 ### AppleProvider
 <Segment>
@@ -109,11 +119,13 @@ AppleProvider({
 The client ID.
 
 This is just a string to identify your app.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="appleconfig.clientsecret" Tag="h4" parent="AppleConfig.">clientSecret</NestedTitle>
 <Segment>
@@ -125,11 +137,13 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
+
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
+
 </Segment>
 <NestedTitle id="appleconfig.pkce" Tag="h4" parent="AppleConfig.">pkce?</NestedTitle>
 <Segment>
@@ -194,11 +208,13 @@ A list of OAuth scopes that you want to request.
 The client ID.
 
 This is just a string to identify your app.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="appleoidcconfig.query" Tag="h4" parent="AppleOidcConfig.">query?</NestedTitle>
 <Segment>

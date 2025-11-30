@@ -5,7 +5,9 @@ This example shows how to enable optional queue-based audit logging for better p
 ## Two Deployment Options
 
 ### Option 1: Single Worker (Recommended - Simpler)
+
 One worker handles both:
+
 - OAuth issuer (HTTP requests)
 - Queue consumer (audit events)
 
@@ -13,7 +15,9 @@ One worker handles both:
 **Cons**: Queue processing shares resources with OAuth
 
 ### Option 2: Separate Workers (High Traffic)
+
 Two workers:
+
 - Issuer worker (OAuth only)
 - Consumer worker (audit queue only)
 
@@ -30,7 +34,7 @@ Queue-based logging is **optional**. Use it when you configure your `AuditServic
 // In your issuer worker:
 const auditService = new AuditService({
   database: env.DB,
-  queue: env.AUDIT_QUEUE,  // Optional - enables queue-based audit logging
+  queue: env.AUDIT_QUEUE, // Optional - enables queue-based audit logging
 })
 ```
 
@@ -103,11 +107,11 @@ wrangler deploy
 Update your issuer worker to use the queue:
 
 ```typescript
-import { AuditService } from 'openauth/services/audit'
+import { AuditService } from "openauth/services/audit"
 
 const auditService = new AuditService({
-  database: env.DB,           // For analytics queries
-  queue: env.AUDIT_QUEUE,     // For writing audit events
+  database: env.DB, // For analytics queries
+  queue: env.AUDIT_QUEUE, // For writing audit events
 })
 ```
 
@@ -166,6 +170,7 @@ Single Worker (export default)
 ```
 
 **Benefits**:
+
 - One worker to deploy and manage
 - Simpler configuration
 - Shared environment bindings
@@ -178,28 +183,31 @@ Single Worker (export default)
 If you need independent scaling:
 
 **Issuer Worker** (`issuer/src/index.ts`):
+
 ```typescript
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const auditService = new AuditService({
       database: env.AUDIT_DB,
-      queue: env.AUDIT_QUEUE,  // Publishes to queue
+      queue: env.AUDIT_QUEUE, // Publishes to queue
     })
     // ... issuer config
-  }
+  },
 }
 ```
 
 **Consumer Worker** (`consumer/src/index.ts`):
+
 ```typescript
 export default {
   async queue(batch: MessageBatch<AuditEventMessage>, env: Env): Promise<void> {
     await handleAuditBatch(batch, env.AUDIT_DB)
-  }
+  },
 }
 ```
 
 **When to use separate workers**:
+
 - OAuth issuer needs to scale independently
 - Consumer processing is CPU-intensive
 - You want different resource limits for each
@@ -216,11 +224,13 @@ const auditService = new AuditService({
 ```
 
 **When to use direct writes**:
+
 - Simple setup needed
 - Lower traffic (< 1000 requests/sec)
 - You don't need batch processing
 
 **When to use queue-based**:
+
 - High traffic (> 1000 requests/sec)
 - You want maximum performance
 - You need resilient audit logging with retries

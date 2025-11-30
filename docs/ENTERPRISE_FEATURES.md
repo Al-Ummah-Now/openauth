@@ -33,10 +33,10 @@ All features are **opt-in** and fully backward compatible with existing deployme
 
 OAuth 2.0 defines two client types:
 
-| Client Type | Description | Examples | Secret Storage |
-|-------------|-------------|----------|----------------|
-| **Confidential** | Can securely store secrets | Backend servers, secure services | `client_secret_hash` is set |
-| **Public** | Cannot securely store secrets | SPAs, mobile apps, CLI tools | `client_secret_hash` is NULL |
+| Client Type      | Description                   | Examples                         | Secret Storage               |
+| ---------------- | ----------------------------- | -------------------------------- | ---------------------------- |
+| **Confidential** | Can securely store secrets    | Backend servers, secure services | `client_secret_hash` is set  |
+| **Public**       | Cannot securely store secrets | SPAs, mobile apps, CLI tools     | `client_secret_hash` is NULL |
 
 The D1 Client Adapter provides secure storage for both client types with industry-standard PBKDF2 password hashing for confidential clients.
 
@@ -128,7 +128,7 @@ Or via the adapter:
 // Create a public client programmatically
 await adapter.createClient({
   client_id: "my-mobile-app",
-  client_secret_hash: null,  // Public client
+  client_secret_hash: null, // Public client
   client_name: "My Mobile App",
   redirect_uris: ["myapp://callback"],
   grant_types: ["authorization_code", "refresh_token"],
@@ -183,7 +183,7 @@ fetch("https://auth.example.com/token/revoke", {
   },
   body: new URLSearchParams({
     token: accessToken,
-    client_id: "my-spa-app",  // No client_secret needed
+    client_id: "my-spa-app", // No client_secret needed
     token_type_hint: "access_token",
   }),
 })
@@ -191,10 +191,10 @@ fetch("https://auth.example.com/token/revoke", {
 
 ### Authentication Summary
 
-| Client Type | Introspection | Revocation |
-|-------------|---------------|------------|
-| **Confidential** | Basic Auth or Form (id+secret) | Basic Auth or Form (id+secret) |
-| **Public** | Not supported (use JWT validation) | Form with client_id only |
+| Client Type      | Introspection                      | Revocation                     |
+| ---------------- | ---------------------------------- | ------------------------------ |
+| **Confidential** | Basic Auth or Form (id+secret)     | Basic Auth or Form (id+secret) |
+| **Public**       | Not supported (use JWT validation) | Form with client_id only       |
 
 > **Note**: Public clients cannot use token introspection because they cannot securely authenticate. They should validate JWTs locally instead. However, public clients CAN revoke their own tokens using just `client_id`.
 
@@ -316,10 +316,10 @@ POST /token/revoke
 
 OAuth 2.0 defines two client types with different authentication requirements:
 
-| Client Type | Description | Authentication |
-|-------------|-------------|----------------|
-| **Confidential** | Server-side apps that can securely store secrets | `client_id` + `client_secret` |
-| **Public** | SPAs, mobile apps that cannot store secrets securely | `client_id` only |
+| Client Type      | Description                                          | Authentication                |
+| ---------------- | ---------------------------------------------------- | ----------------------------- |
+| **Confidential** | Server-side apps that can securely store secrets     | `client_id` + `client_secret` |
+| **Public**       | SPAs, mobile apps that cannot store secrets securely | `client_id` only              |
 
 ### Requirements
 
@@ -411,7 +411,10 @@ await fetch("https://auth.example.com/token/revoke", {
 
 ```ts
 // Public client revocation helper
-async function revokeToken(token: string, type: "access_token" | "refresh_token" = "access_token") {
+async function revokeToken(
+  token: string,
+  type: "access_token" | "refresh_token" = "access_token",
+) {
   const response = await fetch("https://auth.example.com/token/revoke", {
     method: "POST",
     headers: {
@@ -419,7 +422,7 @@ async function revokeToken(token: string, type: "access_token" | "refresh_token"
     },
     body: new URLSearchParams({
       token,
-      client_id: "my-spa-app",  // Required for public clients
+      client_id: "my-spa-app", // Required for public clients
       token_type_hint: type,
     }),
   })
@@ -593,10 +596,10 @@ const app = issuer({
       database: env.AUDIT_DB, // Separate D1 database for audit logs
     }),
     hooks: {
-      onTokenGenerated: true,  // Log token creation
-      onTokenRefreshed: true,  // Log token refresh
-      onTokenRevoked: true,    // Log token revocation
-      onTokenReused: true,     // Log refresh token reuse detection
+      onTokenGenerated: true, // Log token creation
+      onTokenRefreshed: true, // Log token refresh
+      onTokenRevoked: true, // Log token revocation
+      onTokenReused: true, // Log refresh token reuse detection
     },
   },
 })
@@ -765,6 +768,7 @@ const app = issuer({
 ### Default Behavior
 
 If `cors` is not configured:
+
 - Individual endpoints (like `/.well-known/jwks.json`) have their own CORS settings
 - Most endpoints are open to all origins for public discovery
 
@@ -947,11 +951,7 @@ describe("ClientAuthenticator", () => {
   test("validates client credentials", async () => {
     const authenticator = new ClientAuthenticator({ adapter })
 
-    await authenticator.createClient(
-      "test-client",
-      "secret-key",
-      "Test Client",
-    )
+    await authenticator.createClient("test-client", "secret-key", "Test Client")
 
     const isValid = await authenticator.validateClient(
       "test-client",
@@ -970,6 +970,7 @@ describe("ClientAuthenticator", () => {
 1. **No Breaking Changes**: All enterprise features are opt-in and backward compatible.
 
 2. **Enable Features Incrementally**:
+
    ```ts
    // Step 1: Add client credentials (optional)
    const app = issuer({

@@ -9,7 +9,11 @@
  * @packageDocumentation
  */
 
-import type { D1Database, MessageBatch, Message } from "@cloudflare/workers-types"
+import type {
+  D1Database,
+  MessageBatch,
+  Message,
+} from "@cloudflare/workers-types"
 import {
   applySyncMessage,
   type ClientSyncMessage,

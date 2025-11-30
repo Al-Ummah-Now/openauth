@@ -57,7 +57,9 @@ export interface ClientSyncMessage {
   operation: SyncOperation
   client_id: string
   data?: Omit<OAuthClient, "created_at" | "updated_at">
-  updates?: Partial<Omit<OAuthClient, "client_id" | "created_at" | "updated_at">>
+  updates?: Partial<
+    Omit<OAuthClient, "client_id" | "created_at" | "updated_at">
+  >
   timestamp: number
 }
 
@@ -149,10 +151,7 @@ export class MultiRegionD1ClientAdapter {
         ) {
           return null
         }
-        console.error(
-          `MultiRegionD1: Failed to get client ${clientId}:`,
-          error,
-        )
+        console.error(`MultiRegionD1: Failed to get client ${clientId}:`, error)
         return null
       })
   }

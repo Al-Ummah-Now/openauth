@@ -84,33 +84,45 @@ async function main() {
   })
 
   // Sensitive operation - forces introspection if available
-  app.delete("/api/users/:id", authMiddleware({ forceIntrospection: true }), (req, res) => {
-    res.json({
-      deleted: req.params.id,
-      validatedBy: req.validationMethod,
-      message: "This endpoint uses introspection when available (secure)",
-    })
-  })
+  app.delete(
+    "/api/users/:id",
+    authMiddleware({ forceIntrospection: true }),
+    (req, res) => {
+      res.json({
+        deleted: req.params.id,
+        validatedBy: req.validationMethod,
+        message: "This endpoint uses introspection when available (secure)",
+      })
+    },
+  )
 
   // Admin endpoint - forces introspection if available
-  app.post("/api/admin/action", authMiddleware({ forceIntrospection: true }), (req, res) => {
-    res.json({
-      action: "performed",
-      performedBy: req.user?.properties?.id,
-      validatedBy: req.validationMethod,
-      message: "Admin actions always use strongest validation available",
-    })
-  })
+  app.post(
+    "/api/admin/action",
+    authMiddleware({ forceIntrospection: true }),
+    (req, res) => {
+      res.json({
+        action: "performed",
+        performedBy: req.user?.properties?.id,
+        validatedBy: req.validationMethod,
+        message: "Admin actions always use strongest validation available",
+      })
+    },
+  )
 
   // Payment endpoint - forces introspection if available
-  app.post("/api/payments", authMiddleware({ forceIntrospection: true }), (req, res) => {
-    res.json({
-      payment: "processed",
-      user: req.user?.properties?.id,
-      validatedBy: req.validationMethod,
-      message: "Payment operations require strongest validation",
-    })
-  })
+  app.post(
+    "/api/payments",
+    authMiddleware({ forceIntrospection: true }),
+    (req, res) => {
+      res.json({
+        payment: "processed",
+        user: req.user?.properties?.id,
+        validatedBy: req.validationMethod,
+        message: "Payment operations require strongest validation",
+      })
+    },
+  )
 
   // Introspection example endpoint
   app.post("/api/introspect", authMiddleware(), async (req, res) => {
@@ -136,13 +148,20 @@ async function main() {
   })
 
   // Error handling
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error("Error:", err)
-    res.status(500).json({
-      error: "internal_error",
-      message: err.message,
-    })
-  })
+  app.use(
+    (
+      err: any,
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction,
+    ) => {
+      console.error("Error:", err)
+      res.status(500).json({
+        error: "internal_error",
+        message: err.message,
+      })
+    },
+  )
 
   app.listen(PORT, () => {
     console.log(`\n🚀 API Gateway listening on port ${PORT}`)
@@ -151,8 +170,12 @@ async function main() {
     console.log(`   API: http://localhost:${PORT}/api/users`)
     console.log(`\n📝 Example requests:`)
     console.log(`   curl http://localhost:${PORT}/features`)
-    console.log(`   curl -H "Authorization: Bearer <token>" http://localhost:${PORT}/api/users`)
-    console.log(`   curl -X DELETE -H "Authorization: Bearer <token>" http://localhost:${PORT}/api/users/123`)
+    console.log(
+      `   curl -H "Authorization: Bearer <token>" http://localhost:${PORT}/api/users`,
+    )
+    console.log(
+      `   curl -X DELETE -H "Authorization: Bearer <token>" http://localhost:${PORT}/api/users/123`,
+    )
     console.log(``)
   })
 }

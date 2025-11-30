@@ -34,7 +34,7 @@ export async function checkIntrospectionAvailability(): Promise<boolean> {
     const response = await fetch(`${client.issuer}/token/introspect`, {
       method: "POST",
       headers: {
-        "Authorization": `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ token: "test-token" }),
@@ -59,7 +59,7 @@ export async function checkRevocationAvailability(): Promise<boolean> {
     const response = await fetch(`${client.issuer}/token/revoke`, {
       method: "POST",
       headers: {
-        "Authorization": `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ token: "test-token" }),
@@ -83,7 +83,7 @@ async function introspectToken(token: string) {
   const response = await fetch(`${client.issuer}/token/introspect`, {
     method: "POST",
     headers: {
-      "Authorization": `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+      Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ token }),
@@ -156,7 +156,10 @@ export async function validateToken(
         }
       }
     } catch (error) {
-      console.warn("Introspection failed, falling back to local verification:", error)
+      console.warn(
+        "Introspection failed, falling back to local verification:",
+        error,
+      )
     }
   }
 
@@ -195,7 +198,7 @@ async function revokeTokenOnServer(token: string): Promise<boolean> {
     const response = await fetch(`${client.issuer}/token/revoke`, {
       method: "POST",
       headers: {
-        "Authorization": `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ token }),

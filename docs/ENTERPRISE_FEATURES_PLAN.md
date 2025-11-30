@@ -10,12 +10,14 @@
 ## Current Architecture Analysis
 
 **What Works:**
+
 - OpenAuth handles OAuth 2.0 authorization flow (authorization_code grant)
 - User authentication with password provider
 - Session management in KV
 - Basic token generation
 
 **What's Missing (Why TokenRoutes Exists):**
+
 1. **Confidential client authentication** (client_secret with PBKDF2)
 2. **D1 database integration** for audit logging and analytics
 3. **Token introspection endpoint** (RFC 7662)
@@ -32,6 +34,7 @@
 **Reason:** D1 cannot handle parallel traffic/concurrent writes effectively, making it unsuitable as the primary storage adapter for tokens which must handle high-concurrency OAuth flows.
 
 **Alternative Approach:**
+
 - **Keep KV Storage** for sessions, auth codes, and refresh tokens (existing OpenAuth approach)
 - **Use D1 for audit logging only** (async writes, not on critical path)
   - `token_usage` table - audit trail
@@ -39,24 +42,26 @@
   - Analytics queries (read-heavy operations)
 
 **Implementation Change:**
+
 ```typescript
 issuer({
   // Primary storage: KV (handles concurrent OAuth flows)
   storage: CloudflareStorage({
-    namespace: env.AUTH_KV
+    namespace: env.AUTH_KV,
   }),
 
   // Audit logging: D1 (async, not blocking)
   hooks: {
     onTokenGenerated: async (event) => {
       // Async write to D1 token_usage table
-      await logTokenUsage(env.AUTH_DB, event);
-    }
-  }
+      await logTokenUsage(env.AUTH_DB, event)
+    },
+  },
 })
 ```
 
 **Database Schema:** D1 used only for audit/analytics
+
 - ~~`refresh_tokens` table~~ → Stays in KV
 - `token_usage` table → D1 (audit logging)
 - `oauth_clients` table → D1 (client credentials)
@@ -67,6 +72,7 @@ issuer({
 **File to Modify:** `packages/openauth/src/issuer.ts`
 
 **Add Configuration:**
+
 ```typescript
 issuer({
   // Existing config
@@ -78,13 +84,14 @@ issuer({
     adapter: D1ClientAdapter({ database: env.AUTH_DB }),
     authenticator: async (clientId, clientSecret) => {
       // PBKDF2 validation (from your client-auth-service.ts)
-      return await validateClient(clientId, clientSecret);
-    }
-  }
+      return await validateClient(clientId, clientSecret)
+    },
+  },
 })
 ```
 
 **Files to Create:**
+
 - `packages/openauth/src/client/d1-adapter.ts` (client credentials only, not tokens)
 - `packages/openauth/src/client/authenticator.ts`
 
@@ -95,16 +102,17 @@ issuer({
 **File to Modify:** `packages/openauth/src/issuer.ts`
 
 **Add Route:**
+
 ```typescript
 // POST /token/introspect
-app.post('/token/introspect', async (c) => {
-  const { token, token_type_hint } = await c.req.formData();
+app.post("/token/introspect", async (c) => {
+  const { token, token_type_hint } = await c.req.formData()
 
   // Validate token (access or refresh)
-  const result = await introspectToken(token, token_type_hint);
+  const result = await introspectToken(token, token_type_hint)
 
-  return c.json(result); // RFC 7662 compliant response
-});
+  return c.json(result) // RFC 7662 compliant response
+})
 ```
 
 **Reuse Logic:** Port from your `token-routes.ts:274-334`
@@ -114,15 +122,16 @@ app.post('/token/introspect', async (c) => {
 **File to Modify:** `packages/openauth/src/issuer.ts`
 
 **Add Route:**
+
 ```typescript
 // POST /token/revoke
-app.post('/token/revoke', async (c) => {
-  const { token, token_type_hint } = await c.req.formData();
+app.post("/token/revoke", async (c) => {
+  const { token, token_type_hint } = await c.req.formData()
 
-  await revokeToken(token, token_type_hint);
+  await revokeToken(token, token_type_hint)
 
-  return c.text('', 200); // RFC 7009: always 200
-});
+  return c.text("", 200) // RFC 7009: always 200
+})
 ```
 
 **Reuse Logic:** Port from your `token-routes.ts:336-389`
@@ -132,24 +141,26 @@ app.post('/token/revoke', async (c) => {
 **File to Modify:** `packages/openauth/src/token.ts`
 
 **Add Hooks:**
+
 ```typescript
 interface TokenHooks {
-  onTokenGenerated?: (event: TokenEvent) => Promise<void>;
-  onTokenRefreshed?: (event: TokenEvent) => Promise<void>;
-  onTokenRevoked?: (event: TokenEvent) => Promise<void>;
-  onTokenReused?: (event: TokenEvent) => Promise<void>;
+  onTokenGenerated?: (event: TokenEvent) => Promise<void>
+  onTokenRefreshed?: (event: TokenEvent) => Promise<void>
+  onTokenRevoked?: (event: TokenEvent) => Promise<void>
+  onTokenReused?: (event: TokenEvent) => Promise<void>
 }
 ```
 
 **Integration:**
+
 ```typescript
 issuer({
   hooks: {
     onTokenRefreshed: async (event) => {
       // Async log to D1 token_usage table (non-blocking)
-      await logTokenUsage(env.AUTH_DB, event);
-    }
-  }
+      await logTokenUsage(env.AUTH_DB, event)
+    },
+  },
 })
 ```
 
@@ -163,9 +174,9 @@ issuer({
 ```typescript
 issuer({
   cors: {
-    origins: env.ALLOWED_ORIGINS.split(','),
-    credentials: true
-  }
+    origins: env.ALLOWED_ORIGINS.split(","),
+    credentials: true,
+  },
 })
 ```
 
@@ -212,6 +223,7 @@ KV handles all high-concurrency OAuth operations. D1 only for async audit loggin
 ## Files to Create/Modify
 
 ### New Files (Port from your code):
+
 1. ~~`packages/openauth/src/storage/d1.ts`~~ - ❌ CANCELLED (D1 not for primary storage)
 2. `packages/openauth/src/client/d1-adapter.ts` - Client credentials DB adapter (D1 okay for this)
 3. `packages/openauth/src/client/authenticator.ts` - PBKDF2 validation
@@ -219,41 +231,48 @@ KV handles all high-concurrency OAuth operations. D1 only for async audit loggin
 5. `packages/openauth/src/services/audit.ts` - Audit logging hooks (async D1 writes)
 
 ### Modified Files:
+
 1. `packages/openauth/src/issuer.ts` - Add introspection, revocation, client auth, audit hooks
 2. `packages/openauth/src/token.ts` - Add audit hooks (async D1 logging)
 
 ## Migration Strategy
 
 ### Phase 1: Fork Setup (1-2 hours)
+
 1. ✅ Fork OpenAuth repo to your organization (DONE)
 2. Set up local development environment
 3. Create feature branch: `feat/enterprise-features`
 
 ### Phase 2: ~~D1 Storage Adapter~~ Client Credentials & Audit Setup (2-3 hours)
+
 1. ❌ ~~Implement D1StorageAdapter~~ - CANCELLED (D1 can't handle concurrency)
 2. ✅ Keep existing KV storage for all tokens (sessions, auth codes, refresh tokens)
 3. Create D1 client adapter for oauth_clients table (low-frequency writes)
 4. Create D1 audit service for token_usage table (async writes)
 
 ### Phase 3: Client Authentication (3-4 hours)
+
 1. Port client-auth-service.ts logic
 2. Add client authentication middleware
 3. Update /token endpoint to validate clients
 4. Test both public (PKCE) and confidential (secret) flows
 
 ### Phase 4: RFC Endpoints (3-4 hours)
+
 1. Add /token/introspect endpoint
 2. Add /token/revoke endpoint
 3. Port error handling from TokenRoutes
 4. Test RFC compliance
 
 ### Phase 5: Audit Logging (already in Phase 2)
+
 1. Token event hooks (integrated with Phase 2)
 2. D1 audit logging service (integrated with Phase 2)
 3. Port token_usage table logic (integrated with Phase 2)
 4. Test analytics queries (integrated with Phase 2)
 
 ### Phase 6: Integration & Testing (4-6 hours)
+
 1. Update apps/auth to use forked OpenAuth
 2. Remove custom TokenRoutes
 3. Update ARCHITECTURE.md
@@ -261,6 +280,7 @@ KV handles all high-concurrency OAuth operations. D1 only for async audit loggin
 5. Security audit
 
 **Total Effort: 12-19 hours** (reduced from 16-25 hours)
+
 - Savings: 4-6 hours from not implementing D1 storage adapter
 
 ## Benefits of This Approach
@@ -281,10 +301,10 @@ issuer({
   plugins: [
     D1StoragePlugin({ database: env.AUTH_DB }),
     ClientAuthPlugin({ adapter: D1ClientAdapter }),
-    AuditLogPlugin({ table: 'token_usage' }),
+    AuditLogPlugin({ table: "token_usage" }),
     IntrospectionPlugin(),
-    RevocationPlugin()
-  ]
+    RevocationPlugin(),
+  ],
 })
 ```
 
@@ -299,19 +319,20 @@ Before committing to the full fork, consider a quick fix to unblock apps:
 
 ```typescript
 // In token-routes.ts handleTokenEndpoint()
-const grantType = formData.get('grant_type') as string;
+const grantType = formData.get("grant_type") as string
 
 // Pass authorization_code to OpenAuth
-if (grantType === 'authorization_code') {
-  return new Response(JSON.stringify({ error: 'not_found' }), {
-    status: 404
-  });
+if (grantType === "authorization_code") {
+  return new Response(JSON.stringify({ error: "not_found" }), {
+    status: 404,
+  })
 }
 
 // Continue with refresh_token handling...
 ```
 
 This allows:
+
 - ✅ Apps work immediately
 - ✅ All existing features preserved
 - ✅ Time to properly plan and execute fork
@@ -320,11 +341,13 @@ This allows:
 ---
 
 **Next Steps:**
+
 1. Decide: Quick fix first, or go straight to fork?
 2. If fork: Set up OpenAuth development environment
 3. If quick fix: Modify TokenRoutes, test, then plan fork
 
 **Repository:**
+
 - **Fork**: https://github.com/meywd/openauth.git
 - **Upstream**: https://github.com/sst/openauth.git
 - **Source Project**: https://github.com/meywd/AlUmmahNowAuth.git

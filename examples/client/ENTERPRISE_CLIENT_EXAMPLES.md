@@ -13,13 +13,13 @@ All enterprise features are **OPTIONAL**. Your client code works perfectly wheth
 
 ## Quick Comparison
 
-| Feature | Without Enterprise | With Enterprise |
-|---------|-------------------|-----------------|
-| **Token Validation** | JWT verification (local) | JWT + Introspection (server-side) |
-| **Speed** | 1-2ms | 1-2ms (JWT) or 50-100ms (introspection) |
-| **Security** | Tokens expire naturally | Can revoke tokens immediately |
-| **Logout** | Clear local cookies | Revoke on server + clear cookies |
-| **Code Changes** | None required | None required |
+| Feature              | Without Enterprise       | With Enterprise                         |
+| -------------------- | ------------------------ | --------------------------------------- |
+| **Token Validation** | JWT verification (local) | JWT + Introspection (server-side)       |
+| **Speed**            | 1-2ms                    | 1-2ms (JWT) or 50-100ms (introspection) |
+| **Security**         | Tokens expire naturally  | Can revoke tokens immediately           |
+| **Logout**           | Clear local cookies      | Revoke on server + clear cookies        |
+| **Code Changes**     | None required            | None required                           |
 
 ## Examples
 
@@ -28,11 +28,13 @@ All enterprise features are **OPTIONAL**. Your client code works perfectly wheth
 **Location**: `examples/client/nextjs/`
 
 **New Files**:
+
 - `app/auth-with-enterprise.ts` - Enhanced auth utilities with feature detection
 - `app/actions-with-enterprise.ts` - Server actions with graceful degradation
 - `app/enterprise-demo/page.tsx` - Interactive demo page
 
 **Features**:
+
 - Automatic feature detection
 - `checkAuth()` with optional introspection
 - `logout()` with automatic revocation
@@ -40,6 +42,7 @@ All enterprise features are **OPTIONAL**. Your client code works perfectly wheth
 - Complete working demo page
 
 **Usage**:
+
 ```typescript
 import { checkAuth, logout, getAuthInfo } from "./auth-with-enterprise"
 
@@ -49,13 +52,14 @@ const user = await checkAuth({ preferIntrospection: true })
 // Get detailed auth info including feature availability
 const info = await getAuthInfo()
 console.log(info.features.introspection) // true/false
-console.log(info.validationMethod)       // "introspection" | "local"
+console.log(info.validationMethod) // "introspection" | "local"
 
 // Logout (automatically uses revocation if available)
 await logout() // Returns { method: "server" | "local" }
 ```
 
 **Demo**:
+
 ```bash
 cd examples/client/nextjs
 npm install
@@ -68,12 +72,14 @@ npm run dev
 **Location**: `examples/client/api-gateway-example/`
 
 **Files**:
+
 - `auth-middleware.ts` - Express middleware with feature detection
 - `server.ts` - Complete API gateway server
 - `README.md` - Detailed usage guide
 - `TESTING.md` - Comprehensive testing scenarios
 
 **Features**:
+
 - Express middleware with automatic feature detection
 - Result caching for performance
 - Force introspection for sensitive endpoints
@@ -81,6 +87,7 @@ npm run dev
 - Production-ready error handling
 
 **Usage**:
+
 ```typescript
 import { createAuthMiddleware } from "./auth-middleware"
 
@@ -96,9 +103,13 @@ app.get("/api/data", authMiddleware(), (req, res) => {
 })
 
 // Sensitive endpoint (forces introspection if available)
-app.delete("/api/users/:id", authMiddleware({ forceIntrospection: true }), (req, res) => {
-  res.json({ deleted: req.params.id })
-})
+app.delete(
+  "/api/users/:id",
+  authMiddleware({ forceIntrospection: true }),
+  (req, res) => {
+    res.json({ deleted: req.params.id })
+  },
+)
 
 // Check what features are available
 console.log(authMiddleware.features)
@@ -110,6 +121,7 @@ console.log(authMiddleware.features)
 ```
 
 **Demo**:
+
 ```bash
 cd examples/client/api-gateway-example
 npm install
@@ -122,6 +134,7 @@ npm run dev
 **Location**: `examples/client/ENTERPRISE_FEATURES_USAGE.md`
 
 **Content**:
+
 - Feature detection patterns
 - Graceful degradation strategies
 - Complete code examples
@@ -228,16 +241,19 @@ All examples include testing for these scenarios:
 ## Performance Comparison
 
 ### JWT Verification (Local)
+
 - **Latency**: 1-2ms
 - **Throughput**: 10,000+ req/sec
 - **Use for**: Regular operations, high-traffic endpoints
 
 ### Introspection (Server-Side)
+
 - **Latency**: 50-100ms (without cache), 1-2ms (with cache)
 - **Throughput**: 1,000 req/sec (without cache), 10,000+ (with cache)
 - **Use for**: Sensitive operations, admin actions, payments
 
 ### Hybrid (Recommended)
+
 - **Strategy**: JWT for regular, introspection for sensitive
 - **Result**: Fast AND secure
 - **Implementation**: Automatic in all examples
@@ -291,7 +307,11 @@ app.get("/api/data", authMiddleware({ forceIntrospection: true }), handler)
 
 ```typescript
 // ✅ Good - Maximum security
-app.delete("/api/users/:id", authMiddleware({ forceIntrospection: true }), handler)
+app.delete(
+  "/api/users/:id",
+  authMiddleware({ forceIntrospection: true }),
+  handler,
+)
 app.post("/api/payments", authMiddleware({ forceIntrospection: true }), handler)
 
 // ⚠️ Acceptable but less secure
@@ -396,6 +416,7 @@ const user = await checkAuth({ preferIntrospection: true })
 ### Q: How do I know if my server has enterprise features enabled?
 
 **A**: Check for HTTP 501 responses:
+
 ```typescript
 const response = await fetch(`${issuer}/token/introspect`, { ... })
 if (response.status === 501) {
@@ -408,6 +429,7 @@ if (response.status === 501) {
 ### Q: Can I use these patterns with other frameworks?
 
 **A**: Yes! The patterns work with any framework:
+
 - Next.js ✅ (example provided)
 - Express ✅ (example provided)
 - Fastify ✅ (adapt Express example)
@@ -429,6 +451,7 @@ if (response.status === 501) {
 ## Support
 
 For questions or issues:
+
 1. Check the [Testing Guide](api-gateway-example/TESTING.md)
 2. Review [Common Questions](#common-questions)
 3. See [Best Practices](#best-practices)

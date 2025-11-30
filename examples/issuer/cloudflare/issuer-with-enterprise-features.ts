@@ -28,10 +28,10 @@ interface Env {
   CloudflareAuthKV: KVNamespace
 
   // Optional: For enterprise features
-  AUTH_DB: D1Database      // Client credentials
-  AUDIT_DB: D1Database     // Audit logs
-  AUDIT_QUEUE: Queue       // Queue for async audit logging
-  ALLOWED_ORIGINS: string  // Comma-separated origins
+  AUTH_DB: D1Database // Client credentials
+  AUDIT_DB: D1Database // Audit logs
+  AUDIT_QUEUE: Queue // Queue for async audit logging
+  ALLOWED_ORIGINS: string // Comma-separated origins
 }
 
 async function getUser(email: string) {
@@ -60,13 +60,13 @@ export default {
       audit: {
         service: new AuditService({
           database: env.AUDIT_DB,
-          queue: env.AUDIT_QUEUE,  // Optional: Use queue for high performance
+          queue: env.AUDIT_QUEUE, // Optional: Use queue for high performance
         }),
         hooks: {
-          onTokenGenerated: true,   // Log when tokens are created
-          onTokenRefreshed: true,   // Log when tokens are refreshed
-          onTokenRevoked: true,     // Log when tokens are revoked
-          onTokenReused: true,      // Log reuse detection (security incident)
+          onTokenGenerated: true, // Log when tokens are created
+          onTokenRefreshed: true, // Log when tokens are refreshed
+          onTokenRevoked: true, // Log when tokens are revoked
+          onTokenReused: true, // Log reuse detection (security incident)
         },
       },
 

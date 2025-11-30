@@ -7,12 +7,14 @@ This guide shows how to test the API gateway with and without enterprise feature
 ### Setup
 
 1. **Start basic issuer** (without `clientDb`):
+
 ```bash
 cd examples/issuer/cloudflare
 wrangler dev issuer.ts
 ```
 
 2. **Start API gateway** (without client secret):
+
 ```bash
 cd examples/client/api-gateway-example
 cp .env.example .env
@@ -24,6 +26,7 @@ npm run dev
 ### Expected Behavior
 
 The API gateway should:
+
 - Start successfully
 - Detect that introspection is NOT available
 - Fall back to JWT verification for all requests
@@ -90,6 +93,7 @@ curl -X POST \
 ### Validation
 
 ✅ **Success Criteria:**
+
 - Feature detection shows `introspection: false`
 - All endpoints work using JWT verification
 - No errors or warnings about missing features
@@ -100,6 +104,7 @@ curl -X POST \
 ### Setup
 
 1. **Create D1 databases**:
+
 ```bash
 cd examples/issuer/cloudflare
 wrangler d1 create openauth-clients
@@ -108,18 +113,21 @@ wrangler queues create audit-events-queue
 ```
 
 2. **Update wrangler config** with database IDs:
+
 ```bash
 # Edit wrangler-with-enterprise.toml
 # Replace database_id values with your actual IDs
 ```
 
 3. **Run migrations**:
+
 ```bash
 wrangler d1 execute openauth-clients --file=../../../schema/clients.sql
 wrangler d1 execute openauth-audit --file=../../../schema/audit.sql
 ```
 
 4. **Create a test client**:
+
 ```bash
 # Insert test client credentials
 wrangler d1 execute openauth-clients --command="
@@ -133,11 +141,13 @@ VALUES (
 ```
 
 5. **Start enterprise issuer**:
+
 ```bash
 wrangler dev issuer-with-enterprise-features.ts --config wrangler-with-enterprise.toml
 ```
 
 6. **Configure API gateway** with client secret:
+
 ```bash
 cd examples/client/api-gateway-example
 # Edit .env
@@ -148,6 +158,7 @@ npm run dev
 ### Expected Behavior
 
 The API gateway should:
+
 - Start successfully
 - Detect that introspection IS available
 - Detect that revocation IS available
@@ -229,6 +240,7 @@ curl -X POST \
 ### Validation
 
 ✅ **Success Criteria:**
+
 - Feature detection shows `introspection: true`, `revocation: true`
 - Regular endpoints use JWT verification (fast)
 - Sensitive endpoints use introspection (secure)
@@ -420,10 +432,12 @@ curl -H "Authorization: Bearer $TOKEN" \
 ### Issue: API gateway can't detect introspection
 
 **Symptoms:**
+
 - `features.introspection` is always `false`
 - Even with client secret configured
 
 **Debug:**
+
 ```bash
 # Check if server has clientDb
 curl http://localhost:3000/token/introspect
@@ -438,6 +452,7 @@ echo -n 'api-gateway:test-secret' | base64
 ```
 
 **Solutions:**
+
 - Verify server has `clientDb` configured
 - Check client credentials in database
 - Verify client secret in `.env`
@@ -446,10 +461,12 @@ echo -n 'api-gateway:test-secret' | base64
 ### Issue: Introspection is slow
 
 **Symptoms:**
+
 - Response times > 100ms
 - High server load
 
 **Debug:**
+
 ```bash
 # Check cache TTL
 echo $INTROSPECTION_CACHE_TTL
@@ -461,6 +478,7 @@ echo $INTROSPECTION_CACHE_TTL
 ```
 
 **Solutions:**
+
 - Increase cache TTL (e.g., 600 = 10 minutes)
 - Use JWT for non-sensitive endpoints
 - Check network latency between gateway and auth server
@@ -469,6 +487,7 @@ echo $INTROSPECTION_CACHE_TTL
 ## Next Steps
 
 After testing, you can:
+
 1. Deploy to production with basic features
 2. Enable enterprise features later without downtime
 3. Monitor feature usage and performance

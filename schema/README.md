@@ -65,18 +65,19 @@ npx wrangler d1 execute openauth-audit --command="SELECT name FROM sqlite_master
 
 Stores OAuth client credentials with PBKDF2-hashed secrets.
 
-| Column              | Type    | Description                                    |
-| ------------------- | ------- | ---------------------------------------------- |
-| client_id           | TEXT    | Primary key, unique client identifier         |
-| client_secret_hash  | TEXT    | PBKDF2 hash (format: salt:hash)                |
-| client_name         | TEXT    | Human-readable client name                     |
-| redirect_uris       | TEXT    | JSON array of allowed redirect URIs            |
-| grant_types         | TEXT    | JSON array of allowed grant types              |
-| scopes              | TEXT    | JSON array of allowed scopes                   |
-| created_at          | INTEGER | Unix timestamp (milliseconds)                  |
-| updated_at          | INTEGER | Unix timestamp (milliseconds)                  |
+| Column             | Type    | Description                           |
+| ------------------ | ------- | ------------------------------------- |
+| client_id          | TEXT    | Primary key, unique client identifier |
+| client_secret_hash | TEXT    | PBKDF2 hash (format: salt:hash)       |
+| client_name        | TEXT    | Human-readable client name            |
+| redirect_uris      | TEXT    | JSON array of allowed redirect URIs   |
+| grant_types        | TEXT    | JSON array of allowed grant types     |
+| scopes             | TEXT    | JSON array of allowed scopes          |
+| created_at         | INTEGER | Unix timestamp (milliseconds)         |
+| updated_at         | INTEGER | Unix timestamp (milliseconds)         |
 
 **Indexes:**
+
 - `idx_client_name` - Fast lookups by client name
 - `idx_created_at` - Sorting/filtering by creation date
 
@@ -84,19 +85,20 @@ Stores OAuth client credentials with PBKDF2-hashed secrets.
 
 Stores audit logs for all token lifecycle events.
 
-| Column      | Type    | Description                                        |
-| ----------- | ------- | -------------------------------------------------- |
-| id          | INTEGER | Auto-increment primary key                         |
-| token_id    | TEXT    | Token identifier (refresh token ID or JTI)         |
-| subject     | TEXT    | Subject identifier (e.g., "user:abc123")           |
-| event_type  | TEXT    | Event type: generated, refreshed, revoked, reused  |
-| client_id   | TEXT    | OAuth client identifier (optional)                 |
-| ip_address  | TEXT    | IP address of the request (optional)               |
-| user_agent  | TEXT    | User agent string (optional)                       |
-| timestamp   | INTEGER | Unix timestamp (milliseconds)                      |
-| metadata    | TEXT    | JSON object for additional event data (optional)   |
+| Column     | Type    | Description                                       |
+| ---------- | ------- | ------------------------------------------------- |
+| id         | INTEGER | Auto-increment primary key                        |
+| token_id   | TEXT    | Token identifier (refresh token ID or JTI)        |
+| subject    | TEXT    | Subject identifier (e.g., "user:abc123")          |
+| event_type | TEXT    | Event type: generated, refreshed, revoked, reused |
+| client_id  | TEXT    | OAuth client identifier (optional)                |
+| ip_address | TEXT    | IP address of the request (optional)              |
+| user_agent | TEXT    | User agent string (optional)                      |
+| timestamp  | INTEGER | Unix timestamp (milliseconds)                     |
+| metadata   | TEXT    | JSON object for additional event data (optional)  |
 
 **Indexes:**
+
 - `idx_token_id` - Track token family history
 - `idx_subject` - User activity lookups
 - `idx_event_type` - Security monitoring (find all "reused" events)

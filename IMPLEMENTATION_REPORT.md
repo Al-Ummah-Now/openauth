@@ -17,32 +17,38 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 ### 1. D1 Client Credentials Storage ✅
 
 **Files Created:**
+
 - `/packages/openauth/src/client/d1-adapter.ts` - D1 database adapter
 - `/packages/openauth/src/client/authenticator.ts` - PBKDF2 authentication
 - `/schema/clients.sql` - Database schema
 
 **Key Capabilities:**
+
 - PBKDF2-SHA256 password hashing (100,000 iterations, 64-byte keys)
 - Constant-time comparison to prevent timing attacks
 - Client management (create, read, update, delete)
 - Support for redirect URIs, grant types, and scopes
 
 **Test Coverage:**
+
 - `/packages/openauth/test/client-authenticator.test.ts` (15 test cases)
 
 ### 2. Token Introspection (RFC 7662) ✅
 
 **Implementation:**
+
 - Endpoint: `POST /token/introspect`
 - Location: `/packages/openauth/src/issuer.ts:1275`
 
 **Key Capabilities:**
+
 - Active token validation
 - JWT verification and revocation checks
 - Client authentication via Basic Auth or form parameters
 - Returns token metadata (type, expiration, subject, client_id)
 
 **RFC Compliance:**
+
 - ✅ RFC 7662 (OAuth 2.0 Token Introspection)
 - ✅ RFC 6750 (Bearer Token Usage)
 - ✅ RFC 2617 (HTTP Basic Authentication)
@@ -50,33 +56,40 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 ### 3. Token Revocation (RFC 7009) ✅
 
 **Files Created:**
+
 - `/packages/openauth/src/revocation.ts` - Revocation service
 
 **Implementation:**
+
 - Endpoint: `POST /token/revoke`
 - Location: `/packages/openauth/src/issuer.ts:1391`
 
 **Key Capabilities:**
+
 - Revoke access tokens (stored in KV with TTL)
 - Revoke refresh tokens (invalidates user session)
 - Support for `token_type_hint` parameter
 - Client authentication required
 
 **Strategy:**
+
 - Access tokens: Short TTL (15 min) + revocation list in KV
 - Refresh tokens: Session invalidation
 - Fail-open design for high availability
 
 **Test Coverage:**
+
 - `/packages/openauth/test/revocation-service.test.ts` (12 test cases)
 
 ### 4. Audit Logging ✅
 
 **Files Created:**
+
 - `/packages/openauth/src/services/audit.ts` - Audit service
 - `/schema/audit.sql` - Database schema
 
 **Key Capabilities:**
+
 - Fire-and-forget async logging (never blocks OAuth flows)
 - Tracks 4 event types: `generated`, `refreshed`, `revoked`, `reused`
 - Token family tracking for security analysis
@@ -84,6 +97,7 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 - Client analytics
 
 **Integration Points:**
+
 - Token generation: `issuer.ts:798`
 - Token refresh: `issuer.ts:1076`
 - Token reuse detection: `issuer.ts:1053`
@@ -91,6 +105,7 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 - Refresh token revocation: `issuer.ts:1509`
 
 **Analytics Capabilities:**
+
 - Query by token ID (track token family)
 - Query by subject (user activity)
 - Query by event type (security monitoring)
@@ -98,14 +113,17 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 - Time-range filtering with efficient indexes
 
 **Test Coverage:**
+
 - `/packages/openauth/test/audit-service.test.ts` (10 test cases)
 
 ### 5. Client Authentication Middleware ✅
 
 **Files Created:**
+
 - `/packages/openauth/src/middleware/client-auth.ts`
 
 **Key Capabilities:**
+
 - Supports both Basic Auth and form-based credentials
 - Validates client_id and client_secret
 - Stores authenticated client in request context
@@ -114,9 +132,11 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 ### 6. Enhanced CORS Configuration ✅
 
 **Implementation:**
+
 - Location: `/packages/openauth/src/issuer.ts:623-638`
 
 **Key Capabilities:**
+
 - Configurable allowed origins
 - Credential support toggle
 - Automatic preflight handling
@@ -129,16 +149,19 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 ### Storage Strategy
 
 **D1 Database (SQL):**
+
 - ✅ OAuth client credentials (low-frequency writes)
 - ✅ Audit logs (fire-and-forget writes)
 
 **KV Storage:**
+
 - ✅ Sessions
 - ✅ Authorization codes
 - ✅ Refresh tokens
 - ✅ Access token revocation list
 
 **Rationale:**
+
 - D1 has strong eventual consistency with potential write conflicts
 - KV provides atomic operations with global replication
 - Never use D1 for high-concurrency token operations
@@ -146,16 +169,19 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 ### Security Design
 
 **PBKDF2 Configuration:**
+
 - Algorithm: SHA-256
 - Iterations: 100,000 (OWASP recommended)
 - Key length: 64 bytes
 - Random salt: 16 bytes per secret
 
 **Timing Attack Prevention:**
+
 - Constant-time comparison for secrets
 - Hash computation even when client not found
 
 **Revocation Strategy:**
+
 - Short-lived access tokens (15 min default)
 - Revocation list with automatic TTL expiry
 - Fail-open on storage errors (availability over security)
@@ -163,16 +189,19 @@ Successfully implemented 6 enterprise features for OpenAuth, a self-hosted OAuth
 ### Audit Logging Design
 
 **Fire-and-Forget Pattern:**
+
 ```typescript
 void input.audit.service.logTokenUsage({...})
 ```
 
 **Benefits:**
+
 - Never blocks OAuth flows
 - Graceful degradation on audit failures
 - Errors logged but don't propagate
 
 **Event Types:**
+
 - `generated` - New token issued
 - `refreshed` - Refresh token used successfully
 - `revoked` - Token explicitly revoked
@@ -231,6 +260,7 @@ CREATE INDEX idx_client_id ON token_usage(client_id);
 ### Test Files Created
 
 1. **client-authenticator.test.ts** - 15 tests
+
    - PBKDF2 hashing consistency
    - Salt generation randomness
    - Constant-time comparison
@@ -238,6 +268,7 @@ CREATE INDEX idx_client_id ON token_usage(client_id);
    - Client CRUD operations
 
 2. **revocation-service.test.ts** - 12 tests
+
    - Access token revocation
    - Refresh token revocation
    - Revocation checks
@@ -245,6 +276,7 @@ CREATE INDEX idx_client_id ON token_usage(client_id);
    - Error handling (fail-open)
 
 3. **audit-service.test.ts** - 10 tests
+
    - Event logging for all types
    - Analytics queries
    - Token family tracking
@@ -276,6 +308,7 @@ bun test
 ### Files Created
 
 1. **docs/ENTERPRISE_FEATURES.md** - 21 KB comprehensive guide
+
    - Feature overview
    - Configuration examples
    - API reference
@@ -397,6 +430,7 @@ npx wrangler deploy
 ### Token Introspection
 
 **Request:**
+
 ```http
 POST /token/introspect HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
@@ -406,6 +440,7 @@ token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (Active):**
+
 ```json
 {
   "active": true,
@@ -417,6 +452,7 @@ token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (Inactive):**
+
 ```json
 {
   "active": false
@@ -426,6 +462,7 @@ token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 ### Token Revocation
 
 **Request:**
+
 ```http
 POST /token/revoke HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
@@ -435,6 +472,7 @@ token=eyJhbGci...&token_type_hint=access_token
 ```
 
 **Response:**
+
 ```http
 HTTP/1.1 200 OK
 ```
@@ -474,15 +512,18 @@ HTTP/1.1 200 OK
 ## Performance Characteristics
 
 ### Token Introspection
+
 - **Latency:** < 50ms (KV lookup + JWT verification)
 - **Throughput:** Scales with KV (millions of requests/day)
 - **Cold start:** ~100ms (Cloudflare Workers)
 
 ### Token Revocation
+
 - **Latency:** < 100ms (KV write + session invalidation)
 - **Storage:** O(n) where n = active tokens (auto-cleanup via TTL)
 
 ### Audit Logging
+
 - **Impact on OAuth flow:** 0ms (fire-and-forget)
 - **Write throughput:** Limited by D1 (hundreds of writes/second)
 - **Query performance:** < 100ms with proper indexes
@@ -494,20 +535,24 @@ HTTP/1.1 200 OK
 ### Implemented Protections
 
 ✅ **Timing Attack Prevention**
+
 - Constant-time secret comparison
 - Hash computation for non-existent clients
 
 ✅ **Token Security**
+
 - Short-lived access tokens (15 min)
 - Refresh token rotation
 - Token reuse detection
 
 ✅ **Credential Security**
+
 - PBKDF2 with 100k iterations
 - Random salts per secret
 - Secure hash storage format
 
 ✅ **Audit Trail**
+
 - Immutable event logs
 - Token family tracking
 - Security incident detection
@@ -529,17 +574,20 @@ HTTP/1.1 200 OK
 ### Key Metrics to Track
 
 **Token Operations:**
+
 - Introspection requests/sec
 - Revocation requests/sec
 - Active vs. inactive token ratio
 
 **Audit Events:**
+
 - Token generation rate
 - Refresh rate
 - Revocation rate
 - **Reuse events (critical!)**
 
 **Client Activity:**
+
 - Requests by client_id
 - Failed authentication attempts
 - Client creation/deletion
@@ -565,10 +613,12 @@ npx wrangler d1 execute openauth-audit \
 ## Known Limitations
 
 1. **D1 Write Throughput**: Limited to hundreds of writes/second
+
    - **Impact:** Audit logging may be delayed under extreme load
    - **Mitigation:** Fire-and-forget design prevents OAuth flow blocking
 
 2. **Revocation List Growth**: Grows with token volume
+
    - **Impact:** KV storage costs increase
    - **Mitigation:** Automatic TTL-based cleanup
 
@@ -585,18 +635,21 @@ npx wrangler d1 execute openauth-audit \
 1. **Install dependencies** (none required - all built-in)
 
 2. **Create D1 databases**
+
    ```bash
    npx wrangler d1 create openauth-clients
    npx wrangler d1 create openauth-audit
    ```
 
 3. **Run migrations**
+
    ```bash
    npx wrangler d1 execute openauth-clients --file=./schema/clients.sql
    npx wrangler d1 execute openauth-audit --file=./schema/audit.sql
    ```
 
 4. **Update issuer configuration**
+
    - Add `clientDb` binding
    - Add `audit` configuration
    - Configure CORS if needed
@@ -615,21 +668,25 @@ npx wrangler d1 execute openauth-audit \
 ## Troubleshooting
 
 ### "Client authentication failed"
+
 - Verify client_id exists in database
 - Check client_secret matches (use PBKDF2 hash)
 - Ensure Basic Auth is properly formatted
 
 ### "Token introspection returns active=false"
+
 - Check token hasn't expired (exp claim)
 - Verify token wasn't revoked
 - Ensure JWT signature is valid
 
 ### "Audit logs not appearing"
+
 - Check D1 database binding in wrangler.toml
 - Verify audit hooks are enabled
 - Review Cloudflare Workers logs for errors
 
 ### "Database not found" error
+
 - Create databases with `wrangler d1 create`
 - Update database IDs in wrangler.toml
 - Run migrations with `wrangler d1 execute`
@@ -639,12 +696,14 @@ npx wrangler d1 execute openauth-audit \
 ## References
 
 ### RFCs Implemented
+
 - [RFC 7662](https://tools.ietf.org/html/rfc7662) - OAuth 2.0 Token Introspection
 - [RFC 7009](https://tools.ietf.org/html/rfc7009) - OAuth 2.0 Token Revocation
 - [RFC 6750](https://tools.ietf.org/html/rfc6750) - Bearer Token Usage
 - [RFC 2617](https://tools.ietf.org/html/rfc2617) - HTTP Authentication
 
 ### Documentation
+
 - [Cloudflare D1 Documentation](https://developers.cloudflare.com/d1/)
 - [Cloudflare KV Documentation](https://developers.cloudflare.com/kv/)
 - [OpenAuth Documentation](https://openauth.js.org/)
@@ -655,23 +714,27 @@ npx wrangler d1 execute openauth-audit \
 ## Verification Status
 
 ### Code Files
+
 ✅ All service files created and verified
 ✅ Issuer.ts modified with enterprise features
 ✅ Middleware and adapters in place
 
 ### Tests
+
 ✅ 50+ test cases created
 ✅ Unit tests for all services
 ✅ Integration tests for endpoints
-⚠️  Tests not executed (requires Bun runtime)
+⚠️ Tests not executed (requires Bun runtime)
 
 ### Documentation
+
 ✅ Comprehensive feature guide created
 ✅ Database setup guide created
 ✅ API reference documented
 ✅ Configuration examples provided
 
 ### Schemas
+
 ✅ Client credentials schema created
 ✅ Audit logging schema created
 ✅ Indexes optimized for common queries
@@ -681,11 +744,13 @@ npx wrangler d1 execute openauth-audit \
 ## Next Steps
 
 ### For Development
+
 1. **Install Bun**: `curl -fsSL https://bun.sh/install | bash`
 2. **Run tests**: `bun test`
 3. **Build package**: `bun run build`
 
 ### For Production
+
 1. **Create databases** using wrangler commands
 2. **Run migrations** to set up schemas
 3. **Create initial OAuth client**
@@ -697,6 +762,7 @@ npx wrangler d1 execute openauth-audit \
 ## Support
 
 For issues or questions:
+
 - Review `/docs/ENTERPRISE_FEATURES.md` for detailed guides
 - Check `/schema/README.md` for database setup help
 - Refer to test files for usage examples

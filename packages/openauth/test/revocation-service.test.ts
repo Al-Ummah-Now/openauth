@@ -134,9 +134,9 @@ describe("RevocationService", () => {
       // Revoke it
       const success = await service.revokeRefreshToken(subject, tokenId)
 
-      // Verify it was removed
+      // Verify it was removed (Storage.get returns undefined for missing keys)
       result = await Storage.get(storage, key)
-      expect(result).toBeNull()
+      expect(result).toBeUndefined()
       expect(success).toBe(true)
     })
 
@@ -206,7 +206,7 @@ describe("RevocationService", () => {
           subject,
           tokenId,
         ])
-        expect(result).toBeNull()
+        expect(result).toBeUndefined()
       }
     })
 
@@ -245,7 +245,7 @@ describe("RevocationService", () => {
         subject1,
         "token-1",
       ])
-      expect(result1).toBeNull()
+      expect(result1).toBeUndefined()
 
       // Verify subject2's tokens still exist
       const result2 = await Storage.get(storage, [

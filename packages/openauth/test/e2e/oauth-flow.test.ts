@@ -115,7 +115,9 @@ describe("OAuth 2.0 End-to-End Flow", () => {
     // This will redirect to /password/authorize (sets authorization cookie)
     const authorizeResponse = await cookieJar.fetch(authorizeUrl.toString())
     expect(authorizeResponse.status).toBe(302)
-    expect(authorizeResponse.headers.get("location")).toBe("/password/authorize")
+    expect(authorizeResponse.headers.get("location")).toBe(
+      "/password/authorize",
+    )
 
     // Step 2: Navigate to registration (within the OAuth flow, cookies maintained)
     const registerUrl = `${issuerUrl}/password/register`

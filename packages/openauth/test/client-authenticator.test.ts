@@ -1,11 +1,4 @@
-import {
-  expect,
-  test,
-  describe,
-  beforeEach,
-  mock,
-  spyOn,
-} from "bun:test"
+import { expect, test, describe, beforeEach, mock, spyOn } from "bun:test"
 import { ClientAuthenticator } from "../src/client/authenticator.js"
 import { D1ClientAdapter, type OAuthClient } from "../src/client/d1-adapter.js"
 
@@ -144,10 +137,7 @@ describe("ClientAuthenticator", () => {
         created_at: Date.now(),
       })
 
-      const result = await authenticator.validateClient(
-        clientId,
-        wrongSecret,
-      )
+      const result = await authenticator.validateClient(clientId, wrongSecret)
 
       expect(result.valid).toBe(false)
       expect(result.isPublicClient).toBe(false)

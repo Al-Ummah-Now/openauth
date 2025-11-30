@@ -79,10 +79,7 @@ export default {
    *
    * This runs in the SAME worker as the OAuth issuer above.
    */
-  async queue(
-    batch: MessageBatch<AuditEventMessage>,
-    env: Env,
-  ): Promise<void> {
+  async queue(batch: MessageBatch<AuditEventMessage>, env: Env): Promise<void> {
     console.log(`Processing batch of ${batch.messages.length} audit events`)
 
     try {

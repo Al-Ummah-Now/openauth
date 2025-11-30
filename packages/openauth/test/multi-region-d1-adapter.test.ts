@@ -1,10 +1,4 @@
-import {
-  expect,
-  test,
-  describe,
-  beforeEach,
-  mock,
-} from "bun:test"
+import { expect, test, describe, beforeEach, mock } from "bun:test"
 import {
   MultiRegionD1ClientAdapter,
   applySyncMessage,
@@ -16,9 +10,7 @@ import type { OAuthClient } from "../src/client/d1-adapter.js"
 const createMockD1 = () => ({
   prepare: (sql: string) => ({
     bind: (...params: any[]) => ({
-      run: mock(() =>
-        Promise.resolve({ success: true, meta: { changes: 1 } }),
-      ),
+      run: mock(() => Promise.resolve({ success: true, meta: { changes: 1 } })),
       first: mock(() => Promise.resolve(null)),
       all: mock(() => Promise.resolve({ results: [] })),
     }),

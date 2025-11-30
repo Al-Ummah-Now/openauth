@@ -4,8 +4,13 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the OpenAuth client.
 ---
 
-import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
-import { Tabs, TabItem } from '@astrojs/starlight/components'
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
 
 <div class="tsdoc">
 <Section type="about">
@@ -19,7 +24,7 @@ import { createClient } from "@openauthjs/openauth/client"
 
 const client = createClient({
   clientID: "my-client",
-  issuer: "https://auth.myserver.com"
+  issuer: "https://auth.myserver.com",
 })
 ```
 
@@ -28,10 +33,7 @@ Kick off the OAuth flow by calling `authorize`.
 ```ts
 const redirect_uri = "https://myserver.com/callback"
 
-const { url } = await client.authorize(
-  redirect_uri,
-  "code"
-)
+const { url } = await client.authorize(redirect_uri, "code")
 ```
 
 When the user completes the flow, `exchange` the code for tokens.
@@ -45,10 +47,13 @@ And `verify` the tokens.
 ```ts
 const verified = await client.verify(subjects, tokens.access)
 ```
-</Section>
----
+
+## </Section>
+
 ## Methods
+
 ### createClient
+
 <Segment>
 <Section type="signature">
 ```ts
@@ -106,6 +111,7 @@ const { challenge, url } = await client.authorize(
 ```
 
 This returns a redirect URL and a challenge that you need to use later to verify the code.
+
 </Segment>
 ### exchange
 <Segment>
@@ -155,14 +161,14 @@ import { InvalidAuthorizationCodeError } from "@openauthjs/openauth/error"
 if (exchanged.err) {
   if (exchanged.err instanceof InvalidAuthorizationCodeError) {
     // handle invalid code error
-  }
-  else {
+  } else {
     // handle other errors
   }
 }
 
 const { access, refresh } = exchanged.tokens
 ```
+
 </Segment>
 ### refresh
 <Segment>
@@ -204,12 +210,12 @@ import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
 if (next.err) {
   if (next.err instanceof InvalidRefreshTokenError) {
     // handle invalid refresh token error
-  }
-  else {
+  } else {
     // handle other errors
   }
 }
 ```
+
 </Segment>
 ### verify
 <Segment>
@@ -260,12 +266,12 @@ import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
 if (verified.err) {
   if (verified.err instanceof InvalidRefreshTokenError) {
     // handle invalid refresh token error
-  }
-  else {
+  } else {
     // handle other errors
   }
 }
 ```
+
 </Segment>
 ## AuthorizeOptions
 <Segment>
@@ -282,9 +288,7 @@ if (verified.err) {
 </InlineSection>
 </Section>
 
-<InlineSection>
-**Default** false
-</InlineSection>
+<InlineSection>**Default** false</InlineSection>
 Enable the PKCE flow. This is for SPA apps.
 
 ```ts
@@ -292,6 +296,7 @@ Enable the PKCE flow. This is for SPA apps.
   pkce: true
 }
 ```
+
 </Segment>
 <NestedTitle id="authorizeoptions.provider" Tag="h4" parent="AuthorizeOptions.">provider?</NestedTitle>
 <Segment>
@@ -312,6 +317,7 @@ If no provider is specified, the user is directed to a page where they can selec
 list of configured providers.
 
 If there's only one provider configured, the user will be redirected to that.
+
 </Segment>
 ## AuthorizeResult
 <Segment>
@@ -334,6 +340,7 @@ This is an object that you _stringify_ and store it in session storage.
 ```ts
 sessionStorage.setItem("challenge", JSON.stringify(challenge))
 ```
+
 </Segment>
 <NestedTitle id="authorizeresult.url" Tag="h4" parent="AuthorizeResult.">url</NestedTitle>
 <Segment>
@@ -349,6 +356,7 @@ For example, for SPA apps.
 ```ts
 location.href = url
 ```
+
 </Segment>
 ## Challenge
 <Segment>
@@ -378,11 +386,13 @@ Configure the client.
 The client ID. This is just a string to identify your app.
 
 If you have a web app and a mobile app, you want to use different client IDs both.
+
 ```ts
 {
   clientID: "my-client"
 }
 ```
+
 </Segment>
 <NestedTitle id="clientinput.fetch" Tag="h4" parent="ClientInput.">fetch?</NestedTitle>
 <Segment>
@@ -395,6 +405,7 @@ Optionally, override the internally used fetch function.
 
 This is useful if you are using a polyfilled fetch function in your application and you
 want the client to use it too.
+
 </Segment>
 <NestedTitle id="clientinput.issuer" Tag="h4" parent="ClientInput.">issuer?</NestedTitle>
 <Segment>
@@ -429,7 +440,8 @@ The type of error that occurred. You can handle this by checking the type.
 import { InvalidAuthorizationCodeError } from "@openauthjs/openauth/error"
 
 console.log(err instanceof InvalidAuthorizationCodeError)
-```
+
+````
 </Segment>
 ## ExchangeSuccess
 <Segment>
@@ -476,7 +488,8 @@ The type of error that occurred. You can handle this by checking the type.
 import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
 
 console.log(err instanceof InvalidRefreshTokenError)
-```
+````
+
 </Segment>
 ## RefreshOptions
 <Segment>
@@ -520,6 +533,7 @@ This is always `false` when the refresh is successful.
 Returns the refreshed tokens only if they've been refreshed.
 
 If they are still valid, this will be `undefined`.
+
 </Segment>
 ## Tokens
 <Segment>
@@ -576,6 +590,7 @@ The type of error that occurred. You can handle this by checking the type.
 import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
 
 console.log(err instanceof InvalidRefreshTokenError)
+
 ```
 </Segment>
 ## VerifyOptions
@@ -648,3 +663,4 @@ Returns the refreshed tokens only if they’ve been refreshed.
 If they are still valid, this will be undefined.
 </Segment>
 </div>
+```

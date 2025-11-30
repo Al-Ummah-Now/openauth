@@ -51,11 +51,9 @@ export async function getAuthInfo() {
     }
   }
 
-  const result = await validateToken(
-    accessToken.value,
-    refreshToken?.value,
-    { preferIntrospection: true },
-  )
+  const result = await validateToken(accessToken.value, refreshToken?.value, {
+    preferIntrospection: true,
+  })
 
   if (result.tokens) {
     await setTokens(result.tokens.access, result.tokens.refresh)
@@ -81,10 +79,7 @@ export async function login() {
   const refreshToken = cookies.get("refresh_token")
 
   if (accessToken) {
-    const result = await validateToken(
-      accessToken.value,
-      refreshToken?.value,
-    )
+    const result = await validateToken(accessToken.value, refreshToken?.value)
 
     if (result.valid && result.tokens) {
       await setTokens(result.tokens.access, result.tokens.refresh)

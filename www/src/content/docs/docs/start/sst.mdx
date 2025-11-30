@@ -83,13 +83,12 @@ const app = issuer({
   success: async (ctx, value) => {
     if (value.provider === "code") {
       return ctx.subject("user", {
-        id: await getUser(value.claims.email)
+        id: await getUser(value.claims.email),
       })
     }
     throw new Error("Invalid provider")
   },
 })
-
 
 export const handler = handle(app)
 ```
@@ -126,11 +125,11 @@ Now let's add this to our SST app. Replace the `run` function in `sst.config.ts`
 ```ts title="sst.config.ts" {6}
 const auth = new sst.aws.Auth("MyAuth", {
   issuer: "auth/index.handler",
-});
+})
 
 new sst.aws.Nextjs("MyWeb", {
-  link: [auth]
-});
+  link: [auth],
+})
 ```
 
 This is defining our OpenAuth component and linking it to our Next.js app.
@@ -167,7 +166,7 @@ import { cookies as getCookies } from "next/headers"
 
 export const client = createClient({
   clientID: "nextjs",
-  issuer: Resource.MyAuth.url
+  issuer: Resource.MyAuth.url,
 })
 
 export async function setTokens(access: string, refresh: string) {
@@ -249,7 +248,10 @@ export async function login() {
   const headers = await getHeaders()
   const host = headers.get("host")
   const protocol = host?.includes("localhost") ? "http" : "https"
-  const { url } = await client.authorize(`${protocol}://${host}/api/callback`, "code")
+  const { url } = await client.authorize(
+    `${protocol}://${host}/api/callback`,
+    "code",
+  )
   redirect(url)
 }
 
