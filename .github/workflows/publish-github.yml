@@ -51,7 +51,9 @@ jobs:
           cd packages/openauth
           npm publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN works for same-repo packages
+          # Use GH_PKG_TOKEN (PAT) for cross-repo or org-wide access
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PKG_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Restore original package.json
         if: always()
