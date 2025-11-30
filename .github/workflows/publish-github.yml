@@ -41,9 +41,9 @@ jobs:
           cp package.json package.npm.json
           # Use GitHub Packages config
           cp package.github.json package.json
-          # Update version if provided
+          # Update version if provided (using node to avoid npm workspace issues)
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            npm version ${{ github.event.inputs.version }} --no-git-tag-version
+            node -e "const pkg = require('./package.json'); pkg.version = '${{ github.event.inputs.version }}'; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           fi
 
       - name: Publish to GitHub Packages
