@@ -1135,7 +1135,7 @@ export function issuer<
         const response = await match.client({
           clientID: clientID.toString(),
           clientSecret: clientSecret.toString(),
-          params: Object.fromEntries(form) as Record<string, string>,
+          params: Object.fromEntries([...form.entries()]) as Record<string, string>,
         })
         return input.success(
           {
