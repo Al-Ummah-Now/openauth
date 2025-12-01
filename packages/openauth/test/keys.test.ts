@@ -143,7 +143,10 @@ describe("Key Generation and Persistence", () => {
       const savedKeys = await Array.fromAsync(
         Storage.scan(storage, ["signing:key"]),
       )
-      console.log("Signing keys created from concurrent calls:", savedKeys.length)
+      console.log(
+        "Signing keys created from concurrent calls:",
+        savedKeys.length,
+      )
       expect(savedKeys).toHaveLength(1)
     })
   })

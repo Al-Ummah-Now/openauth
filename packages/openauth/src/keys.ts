@@ -179,7 +179,11 @@ async function signingKeysInternal(
     created: Date.now(),
     alg: signingAlg,
   }
-  await Storage.set(storage, ["signing:key", PRIMARY_SIGNING_KEY_ID], serialized)
+  await Storage.set(
+    storage,
+    ["signing:key", PRIMARY_SIGNING_KEY_ID],
+    serialized,
+  )
 
   // Re-read to get whatever key is now stored (handles race condition)
   const savedKey = await Storage.get<SerializedKeyPair>(storage, [
