@@ -35,10 +35,16 @@ function validateTenantName(name: unknown): string {
   }
   const trimmed = name.trim()
   if (trimmed.length < 2) {
-    throw new ValidationError("name", "Tenant name must be at least 2 characters")
+    throw new ValidationError(
+      "name",
+      "Tenant name must be at least 2 characters",
+    )
   }
   if (trimmed.length > 100) {
-    throw new ValidationError("name", "Tenant name must be at most 100 characters")
+    throw new ValidationError(
+      "name",
+      "Tenant name must be at most 100 characters",
+    )
   }
   return trimmed
 }
@@ -283,9 +289,7 @@ export function tenantApiRoutes(service: TenantService): Hono {
       const limitParam = url.searchParams.get("limit")
       const offsetParam = url.searchParams.get("offset")
 
-      const status = statusParam
-        ? validateStatus(statusParam)
-        : undefined
+      const status = statusParam ? validateStatus(statusParam) : undefined
       const limit = limitParam ? parseInt(limitParam, 10) : 100
       const offset = offsetParam ? parseInt(offsetParam, 10) : 0
 
@@ -293,7 +297,10 @@ export function tenantApiRoutes(service: TenantService): Hono {
         throw new ValidationError("limit", "Limit must be between 1 and 1000")
       }
       if (isNaN(offset) || offset < 0) {
-        throw new ValidationError("offset", "Offset must be a non-negative number")
+        throw new ValidationError(
+          "offset",
+          "Offset must be a non-negative number",
+        )
       }
 
       const tenants = await service.listTenants({ status, limit, offset })

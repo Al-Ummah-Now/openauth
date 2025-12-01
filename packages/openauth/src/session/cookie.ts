@@ -89,7 +89,9 @@ export async function decryptSessionCookie(
   try {
     const { plaintext } = await compactDecrypt(cookie, secret)
     const decoder = new TextDecoder()
-    const payload = JSON.parse(decoder.decode(plaintext)) as SessionCookiePayload
+    const payload = JSON.parse(
+      decoder.decode(plaintext),
+    ) as SessionCookiePayload
 
     // Validate payload structure
     if (
@@ -142,7 +144,9 @@ export function createCookieOptions(domain?: string): SessionCookieOptions {
  * @param params - Cookie creation parameters
  * @returns Session cookie payload
  */
-export function createCookiePayload(params: CreateCookieParams): SessionCookiePayload {
+export function createCookiePayload(
+  params: CreateCookieParams,
+): SessionCookiePayload {
   return {
     sid: params.sessionId,
     tid: params.tenantId,

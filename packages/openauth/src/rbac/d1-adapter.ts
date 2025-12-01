@@ -204,7 +204,13 @@ export class RBACAdapter {
         VALUES (?, ?, ?, ?, ?)
         `,
       )
-      .bind(params.id, params.name, params.tenant_id, params.description ?? null, now)
+      .bind(
+        params.id,
+        params.name,
+        params.tenant_id,
+        params.description ?? null,
+        now,
+      )
       .run()
 
     return {
@@ -315,7 +321,10 @@ export class RBACAdapter {
       .first()
 
     if (existing) {
-      throw new RBACError("role_already_assigned", "Role is already assigned to user")
+      throw new RBACError(
+        "role_already_assigned",
+        "Role is already assigned to user",
+      )
     }
 
     await this.db

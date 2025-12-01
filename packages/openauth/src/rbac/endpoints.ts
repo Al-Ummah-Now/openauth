@@ -86,10 +86,7 @@ export function rbacEndpoints(service: RBACService): Hono<RBACContext> {
     try {
       body = await c.req.json<CheckPermissionBody>()
     } catch {
-      return c.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        400,
-      )
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
     }
 
     if (!body.permission || typeof body.permission !== "string") {
@@ -155,10 +152,7 @@ export function rbacEndpoints(service: RBACService): Hono<RBACContext> {
     try {
       body = await c.req.json<BatchCheckBody>()
     } catch {
-      return c.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        400,
-      )
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
     }
 
     if (!Array.isArray(body.permissions)) {
@@ -325,7 +319,11 @@ export function createRBACContextMiddleware(
   ) => Promise<{ userId: string; tenantId: string; appId?: string } | null>,
 ) {
   return async (
-    c: { req: { raw: Request }; set: (key: string, value: string) => void; json: (data: unknown, status?: number) => Response },
+    c: {
+      req: { raw: Request }
+      set: (key: string, value: string) => void
+      json: (data: unknown, status?: number) => Response
+    },
     next: () => Promise<void>,
   ) => {
     const context = await extractContext(c.req.raw)

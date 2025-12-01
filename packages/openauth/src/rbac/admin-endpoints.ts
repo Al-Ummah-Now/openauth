@@ -153,22 +153,25 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     try {
       body = await c.req.json<CreateAppBody>()
     } catch {
-      return c.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        400,
-      )
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
     }
 
     if (!body.id || typeof body.id !== "string") {
       return c.json(
-        { error: "Bad Request", message: "id is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "id is required and must be a string",
+        },
         400,
       )
     }
 
     if (!body.name || typeof body.name !== "string") {
       return c.json(
-        { error: "Bad Request", message: "name is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "name is required and must be a string",
+        },
         400,
       )
     }
@@ -178,7 +181,8 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
       return c.json(
         {
           error: "Bad Request",
-          message: "id must contain only alphanumeric characters, hyphens, and underscores",
+          message:
+            "id must contain only alphanumeric characters, hyphens, and underscores",
         },
         400,
       )
@@ -194,7 +198,10 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
 
       return c.json(app, 201)
     } catch (error) {
-      if (error instanceof Error && error.message.includes("UNIQUE constraint")) {
+      if (
+        error instanceof Error &&
+        error.message.includes("UNIQUE constraint")
+      ) {
         return c.json(
           { error: "Conflict", message: "App with this ID already exists" },
           409,
@@ -260,15 +267,15 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     try {
       body = await c.req.json<CreateRoleBody>()
     } catch {
-      return c.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        400,
-      )
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
     }
 
     if (!body.name || typeof body.name !== "string") {
       return c.json(
-        { error: "Bad Request", message: "name is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "name is required and must be a string",
+        },
         400,
       )
     }
@@ -278,7 +285,8 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
       return c.json(
         {
           error: "Bad Request",
-          message: "name must contain only alphanumeric characters, hyphens, and underscores",
+          message:
+            "name must contain only alphanumeric characters, hyphens, and underscores",
         },
         400,
       )
@@ -352,36 +360,45 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     try {
       body = await c.req.json<CreatePermissionBody>()
     } catch {
-      return c.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        400,
-      )
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
     }
 
     if (!body.name || typeof body.name !== "string") {
       return c.json(
-        { error: "Bad Request", message: "name is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "name is required and must be a string",
+        },
         400,
       )
     }
 
     if (!body.appId || typeof body.appId !== "string") {
       return c.json(
-        { error: "Bad Request", message: "appId is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "appId is required and must be a string",
+        },
         400,
       )
     }
 
     if (!body.resource || typeof body.resource !== "string") {
       return c.json(
-        { error: "Bad Request", message: "resource is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "resource is required and must be a string",
+        },
         400,
       )
     }
 
     if (!body.action || typeof body.action !== "string") {
       return c.json(
-        { error: "Bad Request", message: "action is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "action is required and must be a string",
+        },
         400,
       )
     }
@@ -391,7 +408,8 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
       return c.json(
         {
           error: "Bad Request",
-          message: "name must contain only alphanumeric characters, underscores, colons, dots, and hyphens",
+          message:
+            "name must contain only alphanumeric characters, underscores, colons, dots, and hyphens",
         },
         400,
       )
@@ -483,15 +501,15 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     try {
       body = await c.req.json<AssignRoleBody>()
     } catch {
-      return c.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        400,
-      )
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
     }
 
     if (!body.roleId || typeof body.roleId !== "string") {
       return c.json(
-        { error: "Bad Request", message: "roleId is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "roleId is required and must be a string",
+        },
         400,
       )
     }
@@ -500,7 +518,10 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     if (body.expiresAt !== undefined) {
       if (typeof body.expiresAt !== "number" || body.expiresAt <= Date.now()) {
         return c.json(
-          { error: "Bad Request", message: "expiresAt must be a future timestamp" },
+          {
+            error: "Bad Request",
+            message: "expiresAt must be a future timestamp",
+          },
           400,
         )
       }
@@ -519,16 +540,10 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     } catch (error) {
       if (error instanceof RBACError) {
         if (error.code === "role_already_assigned") {
-          return c.json(
-            { error: "Conflict", message: error.message },
-            409,
-          )
+          return c.json({ error: "Conflict", message: error.message }, 409)
         }
         if (error.code === "role_not_found") {
-          return c.json(
-            { error: "Not Found", message: error.message },
-            404,
-          )
+          return c.json({ error: "Not Found", message: error.message }, 404)
         }
       }
       throw error
@@ -629,15 +644,15 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     try {
       body = await c.req.json<AssignPermissionBody>()
     } catch {
-      return c.json(
-        { error: "Bad Request", message: "Invalid JSON body" },
-        400,
-      )
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
     }
 
     if (!body.permissionId || typeof body.permissionId !== "string") {
       return c.json(
-        { error: "Bad Request", message: "permissionId is required and must be a string" },
+        {
+          error: "Bad Request",
+          message: "permissionId is required and must be a string",
+        },
         400,
       )
     }
@@ -653,16 +668,13 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     } catch (error) {
       if (error instanceof RBACError) {
         if (error.code === "role_already_assigned") {
-          return c.json(
-            { error: "Conflict", message: error.message },
-            409,
-          )
+          return c.json({ error: "Conflict", message: error.message }, 409)
         }
-        if (error.code === "role_not_found" || error.code === "permission_not_found") {
-          return c.json(
-            { error: "Not Found", message: error.message },
-            404,
-          )
+        if (
+          error.code === "role_not_found" ||
+          error.code === "permission_not_found"
+        ) {
+          return c.json({ error: "Not Found", message: error.message }, 404)
         }
       }
       throw error
@@ -680,7 +692,10 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
 
     if (!roleId || !permissionId) {
       return c.json(
-        { error: "Bad Request", message: "roleId and permissionId are required" },
+        {
+          error: "Bad Request",
+          message: "roleId and permissionId are required",
+        },
         400,
       )
     }
@@ -758,7 +773,11 @@ export function createAdminMiddleware(
   ) => Promise<{ adminId: string; tenantId: string; isAdmin: boolean } | null>,
 ) {
   return async (
-    c: { req: { raw: Request }; set: (key: string, value: string | boolean) => void; json: (data: unknown, status?: number) => Response },
+    c: {
+      req: { raw: Request }
+      set: (key: string, value: string | boolean) => void
+      json: (data: unknown, status?: number) => Response
+    },
     next: () => Promise<void>,
   ) => {
     const context = await extractAdmin(c.req.raw)

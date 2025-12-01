@@ -26,6 +26,7 @@ Migrations must be run in order due to table dependencies:
 ## Prerequisites
 
 1. Install Wrangler CLI:
+
    ```bash
    npm install -g wrangler
    ```
@@ -87,33 +88,33 @@ wrangler d1 execute openauth-db --command=".schema rbac_roles"
 
 ### Core Tables
 
-| Table | Description | Primary Key |
-|-------|-------------|-------------|
+| Table           | Description                    | Primary Key |
+| --------------- | ------------------------------ | ----------- |
 | `oauth_clients` | OAuth 2.0 client registrations | `client_id` |
-| `tenants` | Multi-tenant organizations | `id` |
+| `tenants`       | Multi-tenant organizations     | `id`        |
 
 ### Session Tables
 
-| Table | Description | Primary Key |
-|-------|-------------|-------------|
-| `browser_sessions` | Browser/device sessions | `id` |
-| `account_sessions` | User account sessions (multi-account) | `id` |
+| Table              | Description                           | Primary Key |
+| ------------------ | ------------------------------------- | ----------- |
+| `browser_sessions` | Browser/device sessions               | `id`        |
+| `account_sessions` | User account sessions (multi-account) | `id`        |
 
 ### RBAC Tables
 
-| Table | Description | Primary Key |
-|-------|-------------|-------------|
-| `rbac_apps` | Applications with RBAC | `id` |
-| `rbac_roles` | Named permission collections | `id` |
-| `rbac_permissions` | Granular access controls | `id` |
-| `rbac_role_permissions` | Role-to-permission mapping | `(role_id, permission_id)` |
-| `rbac_user_roles` | User-to-role mapping | `(user_id, role_id, tenant_id)` |
+| Table                   | Description                  | Primary Key                     |
+| ----------------------- | ---------------------------- | ------------------------------- |
+| `rbac_apps`             | Applications with RBAC       | `id`                            |
+| `rbac_roles`            | Named permission collections | `id`                            |
+| `rbac_permissions`      | Granular access controls     | `id`                            |
+| `rbac_role_permissions` | Role-to-permission mapping   | `(role_id, permission_id)`      |
+| `rbac_user_roles`       | User-to-role mapping         | `(user_id, role_id, tenant_id)` |
 
 ### Views
 
-| View | Description |
-|------|-------------|
-| `expired_sessions` | Sessions needing cleanup |
+| View               | Description                |
+| ------------------ | -------------------------- |
+| `expired_sessions` | Sessions needing cleanup   |
 | `user_permissions` | Flattened user permissions |
 
 ## Rollback Strategy
@@ -279,6 +280,7 @@ All timestamps use Unix epoch milliseconds (INTEGER) for consistency and timezon
 ### JSON Columns
 
 JSON data is stored as TEXT columns. Parse with `json()` in queries if needed:
+
 ```sql
 SELECT json_extract(branding, '$.theme.primary') AS primary_color FROM tenants;
 ```
@@ -317,6 +319,7 @@ Ensure referenced rows exist before inserting. The default tenant is created in 
 ### Slow Queries
 
 Check query plans with:
+
 ```sql
 EXPLAIN QUERY PLAN SELECT * FROM rbac_user_roles WHERE user_id = 'x';
 ```

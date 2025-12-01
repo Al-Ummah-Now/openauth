@@ -81,7 +81,10 @@ npm install @openauthjs/openauth
 ### Basic Enterprise Setup
 
 ```typescript
-import { createMultiTenantIssuer, hexToSecret } from "@openauthjs/openauth/enterprise"
+import {
+  createMultiTenantIssuer,
+  hexToSecret,
+} from "@openauthjs/openauth/enterprise"
 import { createTenantService } from "@openauthjs/openauth/tenant"
 import { SessionServiceImpl } from "@openauthjs/openauth/session"
 import { RBACServiceImpl, RBACAdapter } from "@openauthjs/openauth/rbac"
@@ -156,26 +159,26 @@ The session management system allows users to be logged into multiple accounts w
 
 ### Key Concepts
 
-| Concept | Description |
-|---------|-------------|
-| **Browser Session** | Represents a browser instance, stored in encrypted cookie |
+| Concept             | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| **Browser Session** | Represents a browser instance, stored in encrypted cookie    |
 | **Account Session** | Represents a logged-in user account within a browser session |
-| **Active Account** | The currently selected account for the session |
-| **Sliding Window** | Sessions automatically extend when activity is detected |
+| **Active Account**  | The currently selected account for the session               |
+| **Sliding Window**  | Sessions automatically extend when activity is detected      |
 
 ### Browser Session Structure
 
 ```typescript
 interface BrowserSession {
-  id: string              // UUID
-  tenant_id: string       // Tenant this session belongs to
-  created_at: number      // Unix timestamp (ms)
-  last_activity: number   // Unix timestamp (ms)
-  user_agent: string      // Browser user agent
-  ip_address: string      // Client IP address
-  version: number         // Optimistic concurrency control
-  active_user_id: string | null  // Currently active account
-  account_user_ids: string[]     // All logged-in accounts (max 3)
+  id: string // UUID
+  tenant_id: string // Tenant this session belongs to
+  created_at: number // Unix timestamp (ms)
+  last_activity: number // Unix timestamp (ms)
+  user_agent: string // Browser user agent
+  ip_address: string // Client IP address
+  version: number // Optimistic concurrency control
+  active_user_id: string | null // Currently active account
+  account_user_ids: string[] // All logged-in accounts (max 3)
 }
 ```
 
@@ -183,16 +186,16 @@ interface BrowserSession {
 
 ```typescript
 interface AccountSession {
-  id: string                     // UUID
-  browser_session_id: string     // Parent browser session
-  user_id: string                // User identifier
-  is_active: boolean             // Is this the active account?
-  authenticated_at: number       // When user authenticated
-  expires_at: number             // Session expiration
-  subject_type: string           // Subject type (e.g., "user")
-  subject_properties: Record<string, unknown>  // User data
-  refresh_token: string          // Associated refresh token
-  client_id: string              // Client that initiated auth
+  id: string // UUID
+  browser_session_id: string // Parent browser session
+  user_id: string // User identifier
+  is_active: boolean // Is this the active account?
+  authenticated_at: number // When user authenticated
+  expires_at: number // Session expiration
+  subject_type: string // Subject type (e.g., "user")
+  subject_properties: Record<string, unknown> // User data
+  refresh_token: string // Associated refresh token
+  client_id: string // Client that initiated auth
 }
 ```
 
@@ -210,10 +213,10 @@ session:user/{tenant_id}/{user_id}/{browser_session_id} - User lookup index
 
 ```typescript
 interface SessionConfig {
-  maxAccountsPerSession: number    // Default: 3
-  sessionLifetimeSeconds: number   // Default: 604800 (7 days)
-  slidingWindowSeconds: number     // Default: 86400 (1 day)
-  cookieName: string               // Default: "__session"
+  maxAccountsPerSession: number // Default: 3
+  sessionLifetimeSeconds: number // Default: 604800 (7 days)
+  slidingWindowSeconds: number // Default: 86400 (1 day)
+  cookieName: string // Default: "__session"
 }
 ```
 
@@ -223,14 +226,15 @@ Session cookies are encrypted using JWE (JSON Web Encryption):
 
 ```typescript
 interface SessionCookiePayload {
-  sid: string  // Browser session ID
-  tid: string  // Tenant ID
-  v: number    // Version (optimistic concurrency)
-  iat: number  // Issued at
+  sid: string // Browser session ID
+  tid: string // Tenant ID
+  v: number // Version (optimistic concurrency)
+  iat: number // Issued at
 }
 ```
 
 Cookie attributes:
+
 - `HttpOnly: true` - Prevents XSS attacks
 - `Secure: true` - HTTPS only (in production)
 - `SameSite: Lax` - CSRF protection while allowing redirects
@@ -276,10 +280,16 @@ await sessionService.removeAccount(browserSession.id, "user-456")
 await sessionService.removeAllAccounts(browserSession.id)
 
 // Admin: Revoke all sessions for a user
-const revokedCount = await sessionService.revokeUserSessions("tenant-123", "user-456")
+const revokedCount = await sessionService.revokeUserSessions(
+  "tenant-123",
+  "user-456",
+)
 
 // Admin: Revoke specific session
-const revoked = await sessionService.revokeSpecificSession("session-id", "tenant-123")
+const revoked = await sessionService.revokeSpecificSession(
+  "session-id",
+  "tenant-123",
+)
 ```
 
 ### Session Middleware
@@ -296,10 +306,13 @@ import {
 const app = new Hono()
 
 // Apply session middleware
-app.use("*", createSessionMiddleware(sessionService, sessionSecret, {
-  cookieName: "__session",
-  autoRefresh: true,
-}))
+app.use(
+  "*",
+  createSessionMiddleware(sessionService, sessionSecret, {
+    cookieName: "__session",
+    autoRefresh: true,
+  }),
+)
 
 // Access session in routes
 app.get("/profile", async (c) => {
@@ -327,20 +340,20 @@ When using the enterprise issuer, these endpoints are automatically mounted:
 
 #### User Session Routes (`/session/*`)
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/session/accounts` | GET | List all logged-in accounts |
-| `/session/switch` | POST | Switch active account |
-| `/session/accounts/:userId` | DELETE | Sign out one account |
-| `/session/all` | DELETE | Sign out all accounts |
-| `/session/check` | GET | Silent session check (CORS enabled) |
+| Endpoint                    | Method | Description                         |
+| --------------------------- | ------ | ----------------------------------- |
+| `/session/accounts`         | GET    | List all logged-in accounts         |
+| `/session/switch`           | POST   | Switch active account               |
+| `/session/accounts/:userId` | DELETE | Sign out one account                |
+| `/session/all`              | DELETE | Sign out all accounts               |
+| `/session/check`            | GET    | Silent session check (CORS enabled) |
 
 #### Admin Session Routes (`/admin/sessions/*`)
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/admin/sessions/revoke-user` | POST | Revoke all sessions for a user |
-| `/admin/sessions/revoke` | POST | Revoke a specific session |
+| Endpoint                      | Method | Description                    |
+| ----------------------------- | ------ | ------------------------------ |
+| `/admin/sessions/revoke-user` | POST   | Revoke all sessions for a user |
+| `/admin/sessions/revoke`      | POST   | Revoke a specific session      |
 
 ---
 
@@ -364,28 +377,28 @@ Tenants are resolved from requests using multiple strategies (in priority order)
 
 ```typescript
 interface Tenant {
-  id: string                    // Unique identifier
-  domain?: string               // Custom domain (optional)
-  name: string                  // Display name
-  status: TenantStatus          // "active" | "suspended" | "pending" | "deleted"
-  branding: TenantBranding      // White-label customization
-  settings: TenantSettings      // Tenant-specific settings
-  created_at: number            // Unix timestamp (ms)
-  updated_at: number            // Unix timestamp (ms)
+  id: string // Unique identifier
+  domain?: string // Custom domain (optional)
+  name: string // Display name
+  status: TenantStatus // "active" | "suspended" | "pending" | "deleted"
+  branding: TenantBranding // White-label customization
+  settings: TenantSettings // Tenant-specific settings
+  created_at: number // Unix timestamp (ms)
+  updated_at: number // Unix timestamp (ms)
 }
 
 interface TenantBranding {
   theme?: {
-    primary?: string            // Primary color
-    secondary?: string          // Secondary color
-    background?: string         // Background color
-    text?: string               // Text color
-    fontFamily?: string         // Font family
+    primary?: string // Primary color
+    secondary?: string // Secondary color
+    background?: string // Background color
+    text?: string // Text color
+    fontFamily?: string // Font family
   }
-  logoLight?: string            // Logo URL (light theme)
-  logoDark?: string             // Logo URL (dark theme)
-  favicon?: string              // Favicon URL
-  customCss?: string            // Custom CSS injection
+  logoLight?: string // Logo URL (light theme)
+  logoDark?: string // Logo URL (dark theme)
+  favicon?: string // Favicon URL
+  customCss?: string // Custom CSS injection
   emailTemplates?: {
     welcome?: string
     verification?: string
@@ -395,19 +408,22 @@ interface TenantBranding {
 }
 
 interface TenantSettings {
-  maxAccountsPerSession?: number         // Override default
-  sessionLifetime?: number               // Override default
-  allowPublicRegistration?: boolean      // Allow self-registration
-  requireEmailVerification?: boolean     // Require email verification
-  allowedProviders?: string[]            // Restrict auth providers
-  mfaRequired?: boolean                  // Require MFA
+  maxAccountsPerSession?: number // Override default
+  sessionLifetime?: number // Override default
+  allowPublicRegistration?: boolean // Allow self-registration
+  requireEmailVerification?: boolean // Require email verification
+  allowedProviders?: string[] // Restrict auth providers
+  mfaRequired?: boolean // Require MFA
 }
 ```
 
 ### Using TenantService
 
 ```typescript
-import { createTenantService, TenantServiceImpl } from "@openauthjs/openauth/tenant"
+import {
+  createTenantService,
+  TenantServiceImpl,
+} from "@openauthjs/openauth/tenant"
 
 // Initialize
 const tenantService = createTenantService(storage, d1Database)
@@ -465,16 +481,19 @@ import {
 const app = new Hono()
 
 // Apply tenant resolver
-app.use("*", createTenantResolver({
-  service: tenantService,
-  storage,
-  config: {
-    baseDomain: "auth.example.com",
-    headerName: "X-Tenant-ID",
-    queryParam: "tenant",
-  },
-  optional: false, // Tenant is required
-}))
+app.use(
+  "*",
+  createTenantResolver({
+    service: tenantService,
+    storage,
+    config: {
+      baseDomain: "auth.example.com",
+      headerName: "X-Tenant-ID",
+      queryParam: "tenant",
+    },
+    optional: false, // Tenant is required
+  }),
+)
 
 // Access tenant in routes
 app.get("/info", async (c) => {
@@ -519,15 +538,15 @@ t:{tenantId}:client:{clientId}
 
 ### Tenant API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/tenants` | POST | Create tenant |
-| `/tenants` | GET | List tenants |
-| `/tenants/:id` | GET | Get tenant by ID |
-| `/tenants/:id` | PUT | Update tenant |
-| `/tenants/:id` | DELETE | Delete tenant (soft delete) |
-| `/tenants/:id/branding` | PUT | Update branding only |
-| `/tenants/:id/settings` | PUT | Update settings only |
+| Endpoint                | Method | Description                 |
+| ----------------------- | ------ | --------------------------- |
+| `/tenants`              | POST   | Create tenant               |
+| `/tenants`              | GET    | List tenants                |
+| `/tenants/:id`          | GET    | Get tenant by ID            |
+| `/tenants/:id`          | PUT    | Update tenant               |
+| `/tenants/:id`          | DELETE | Delete tenant (soft delete) |
+| `/tenants/:id/branding` | PUT    | Update branding only        |
+| `/tenants/:id/settings` | PUT    | Update settings only        |
 
 ---
 
@@ -539,40 +558,40 @@ RBAC provides fine-grained authorization by organizing permissions into roles th
 
 ### Key Concepts
 
-| Concept | Description |
-|---------|-------------|
-| **App** | An application that defines its own permissions |
+| Concept        | Description                                          |
+| -------------- | ---------------------------------------------------- |
+| **App**        | An application that defines its own permissions      |
 | **Permission** | A specific action on a resource (e.g., `posts:read`) |
-| **Role** | A named collection of permissions |
-| **User Role** | Assignment of a role to a user (may have expiration) |
+| **Role**       | A named collection of permissions                    |
+| **User Role**  | Assignment of a role to a user (may have expiration) |
 
 ### Data Models
 
 ```typescript
 interface App {
-  id: string           // Unique identifier (e.g., "admin-dashboard")
-  name: string         // Display name
-  tenant_id: string    // Owner tenant
+  id: string // Unique identifier (e.g., "admin-dashboard")
+  name: string // Display name
+  tenant_id: string // Owner tenant
   description?: string
   created_at: number
 }
 
 interface Permission {
-  id: string           // UUID
-  name: string         // Format: "resource:action" (e.g., "posts:read")
-  app_id: string       // App that owns this permission
+  id: string // UUID
+  name: string // Format: "resource:action" (e.g., "posts:read")
+  app_id: string // App that owns this permission
   description?: string
-  resource: string     // Resource being protected (e.g., "posts")
-  action: string       // Action being permitted (e.g., "read")
+  resource: string // Resource being protected (e.g., "posts")
+  action: string // Action being permitted (e.g., "read")
   created_at: number
 }
 
 interface Role {
-  id: string           // UUID
-  name: string         // Unique within tenant (e.g., "editor")
-  tenant_id: string    // Owner tenant
+  id: string // UUID
+  name: string // Unique within tenant (e.g., "editor")
+  tenant_id: string // Owner tenant
   description?: string
-  is_system_role: boolean  // Cannot be deleted
+  is_system_role: boolean // Cannot be deleted
   created_at: number
   updated_at: number
 }
@@ -582,8 +601,8 @@ interface UserRole {
   role_id: string
   tenant_id: string
   assigned_at: number
-  expires_at?: number  // Optional expiration
-  assigned_by: string  // Admin who assigned
+  expires_at?: number // Optional expiration
+  assigned_by: string // Admin who assigned
 }
 ```
 
@@ -719,6 +738,7 @@ const rbacService = new RBACServiceImpl(rbacAdapter, storage, {
 ```
 
 Cache is automatically invalidated when:
+
 - Role is assigned/removed from user
 - Permission is assigned/removed from role
 
@@ -726,29 +746,29 @@ Cache is automatically invalidated when:
 
 #### Permission Check Routes (`/rbac/*`)
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/rbac/check` | POST | Check single permission |
-| `/rbac/check/batch` | POST | Check multiple permissions |
-| `/rbac/permissions` | GET | Get user permissions for app |
-| `/rbac/roles` | GET | Get user roles |
+| Endpoint            | Method | Description                  |
+| ------------------- | ------ | ---------------------------- |
+| `/rbac/check`       | POST   | Check single permission      |
+| `/rbac/check/batch` | POST   | Check multiple permissions   |
+| `/rbac/permissions` | GET    | Get user permissions for app |
+| `/rbac/roles`       | GET    | Get user roles               |
 
 #### Admin RBAC Routes (`/rbac/admin/*`)
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/rbac/admin/apps` | POST | Create app |
-| `/rbac/admin/apps` | GET | List apps |
-| `/rbac/admin/roles` | POST | Create role |
-| `/rbac/admin/roles` | GET | List roles |
-| `/rbac/admin/permissions` | POST | Create permission |
-| `/rbac/admin/permissions` | GET | List permissions (query: appId) |
-| `/rbac/admin/users/:userId/roles` | POST | Assign role to user |
-| `/rbac/admin/users/:userId/roles/:roleId` | DELETE | Remove role from user |
-| `/rbac/admin/users/:userId/roles` | GET | List user's role assignments |
-| `/rbac/admin/roles/:roleId/permissions` | POST | Assign permission to role |
-| `/rbac/admin/roles/:roleId/permissions/:permissionId` | DELETE | Remove permission from role |
-| `/rbac/admin/roles/:roleId/permissions` | GET | List role's permissions |
+| Endpoint                                              | Method | Description                     |
+| ----------------------------------------------------- | ------ | ------------------------------- |
+| `/rbac/admin/apps`                                    | POST   | Create app                      |
+| `/rbac/admin/apps`                                    | GET    | List apps                       |
+| `/rbac/admin/roles`                                   | POST   | Create role                     |
+| `/rbac/admin/roles`                                   | GET    | List roles                      |
+| `/rbac/admin/permissions`                             | POST   | Create permission               |
+| `/rbac/admin/permissions`                             | GET    | List permissions (query: appId) |
+| `/rbac/admin/users/:userId/roles`                     | POST   | Assign role to user             |
+| `/rbac/admin/users/:userId/roles/:roleId`             | DELETE | Remove role from user           |
+| `/rbac/admin/users/:userId/roles`                     | GET    | List user's role assignments    |
+| `/rbac/admin/roles/:roleId/permissions`               | POST   | Assign permission to role       |
+| `/rbac/admin/roles/:roleId/permissions/:permissionId` | DELETE | Remove permission from role     |
+| `/rbac/admin/roles/:roleId/permissions`               | GET    | List role's permissions         |
 
 ---
 
@@ -766,7 +786,7 @@ interface EnterpriseIssuerConfig {
   tenantService: TenantService
   sessionService: SessionService
   storage: StorageAdapter
-  sessionSecret: Uint8Array        // 256-bit key
+  sessionSecret: Uint8Array // 256-bit key
   providers: Record<string, Provider>
   subjects: SubjectSchema
 
@@ -790,8 +810,8 @@ interface EnterpriseIssuerConfig {
   tenantResolver?: {
     baseDomain?: string
     pathPrefix?: string
-    headerName?: string      // Default: "X-Tenant-ID"
-    queryParam?: string      // Default: "tenant"
+    headerName?: string // Default: "X-Tenant-ID"
+    queryParam?: string // Default: "tenant"
     customDomains?: Map<string, string>
   }
 
@@ -810,13 +830,13 @@ interface EnterpriseIssuerConfig {
 
 The enterprise issuer supports these OIDC parameters:
 
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `prompt` | `none`, `login`, `consent`, `select_account` | Control auth UI behavior |
-| `login_hint` | email or user ID | Pre-fill login form |
-| `account_hint` | user ID | Select specific logged-in account |
-| `max_age` | seconds | Force re-auth if session older than |
-| `nonce` | string | For ID token replay protection |
+| Parameter      | Values                                       | Description                         |
+| -------------- | -------------------------------------------- | ----------------------------------- |
+| `prompt`       | `none`, `login`, `consent`, `select_account` | Control auth UI behavior            |
+| `login_hint`   | email or user ID                             | Pre-fill login form                 |
+| `account_hint` | user ID                                      | Select specific logged-in account   |
+| `max_age`      | seconds                                      | Force re-auth if session older than |
+| `nonce`        | string                                       | For ID token replay protection      |
 
 #### prompt=none (Silent Authentication)
 
@@ -859,11 +879,11 @@ GET /authorize?
 
 ### Well-Known Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `/.well-known/openid-configuration` | OIDC Discovery document |
+| Endpoint                                  | Description                  |
+| ----------------------------------------- | ---------------------------- |
+| `/.well-known/openid-configuration`       | OIDC Discovery document      |
 | `/.well-known/oauth-authorization-server` | OAuth 2.0 Discovery document |
-| `/.well-known/jwks.json` | JSON Web Key Set |
+| `/.well-known/jwks.json`                  | JSON Web Key Set             |
 
 ---
 
@@ -1053,7 +1073,7 @@ const secret = hexToSecret(process.env.SESSION_SECRET!)
 const DEFAULT_SESSION_CONFIG = {
   maxAccountsPerSession: 3,
   sessionLifetimeSeconds: 7 * 24 * 60 * 60, // 7 days
-  slidingWindowSeconds: 24 * 60 * 60,       // 1 day
+  slidingWindowSeconds: 24 * 60 * 60, // 1 day
   cookieName: "__session",
 }
 ```
@@ -1069,11 +1089,11 @@ const DEFAULT_RBAC_CONFIG = {
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `SESSION_SECRET` | 64-character hex string (256 bits) | Yes |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID | If using Google |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | If using Google |
+| Variable               | Description                        | Required        |
+| ---------------------- | ---------------------------------- | --------------- |
+| `SESSION_SECRET`       | 64-character hex string (256 bits) | Yes             |
+| `GOOGLE_CLIENT_ID`     | Google OAuth client ID             | If using Google |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret         | If using Google |
 
 ### Database Migrations
 
@@ -1094,34 +1114,34 @@ wrangler d1 execute openauth-db --file=./src/migrations/004_rbac_schema.sql
 
 ```typescript
 type SessionErrorCode =
-  | "max_accounts_exceeded"  // Trying to add 4th account
-  | "session_not_found"      // Browser session doesn't exist
-  | "account_not_found"      // Account not in session
-  | "session_expired"        // Session has expired
-  | "version_conflict"       // Concurrent modification
-  | "invalid_cookie"         // Cookie decryption failed
+  | "max_accounts_exceeded" // Trying to add 4th account
+  | "session_not_found" // Browser session doesn't exist
+  | "account_not_found" // Account not in session
+  | "session_expired" // Session has expired
+  | "version_conflict" // Concurrent modification
+  | "invalid_cookie" // Cookie decryption failed
 ```
 
 ### Tenant Errors
 
 ```typescript
 type TenantErrorCode =
-  | "tenant_not_found"       // Tenant doesn't exist
-  | "tenant_suspended"       // Tenant is suspended
-  | "tenant_deleted"         // Tenant was deleted
-  | "domain_already_exists"  // Domain in use by another tenant
-  | "invalid_tenant_id"      // Invalid tenant ID format
+  | "tenant_not_found" // Tenant doesn't exist
+  | "tenant_suspended" // Tenant is suspended
+  | "tenant_deleted" // Tenant was deleted
+  | "domain_already_exists" // Domain in use by another tenant
+  | "invalid_tenant_id" // Invalid tenant ID format
 ```
 
 ### RBAC Errors
 
 ```typescript
 type RBACErrorCode =
-  | "role_not_found"         // Role doesn't exist
-  | "permission_not_found"   // Permission doesn't exist
-  | "app_not_found"          // App doesn't exist
-  | "role_already_assigned"  // Role already assigned to user
-  | "permission_denied"      // User lacks permission
+  | "role_not_found" // Role doesn't exist
+  | "permission_not_found" // Permission doesn't exist
+  | "app_not_found" // App doesn't exist
+  | "role_already_assigned" // Role already assigned to user
+  | "permission_denied" // User lacks permission
 ```
 
 ---
@@ -1130,49 +1150,49 @@ type RBACErrorCode =
 
 ### OAuth/OIDC Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/authorize` | GET | Authorization endpoint |
-| `/token` | POST | Token endpoint |
-| `/userinfo` | GET | UserInfo endpoint |
-| `/.well-known/openid-configuration` | GET | OIDC discovery |
-| `/.well-known/oauth-authorization-server` | GET | OAuth discovery |
-| `/.well-known/jwks.json` | GET | JSON Web Key Set |
+| Endpoint                                  | Method | Description            |
+| ----------------------------------------- | ------ | ---------------------- |
+| `/authorize`                              | GET    | Authorization endpoint |
+| `/token`                                  | POST   | Token endpoint         |
+| `/userinfo`                               | GET    | UserInfo endpoint      |
+| `/.well-known/openid-configuration`       | GET    | OIDC discovery         |
+| `/.well-known/oauth-authorization-server` | GET    | OAuth discovery        |
+| `/.well-known/jwks.json`                  | GET    | JSON Web Key Set       |
 
 ### Session Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/session/accounts` | GET | List logged-in accounts |
-| `/session/switch` | POST | Switch active account |
-| `/session/accounts/:userId` | DELETE | Sign out one account |
-| `/session/all` | DELETE | Sign out all accounts |
-| `/session/check` | GET | Silent session check |
-| `/admin/sessions/revoke-user` | POST | Revoke all user sessions |
-| `/admin/sessions/revoke` | POST | Revoke specific session |
+| Endpoint                      | Method | Description              |
+| ----------------------------- | ------ | ------------------------ |
+| `/session/accounts`           | GET    | List logged-in accounts  |
+| `/session/switch`             | POST   | Switch active account    |
+| `/session/accounts/:userId`   | DELETE | Sign out one account     |
+| `/session/all`                | DELETE | Sign out all accounts    |
+| `/session/check`              | GET    | Silent session check     |
+| `/admin/sessions/revoke-user` | POST   | Revoke all user sessions |
+| `/admin/sessions/revoke`      | POST   | Revoke specific session  |
 
 ### Tenant Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/tenants` | POST | Create tenant |
-| `/tenants` | GET | List tenants |
-| `/tenants/:id` | GET | Get tenant |
-| `/tenants/:id` | PUT | Update tenant |
-| `/tenants/:id` | DELETE | Delete tenant |
-| `/tenants/:id/branding` | PUT | Update branding |
-| `/tenants/:id/settings` | PUT | Update settings |
+| Endpoint                | Method | Description     |
+| ----------------------- | ------ | --------------- |
+| `/tenants`              | POST   | Create tenant   |
+| `/tenants`              | GET    | List tenants    |
+| `/tenants/:id`          | GET    | Get tenant      |
+| `/tenants/:id`          | PUT    | Update tenant   |
+| `/tenants/:id`          | DELETE | Delete tenant   |
+| `/tenants/:id/branding` | PUT    | Update branding |
+| `/tenants/:id/settings` | PUT    | Update settings |
 
 ### RBAC Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/rbac/check` | POST | Check permission |
-| `/rbac/check/batch` | POST | Batch check permissions |
-| `/rbac/permissions` | GET | Get user permissions |
-| `/rbac/roles` | GET | Get user roles |
-| `/rbac/admin/apps` | POST/GET | Manage apps |
-| `/rbac/admin/roles` | POST/GET | Manage roles |
-| `/rbac/admin/permissions` | POST/GET | Manage permissions |
-| `/rbac/admin/users/:userId/roles` | POST/GET/DELETE | Manage user roles |
+| Endpoint                                | Method          | Description             |
+| --------------------------------------- | --------------- | ----------------------- |
+| `/rbac/check`                           | POST            | Check permission        |
+| `/rbac/check/batch`                     | POST            | Batch check permissions |
+| `/rbac/permissions`                     | GET             | Get user permissions    |
+| `/rbac/roles`                           | GET             | Get user roles          |
+| `/rbac/admin/apps`                      | POST/GET        | Manage apps             |
+| `/rbac/admin/roles`                     | POST/GET        | Manage roles            |
+| `/rbac/admin/permissions`               | POST/GET        | Manage permissions      |
+| `/rbac/admin/users/:userId/roles`       | POST/GET/DELETE | Manage user roles       |
 | `/rbac/admin/roles/:roleId/permissions` | POST/GET/DELETE | Manage role permissions |

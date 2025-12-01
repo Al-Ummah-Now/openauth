@@ -10,7 +10,11 @@ import { MemoryStorage } from "../src/storage/memory.js"
 import { TenantServiceImpl } from "../src/tenant/service.js"
 import { TenantStorageImpl } from "../src/tenant/storage.js"
 import { TenantError } from "../src/contracts/types.js"
-import type { Tenant, TenantBranding, TenantSettings } from "../src/contracts/types.js"
+import type {
+  Tenant,
+  TenantBranding,
+  TenantSettings,
+} from "../src/contracts/types.js"
 
 describe("TenantServiceImpl", () => {
   let storage: ReturnType<typeof MemoryStorage>
@@ -143,7 +147,11 @@ describe("TenantServiceImpl", () => {
         domain: "auth.example.com",
       })
 
-      const domainLookup = await storage.get(["tenant", "domain", "auth.example.com"])
+      const domainLookup = await storage.get([
+        "tenant",
+        "domain",
+        "auth.example.com",
+      ])
       expect(domainLookup).toEqual({ tenantId: "tenant-123" })
     })
   })
@@ -352,11 +360,19 @@ describe("TenantServiceImpl", () => {
       })
 
       // Old domain lookup should be removed
-      const oldLookup = await storage.get(["tenant", "domain", "old.example.com"])
+      const oldLookup = await storage.get([
+        "tenant",
+        "domain",
+        "old.example.com",
+      ])
       expect(oldLookup).toBeUndefined()
 
       // New domain lookup should exist
-      const newLookup = await storage.get(["tenant", "domain", "new.example.com"])
+      const newLookup = await storage.get([
+        "tenant",
+        "domain",
+        "new.example.com",
+      ])
       expect(newLookup).toEqual({ tenantId: "tenant-123" })
     })
 
@@ -497,7 +513,9 @@ describe("TenantServiceImpl", () => {
     })
 
     test("throws error for non-existent tenant", async () => {
-      await expect(service.deleteTenant("non-existent")).rejects.toThrow(TenantError)
+      await expect(service.deleteTenant("non-existent")).rejects.toThrow(
+        TenantError,
+      )
     })
 
     test("allows deleting tenant without domain", async () => {
@@ -556,20 +574,20 @@ describe("TenantServiceImpl", () => {
 
     test("filters by active status", async () => {
       const tenants = await service.listTenants({ status: "active" })
-      expect(tenants.every(t => t.status === "active")).toBe(true)
+      expect(tenants.every((t) => t.status === "active")).toBe(true)
       expect(tenants.length).toBe(3)
     })
 
     test("filters by suspended status", async () => {
       const tenants = await service.listTenants({ status: "suspended" })
-      expect(tenants.every(t => t.status === "suspended")).toBe(true)
+      expect(tenants.every((t) => t.status === "suspended")).toBe(true)
       expect(tenants.length).toBe(1)
       expect(tenants[0].id).toBe("tenant-suspended")
     })
 
     test("filters by deleted status", async () => {
       const tenants = await service.listTenants({ status: "deleted" })
-      expect(tenants.every(t => t.status === "deleted")).toBe(true)
+      expect(tenants.every((t) => t.status === "deleted")).toBe(true)
       expect(tenants.length).toBe(1)
       expect(tenants[0].id).toBe("tenant-deleted")
     })
@@ -581,7 +599,10 @@ describe("TenantServiceImpl", () => {
 
     test("respects offset parameter", async () => {
       const allTenants = await service.listTenants({ status: "active" })
-      const offsetTenants = await service.listTenants({ status: "active", offset: 1 })
+      const offsetTenants = await service.listTenants({
+        status: "active",
+        offset: 1,
+      })
 
       expect(offsetTenants.length).toBe(allTenants.length - 1)
       expect(offsetTenants[0].id).toBe(allTenants[1].id)
@@ -595,7 +616,7 @@ describe("TenantServiceImpl", () => {
       })
 
       expect(tenants.length).toBe(2)
-      expect(tenants.every(t => t.status === "active")).toBe(true)
+      expect(tenants.every((t) => t.status === "active")).toBe(true)
     })
 
     test("returns empty array when no tenants match filter", async () => {
@@ -620,7 +641,7 @@ describe("TenantServiceImpl", () => {
       const tenants = await service.listTenants()
 
       // Verify all returned items are valid tenant objects
-      tenants.forEach(tenant => {
+      tenants.forEach((tenant) => {
         expect(tenant.id).toBeDefined()
         expect(tenant.name).toBeDefined()
         expect(tenant.status).toBeDefined()
@@ -661,21 +682,34 @@ describe("TenantStorageImpl", () => {
       })
 
       // Verify the key is prefixed in base storage
-      const value = await baseStorage.get(["t", "tenant-123", "oauth", "refresh", "token123"])
+      const value = await baseStorage.get([
+        "t",
+        "tenant-123",
+        "oauth",
+        "refresh",
+        "token123",
+      ])
       expect(value).toEqual({ token: "refresh-token" })
     })
 
     test("uses correct prefix format", async () => {
       await tenantStorage.set(["user", "profile"], { name: "John" })
 
-      const value = await baseStorage.get(["t", "tenant-123", "user", "profile"])
+      const value = await baseStorage.get([
+        "t",
+        "tenant-123",
+        "user",
+        "profile",
+      ])
       expect(value).toEqual({ name: "John" })
     })
   })
 
   describe("get", () => {
     test("retrieves data with correct prefix", async () => {
-      await baseStorage.set(["t", "tenant-123", "user", "123"], { name: "John" })
+      await baseStorage.set(["t", "tenant-123", "user", "123"], {
+        name: "John",
+      })
 
       const value = await tenantStorage.get(["user", "123"])
       expect(value).toEqual({ name: "John" })
@@ -786,7 +820,9 @@ describe("TenantStorageImpl", () => {
     })
 
     test("handles removing non-existent key", async () => {
-      await expect(tenantStorage.remove(["non", "existent"])).resolves.toBeUndefined()
+      await expect(
+        tenantStorage.remove(["non", "existent"]),
+      ).resolves.toBeUndefined()
     })
   })
 
@@ -830,16 +866,22 @@ describe("TenantStorageImpl", () => {
     })
 
     test("returns empty iterable for no matches", async () => {
-      const results = await Array.fromAsync(tenantStorage.scan(["non", "existent"]))
+      const results = await Array.fromAsync(
+        tenantStorage.scan(["non", "existent"]),
+      )
       expect(results).toEqual([])
     })
 
     test("handles nested prefixes", async () => {
       await tenantStorage.set(["oauth", "access", "token1"], { type: "access" })
-      await tenantStorage.set(["oauth", "refresh", "token1"], { type: "refresh" })
+      await tenantStorage.set(["oauth", "refresh", "token1"], {
+        type: "refresh",
+      })
       await tenantStorage.set(["oauth", "access", "token2"], { type: "access" })
 
-      const results = await Array.fromAsync(tenantStorage.scan(["oauth", "access"]))
+      const results = await Array.fromAsync(
+        tenantStorage.scan(["oauth", "access"]),
+      )
       expect(results).toHaveLength(2)
       expect(results.every(([, value]) => value.type === "access")).toBe(true)
     })
@@ -977,7 +1019,10 @@ describe("Tenant Resolver", () => {
       const tenant = await service.getTenant("tenant-with-dashes-123")
       expect(tenant?.id).toBe("tenant-with-dashes-123")
 
-      const tenantStorage = new TenantStorageImpl(storage, "tenant-with-dashes-123")
+      const tenantStorage = new TenantStorageImpl(
+        storage,
+        "tenant-with-dashes-123",
+      )
       await tenantStorage.set(["test"], { value: "data" })
 
       const value = await tenantStorage.get(["test"])

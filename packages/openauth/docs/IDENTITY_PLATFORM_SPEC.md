@@ -8,87 +8,87 @@ Enterprise SSO platform supporting multi-tenant white-label deployment and SaaS 
 
 ### 1. Client Registration & Validation
 
-| Feature | Description |
-|---------|-------------|
-| Mandatory client registration | All OAuth clients must be registered before use |
+| Feature                       | Description                                            |
+| ----------------------------- | ------------------------------------------------------ |
+| Mandatory client registration | All OAuth clients must be registered before use        |
 | Authorize endpoint validation | Validate client_id + redirect_uri before showing login |
-| Token endpoint validation | Validate all clients (public + confidential) |
-| Grant type enforcement | Only allow registered grant types per client |
-| Redirect URI strict match | Exact match only, no wildcards |
+| Token endpoint validation     | Validate all clients (public + confidential)           |
+| Grant type enforcement        | Only allow registered grant types per client           |
+| Redirect URI strict match     | Exact match only, no wildcards                         |
 
 ### 2. Single Sign-On (SSO)
 
-| Feature | Description |
-|---------|-------------|
-| Silent authentication | prompt=none - Check session without UI |
-| Shared session cookie | Session valid across all apps in tenant |
+| Feature                  | Description                                      |
+| ------------------------ | ------------------------------------------------ |
+| Silent authentication    | prompt=none - Check session without UI           |
+| Shared session cookie    | Session valid across all apps in tenant          |
 | Automatic token issuance | If session exists, issue tokens without login UI |
-| Session check endpoint | API to verify session status |
-| Cross-app session sync | Login in App A = logged in to App B |
+| Session check endpoint   | API to verify session status                     |
+| Cross-app session sync   | Login in App A = logged in to App B              |
 
 ### 3. Multi-Account Sessions
 
-| Feature | Description |
-|---------|-------------|
-| Multiple logged-in accounts | Up to 3 accounts per browser |
-| Active account designation | One account is "active" at a time |
-| Account switcher | prompt=select_account shows picker |
-| Add account flow | Login without signing out existing accounts |
-| Per-account sign out | Remove one account, keep others |
-| Sign out all | Clear all accounts from browser |
+| Feature                     | Description                                 |
+| --------------------------- | ------------------------------------------- |
+| Multiple logged-in accounts | Up to 3 accounts per browser                |
+| Active account designation  | One account is "active" at a time           |
+| Account switcher            | prompt=select_account shows picker          |
+| Add account flow            | Login without signing out existing accounts |
+| Per-account sign out        | Remove one account, keep others             |
+| Sign out all                | Clear all accounts from browser             |
 
 ### 4. Session Management
 
-| Feature | Description |
-|---------|-------------|
-| 7-day session lifetime | Sessions expire after 7 days of inactivity |
-| Sliding expiration | Activity extends session |
-| Session listing | User can see all active sessions |
-| Remote session revocation | User can sign out other devices |
-| Admin force logout | Admin can terminate any user's sessions |
-| Admin logout all | Admin can terminate all sessions for a user |
+| Feature                   | Description                                 |
+| ------------------------- | ------------------------------------------- |
+| 7-day session lifetime    | Sessions expire after 7 days of inactivity  |
+| Sliding expiration        | Activity extends session                    |
+| Session listing           | User can see all active sessions            |
+| Remote session revocation | User can sign out other devices             |
+| Admin force logout        | Admin can terminate any user's sessions     |
+| Admin logout all          | Admin can terminate all sessions for a user |
 
 ### 5. Token Architecture
 
-| Feature | Description |
-|---------|-------------|
-| Token per app | Each app receives its own access token |
-| Audience claim | Token specifies which app it's for |
-| Centralized refresh | Refresh tokens managed by auth server |
-| Token introspection | Apps can verify tokens with auth server |
+| Feature                  | Description                               |
+| ------------------------ | ----------------------------------------- |
+| Token per app            | Each app receives its own access token    |
+| Audience claim           | Token specifies which app it's for        |
+| Centralized refresh      | Refresh tokens managed by auth server     |
+| Token introspection      | Apps can verify tokens with auth server   |
 | Cross-app token exchange | Exchange token from App A for App B token |
 
 ### 6. Role-Based Access Control (RBAC)
 
-| Feature | Description |
-|---------|-------------|
-| Centralized roles | Global roles defined at platform level |
-| App-specific permissions | Each app defines its own permissions |
-| Role-permission mapping | Roles grant permissions across apps |
-| Permission in token | Access token includes relevant permissions |
-| Real-time permission check | Apps can query current permissions |
+| Feature                    | Description                                |
+| -------------------------- | ------------------------------------------ |
+| Centralized roles          | Global roles defined at platform level     |
+| App-specific permissions   | Each app defines its own permissions       |
+| Role-permission mapping    | Roles grant permissions across apps        |
+| Permission in token        | Access token includes relevant permissions |
+| Real-time permission check | Apps can query current permissions         |
 
 ### 7. Multi-Tenant / White-Label
 
-| Feature | Description |
-|---------|-------------|
-| Tenant isolation | Complete data separation between tenants |
-| Custom domain | Each tenant can use their own domain |
-| Custom branding | Logo, colors, email templates per tenant |
-| Tenant-specific clients | OAuth clients scoped to tenant |
-| Tenant-specific roles | Role definitions per tenant |
-| Tenant admin | Delegated admin per tenant |
+| Feature                 | Description                              |
+| ----------------------- | ---------------------------------------- |
+| Tenant isolation        | Complete data separation between tenants |
+| Custom domain           | Each tenant can use their own domain     |
+| Custom branding         | Logo, colors, email templates per tenant |
+| Tenant-specific clients | OAuth clients scoped to tenant           |
+| Tenant-specific roles   | Role definitions per tenant              |
+| Tenant admin            | Delegated admin per tenant               |
 
 ### 8. Admin Controls
 
-| Feature | Description |
-|---------|-------------|
-| User management | Create, update, suspend, delete users |
-| Session management | View and terminate user sessions |
-| Client management | Register, update, delete OAuth clients |
-| Role management | Define and assign roles |
-| Audit logs | All actions logged with actor, timestamp, details |
-| Security alerts | Suspicious activity notifications |
+| Feature            | Description                                       |
+| ------------------ | ------------------------------------------------- |
+| User management    | Create, update, suspend, delete users             |
+| Session management | View and terminate user sessions                  |
+| Client management  | Register, update, delete OAuth clients            |
+| Role management    | Define and assign roles                           |
+| Audit logs         | All actions logged with actor, timestamp, details |
+| Security alerts    | Suspicious activity notifications                 |
 
 ---
 
@@ -223,26 +223,26 @@ Tenant: "alummahnow" (default)
 
 ## OpenID Connect Parameters Required
 
-| Parameter | Values | Purpose |
-|-----------|--------|---------|
-| prompt | none, login, consent, select_account | Control auth UI behavior |
-| login_hint | email | Pre-fill login form |
-| account_hint | user_id | Select specific logged-in account |
-| max_age | seconds | Force re-auth if session older than |
-| acr_values | mfa | Require specific auth level |
+| Parameter    | Values                               | Purpose                             |
+| ------------ | ------------------------------------ | ----------------------------------- |
+| prompt       | none, login, consent, select_account | Control auth UI behavior            |
+| login_hint   | email                                | Pre-fill login form                 |
+| account_hint | user_id                              | Select specific logged-in account   |
+| max_age      | seconds                              | Force re-auth if session older than |
+| acr_values   | mfa                                  | Require specific auth level         |
 
 ---
 
 ## Session Cookie Requirements
 
-| Attribute | Value | Reason |
-|-----------|-------|--------|
-| Name | `__session` | Standard |
-| Domain | `.{tenant-domain}` | Shared across subdomains |
-| Secure | true | HTTPS only |
-| HttpOnly | true | No JS access |
-| SameSite | Lax | CSRF protection + redirects work |
-| Max-Age | 604800 | 7 days |
+| Attribute | Value              | Reason                           |
+| --------- | ------------------ | -------------------------------- |
+| Name      | `__session`        | Standard                         |
+| Domain    | `.{tenant-domain}` | Shared across subdomains         |
+| Secure    | true               | HTTPS only                       |
+| HttpOnly  | true               | No JS access                     |
+| SameSite  | Lax                | CSRF protection + redirects work |
+| Max-Age   | 604800             | 7 days                           |
 
 ---
 
@@ -308,13 +308,13 @@ ID, domain, name, branding (JSON), settings (JSON), created_at
 
 ## Constraints
 
-| Constraint | Value |
-|------------|-------|
-| Max accounts per browser | 3 |
-| Session lifetime | 7 days |
-| Access token lifetime | 1 hour |
-| Refresh token lifetime | 7 days |
-| Max sessions per user | 10 |
+| Constraint               | Value  |
+| ------------------------ | ------ |
+| Max accounts per browser | 3      |
+| Session lifetime         | 7 days |
+| Access token lifetime    | 1 hour |
+| Refresh token lifetime   | 7 days |
+| Max sessions per user    | 10     |
 
 ---
 
@@ -334,29 +334,34 @@ ID, domain, name, branding (JSON), settings (JSON), created_at
 ## Implementation Phases
 
 ### Phase 1: Core Infrastructure
+
 1. Session Service with multi-account support
 2. Tenant-aware storage layer
 3. Tenant management service
 
 ### Phase 2: SSO Features
+
 1. `prompt` parameter handling
 2. Silent authentication (prompt=none)
 3. Session check endpoint
 4. Account switcher UI
 
 ### Phase 3: RBAC System
+
 1. Role/Permission storage schema
 2. Token enrichment with permissions
 3. Permission check API
 4. Admin role management APIs
 
 ### Phase 4: Multi-Tenant White-Label
+
 1. Tenant resolution (domain/subdomain/header)
 2. Tenant-scoped storage
 3. Custom branding/theming
 4. Delegated tenant admin
 
 ### Phase 5: Admin Controls
+
 1. User management APIs
 2. Session management dashboard
 3. Audit logging

@@ -125,7 +125,8 @@ export class TenantServiceImpl implements TenantService {
     // Validate and check domain uniqueness if provided
     if (domain) {
       const normalizedDomain = this.normalizeDomain(domain)
-      const existingDomainTenant = await this.getTenantByDomain(normalizedDomain)
+      const existingDomainTenant =
+        await this.getTenantByDomain(normalizedDomain)
       if (existingDomainTenant) {
         throw new TenantError(
           "domain_already_exists",
@@ -271,12 +272,14 @@ export class TenantServiceImpl implements TenantService {
       name: updates.name?.trim() || existingTenant.name,
       domain: newDomain || undefined,
       status: updates.status || existingTenant.status,
-      branding: updates.branding !== undefined
-        ? { ...existingTenant.branding, ...updates.branding }
-        : existingTenant.branding,
-      settings: updates.settings !== undefined
-        ? { ...existingTenant.settings, ...updates.settings }
-        : existingTenant.settings,
+      branding:
+        updates.branding !== undefined
+          ? { ...existingTenant.branding, ...updates.branding }
+          : existingTenant.branding,
+      settings:
+        updates.settings !== undefined
+          ? { ...existingTenant.settings, ...updates.settings }
+          : existingTenant.settings,
       updated_at: Date.now(),
     }
 

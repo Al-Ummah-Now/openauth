@@ -61,7 +61,10 @@ export class SessionServiceImpl implements SessionService {
   /**
    * Get the storage key for an account session.
    */
-  private accountSessionKey(browserSessionId: string, userId: string): string[] {
+  private accountSessionKey(
+    browserSessionId: string,
+    userId: string,
+  ): string[] {
     return ["session", "account", browserSessionId, userId]
   }
 
@@ -366,7 +369,10 @@ export class SessionServiceImpl implements SessionService {
         params.userId,
         params.browserSessionId,
       ),
-      { sessionId: params.browserSessionId, tenantId: browserSession.tenant_id },
+      {
+        sessionId: params.browserSessionId,
+        tenantId: browserSession.tenant_id,
+      },
       params.ttl,
     )
 
@@ -439,8 +445,7 @@ export class SessionServiceImpl implements SessionService {
    * @returns Array of account sessions
    */
   async listAccounts(browserSessionId: string): Promise<AccountSession[]> {
-    const browserSession =
-      await this.findBrowserSessionById(browserSessionId)
+    const browserSession = await this.findBrowserSessionById(browserSessionId)
     if (!browserSession) {
       return []
     }
@@ -468,8 +473,7 @@ export class SessionServiceImpl implements SessionService {
     browserSessionId: string,
     userId: string,
   ): Promise<void> {
-    const browserSession =
-      await this.findBrowserSessionById(browserSessionId)
+    const browserSession = await this.findBrowserSessionById(browserSessionId)
     if (!browserSession) {
       throw new SessionError(
         "session_not_found",
@@ -507,7 +511,10 @@ export class SessionServiceImpl implements SessionService {
         )
         await Storage.set(
           this.storage,
-          this.accountSessionKey(browserSessionId, browserSession.active_user_id),
+          this.accountSessionKey(
+            browserSessionId,
+            browserSession.active_user_id,
+          ),
           currentAccount,
           remainingTTL,
         )
@@ -540,12 +547,8 @@ export class SessionServiceImpl implements SessionService {
    * @param browserSessionId - The browser session ID
    * @param userId - The user ID to remove
    */
-  async removeAccount(
-    browserSessionId: string,
-    userId: string,
-  ): Promise<void> {
-    const browserSession =
-      await this.findBrowserSessionById(browserSessionId)
+  async removeAccount(browserSessionId: string, userId: string): Promise<void> {
+    const browserSession = await this.findBrowserSessionById(browserSessionId)
     if (!browserSession) {
       return // Session doesn't exist, nothing to remove
     }
@@ -610,8 +613,7 @@ export class SessionServiceImpl implements SessionService {
    * @param browserSessionId - The browser session ID
    */
   async removeAllAccounts(browserSessionId: string): Promise<void> {
-    const browserSession =
-      await this.findBrowserSessionById(browserSessionId)
+    const browserSession = await this.findBrowserSessionById(browserSessionId)
     if (!browserSession) {
       return // Session doesn't exist, nothing to remove
     }
@@ -700,7 +702,10 @@ export class SessionServiceImpl implements SessionService {
     }
 
     // Remove the browser session
-    await Storage.remove(this.storage, this.browserSessionKey(tenantId, sessionId))
+    await Storage.remove(
+      this.storage,
+      this.browserSessionKey(tenantId, sessionId),
+    )
 
     return true
   }

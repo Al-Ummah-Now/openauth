@@ -13,7 +13,11 @@
 
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import type { SessionService, BrowserSession, AccountSession } from "../contracts/types.js"
+import type {
+  SessionService,
+  BrowserSession,
+  AccountSession,
+} from "../contracts/types.js"
 import { SessionError } from "../contracts/types.js"
 import type {
   SwitchAccountRequest,

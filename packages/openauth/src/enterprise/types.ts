@@ -57,7 +57,10 @@ import type { Context } from "hono"
  * ```
  */
 export interface EnterpriseIssuerConfig<
-  Providers extends Record<string, Provider<any>> = Record<string, Provider<any>>,
+  Providers extends Record<string, Provider<any>> = Record<
+    string,
+    Provider<any>
+  >,
   Subjects extends SubjectSchema = SubjectSchema,
 > {
   /**
@@ -501,8 +504,5 @@ export interface MultiTenantIssuer {
   /**
    * Helper to manually trigger session sync
    */
-  syncSession: (
-    ctx: Context,
-    browserSession: BrowserSession,
-  ) => Promise<void>
+  syncSession: (ctx: Context, browserSession: BrowserSession) => Promise<void>
 }

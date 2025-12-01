@@ -359,7 +359,9 @@ describe("RBACAdapter", () => {
       expect(prepareSpy).toHaveBeenCalled()
       const sql = prepareSpy.mock.calls[0][0]
       expect(sql).toContain("DELETE FROM rbac_user_roles")
-      expect(sql).toContain("WHERE user_id = ? AND role_id = ? AND tenant_id = ?")
+      expect(sql).toContain(
+        "WHERE user_id = ? AND role_id = ? AND tenant_id = ?",
+      )
     })
   })
 
@@ -477,7 +479,9 @@ describe("RBACAdapter", () => {
 
       // Verify query filters by user, tenant, and app
       const sql = prepareSpy.mock.calls[0][0]
-      expect(sql).toContain("WHERE ur.user_id = ? AND ur.tenant_id = ? AND p.app_id = ?")
+      expect(sql).toContain(
+        "WHERE ur.user_id = ? AND ur.tenant_id = ? AND p.app_id = ?",
+      )
       expect(sql).toContain("ur.expires_at IS NULL OR ur.expires_at > ?")
     })
 
@@ -1023,7 +1027,13 @@ describe("RBACServiceImpl", () => {
 
       expect(setSpy).toHaveBeenCalled()
       const cacheKey = setSpy.mock.calls[0][0]
-      expect(cacheKey).toEqual(["rbac", "permissions", "tenant-1", "user-1", "app-1"])
+      expect(cacheKey).toEqual([
+        "rbac",
+        "permissions",
+        "tenant-1",
+        "user-1",
+        "app-1",
+      ])
     })
   })
 
@@ -1261,9 +1271,10 @@ describe("RBACServiceImpl", () => {
       )
 
       const removeSpy = spyOn(storage, "remove")
-      const listUserRolesSpy = spyOn(adapter, "listUserRoles").mockResolvedValue(
-        userRoles,
-      )
+      const listUserRolesSpy = spyOn(
+        adapter,
+        "listUserRoles",
+      ).mockResolvedValue(userRoles)
 
       await service.assignPermissionToRole({
         roleId: "role-1",
@@ -1281,9 +1292,10 @@ describe("RBACServiceImpl", () => {
       mockDb._setResults([])
 
       const consoleSpy = spyOn(console, "warn")
-      const listUserRolesSpy = spyOn(adapter, "listUserRoles").mockRejectedValue(
-        new Error("Database error"),
-      )
+      const listUserRolesSpy = spyOn(
+        adapter,
+        "listUserRoles",
+      ).mockRejectedValue(new Error("Database error"))
 
       await service.assignPermissionToRole({
         roleId: "role-1",
@@ -1345,9 +1357,10 @@ describe("RBACServiceImpl", () => {
     })
 
     test("creates permission via adapter", async () => {
-      const createPermissionSpy = spyOn(adapter, "createPermission").mockResolvedValue(
-        createTestPermission(),
-      )
+      const createPermissionSpy = spyOn(
+        adapter,
+        "createPermission",
+      ).mockResolvedValue(createTestPermission())
 
       await service.createPermission({
         name: "users:write",
@@ -1386,9 +1399,10 @@ describe("RBACServiceImpl", () => {
     })
 
     test("lists permissions via adapter", async () => {
-      const listPermissionsSpy = spyOn(adapter, "listPermissions").mockResolvedValue([
-        createTestPermission(),
-      ])
+      const listPermissionsSpy = spyOn(
+        adapter,
+        "listPermissions",
+      ).mockResolvedValue([createTestPermission()])
 
       await service.listPermissions("app-1")
 
@@ -1407,9 +1421,10 @@ describe("RBACServiceImpl", () => {
     })
 
     test("lists user roles via adapter", async () => {
-      const listUserRolesSpy = spyOn(adapter, "listUserRoles").mockResolvedValue([
-        createTestUserRole(),
-      ])
+      const listUserRolesSpy = spyOn(
+        adapter,
+        "listUserRoles",
+      ).mockResolvedValue([createTestUserRole()])
 
       await service.listUserRoles("user-1", "tenant-1")
 
@@ -1583,8 +1598,12 @@ describe("Token Enricher", () => {
     })
 
     test("rejects invalid roles array", () => {
-      expect(validateRBACClaims({ roles: "admin", permissions: [] })).toBe(false)
-      expect(validateRBACClaims({ roles: [1, 2, 3], permissions: [] })).toBe(false)
+      expect(validateRBACClaims({ roles: "admin", permissions: [] })).toBe(
+        false,
+      )
+      expect(validateRBACClaims({ roles: [1, 2, 3], permissions: [] })).toBe(
+        false,
+      )
     })
 
     test("rejects invalid permissions array", () => {

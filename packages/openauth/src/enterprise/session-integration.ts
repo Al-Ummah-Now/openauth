@@ -135,11 +135,7 @@ export async function handlePromptParameter(
 
   switch (prompt) {
     case "none":
-      return handlePromptNone(
-        ctx,
-        browserSession,
-        authorization,
-      )
+      return handlePromptNone(ctx, browserSession, authorization)
 
     case "login":
       return handlePromptLogin()
@@ -176,14 +172,12 @@ async function handlePromptNone(
   // Check if user has an active session
   if (!browserSession || !browserSession.active_user_id) {
     // No session - return login_required error
-    const errorResponse = createOIDCErrorRedirect(
-      authorization.redirect_uri,
-      {
-        error: "login_required",
-        error_description: "User is not authenticated. Interactive login is required.",
-        state: authorization.state,
-      },
-    )
+    const errorResponse = createOIDCErrorRedirect(authorization.redirect_uri, {
+      error: "login_required",
+      error_description:
+        "User is not authenticated. Interactive login is required.",
+      state: authorization.state,
+    })
 
     return {
       proceed: false,
@@ -405,7 +399,10 @@ export async function handleLoginHint(
     if (email && email.toLowerCase() === loginHint.toLowerCase()) {
       // Found matching account - switch to it
       if (browserSession.active_user_id !== account.user_id) {
-        await sessionService.switchActiveAccount(browserSession.id, account.user_id)
+        await sessionService.switchActiveAccount(
+          browserSession.id,
+          account.user_id,
+        )
       }
       return account
     }

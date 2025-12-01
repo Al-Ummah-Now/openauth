@@ -32,6 +32,7 @@ The migration is designed to be **backward compatible** - existing implementatio
 ### Strategy 1: Full Enterprise Migration
 
 Adopt all enterprise features at once. Best for:
+
 - New deployments
 - Complete rewrites
 - Applications requiring all enterprise features immediately
@@ -39,6 +40,7 @@ Adopt all enterprise features at once. Best for:
 ### Strategy 2: Incremental Adoption
 
 Adopt features one at a time. Best for:
+
 - Existing production systems
 - Risk-averse migrations
 - Teams learning enterprise features
@@ -46,6 +48,7 @@ Adopt features one at a time. Best for:
 ### Strategy 3: Feature Flagged Migration
 
 Deploy enterprise code but enable features gradually via configuration. Best for:
+
 - Large-scale deployments
 - A/B testing new features
 - Gradual rollout to user segments
@@ -62,10 +65,12 @@ Deploy enterprise code but enable features gradually via configuration. Best for
 ### 2. Database Requirements
 
 **For RBAC** (optional):
+
 - Cloudflare D1 database
 - Run RBAC schema migration (004_rbac_schema.sql)
 
 **For Tenant Management** (optional):
+
 - Cloudflare D1 database
 - Run tenant schema migration (002_add_tenant_support.sql)
 
@@ -266,9 +271,9 @@ interface UserToken {
   sub: string
   userId: string
   email: string
-  tenantId: string        // NEW
-  roles: string[]         // NEW
-  permissions: string[]   // NEW
+  tenantId: string // NEW
+  roles: string[] // NEW
+  permissions: string[] // NEW
 }
 ```
 
@@ -280,7 +285,7 @@ If using the enterprise session features, update your app to use the new session
 // List logged-in accounts
 const accounts = await fetch("/session/accounts", {
   credentials: "include",
-}).then(r => r.json())
+}).then((r) => r.json())
 
 // Switch account
 await fetch("/session/switch", {
@@ -462,17 +467,17 @@ https://auth.example.com/tenants/my-tenant/authorize
 
 ### New Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `sessionSecret` | `Uint8Array` | Required | 256-bit key for session encryption |
-| `sessionConfig.maxAccountsPerSession` | `number` | 3 | Max accounts per browser |
-| `sessionConfig.sessionLifetimeSeconds` | `number` | 604800 | Session lifetime (7 days) |
-| `sessionConfig.slidingWindowSeconds` | `number` | 86400 | Sliding window (1 day) |
-| `sessionConfig.cookieName` | `string` | `__session` | Session cookie name |
-| `rbacConfig.maxPermissionsInToken` | `number` | 50 | Max permissions in JWT |
-| `rbacConfig.permissionCacheTTL` | `number` | 60 | Permission cache TTL (seconds) |
-| `tenantResolver.baseDomain` | `string` | - | Base domain for subdomain resolution |
-| `tenantResolver.headerName` | `string` | `X-Tenant-ID` | Header for tenant resolution |
+| Option                                 | Type         | Default       | Description                          |
+| -------------------------------------- | ------------ | ------------- | ------------------------------------ |
+| `sessionSecret`                        | `Uint8Array` | Required      | 256-bit key for session encryption   |
+| `sessionConfig.maxAccountsPerSession`  | `number`     | 3             | Max accounts per browser             |
+| `sessionConfig.sessionLifetimeSeconds` | `number`     | 604800        | Session lifetime (7 days)            |
+| `sessionConfig.slidingWindowSeconds`   | `number`     | 86400         | Sliding window (1 day)               |
+| `sessionConfig.cookieName`             | `string`     | `__session`   | Session cookie name                  |
+| `rbacConfig.maxPermissionsInToken`     | `number`     | 50            | Max permissions in JWT               |
+| `rbacConfig.permissionCacheTTL`        | `number`     | 60            | Permission cache TTL (seconds)       |
+| `tenantResolver.baseDomain`            | `string`     | -             | Base domain for subdomain resolution |
+| `tenantResolver.headerName`            | `string`     | `X-Tenant-ID` | Header for tenant resolution         |
 
 ### Environment Variable Changes
 
@@ -662,7 +667,7 @@ describe("Session Service", () => {
         refreshToken: "token-3",
         clientId: "client",
         ttl: 3600,
-      })
+      }),
     ).rejects.toThrow("max_accounts_exceeded")
   })
 })
@@ -741,10 +746,12 @@ git revert <enterprise-commit>
 ```
 
 2. **Database is backward compatible:**
+
 - New tables/columns don't affect basic operation
 - No need to rollback migrations
 
 3. **Clear session cookies:**
+
 - Users may need to log in again
 - Session cookies from enterprise won't work with basic issuer
 
@@ -782,11 +789,13 @@ DROP TABLE IF EXISTS tenants;
 **Cause:** Invalid session secret format
 
 **Solution:** Generate proper secret:
+
 ```bash
 openssl rand -hex 32
 ```
 
 Use with `hexToSecret()`:
+
 ```typescript
 sessionSecret: hexToSecret(process.env.SESSION_SECRET!)
 ```
@@ -796,6 +805,7 @@ sessionSecret: hexToSecret(process.env.SESSION_SECRET!)
 **Cause:** Tenant resolution failed
 
 **Solution:**
+
 - Check tenant exists in database
 - Verify tenant resolver config matches your domain setup
 - Create default tenant for existing users
@@ -805,6 +815,7 @@ sessionSecret: hexToSecret(process.env.SESSION_SECRET!)
 **Cause:** Trying to add more accounts than allowed
 
 **Solution:**
+
 - Sign out an existing account first
 - Or increase `maxAccountsPerSession` in config
 
@@ -813,6 +824,7 @@ sessionSecret: hexToSecret(process.env.SESSION_SECRET!)
 **Cause:** Cookie security attributes blocking
 
 **Solution:**
+
 - Ensure HTTPS in production
 - Check SameSite/Domain settings match your setup
 - Verify no cookie-blocking extensions
@@ -822,6 +834,7 @@ sessionSecret: hexToSecret(process.env.SESSION_SECRET!)
 **Cause:** User has no roles assigned
 
 **Solution:**
+
 - Assign default role to users
 - Check `rbac_user_roles` table has entries
 - Verify role has permissions assigned

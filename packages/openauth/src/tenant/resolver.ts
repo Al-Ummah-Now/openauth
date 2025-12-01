@@ -13,7 +13,11 @@
 
 import type { Context, MiddlewareHandler, Next } from "hono"
 import type { StorageAdapter } from "../storage/storage.js"
-import type { TenantService, Tenant, TenantStorage } from "../contracts/types.js"
+import type {
+  TenantService,
+  Tenant,
+  TenantStorage,
+} from "../contracts/types.js"
 import { TenantError } from "../contracts/types.js"
 import { TenantStorageImpl } from "./storage.js"
 import {
@@ -260,7 +264,10 @@ async function tryCustomDomain(
   }
 
   // Skip if this looks like a subdomain of the base domain
-  if (config.baseDomain && domain.endsWith(`.${config.baseDomain.toLowerCase()}`)) {
+  if (
+    config.baseDomain &&
+    domain.endsWith(`.${config.baseDomain.toLowerCase()}`)
+  ) {
     return null
   }
 

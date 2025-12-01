@@ -97,10 +97,7 @@ export type {
   SessionErrorCode,
 } from "../contracts/types.js"
 
-export {
-  SessionError,
-  DEFAULT_SESSION_CONFIG,
-} from "../contracts/types.js"
+export { SessionError, DEFAULT_SESSION_CONFIG } from "../contracts/types.js"
 
 export type {
   CreateCookieParams,

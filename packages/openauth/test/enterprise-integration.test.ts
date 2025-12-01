@@ -67,14 +67,16 @@ function createMockContext(overrides: any = {}): any {
   return {
     get: (key: string) => vars.get(key),
     set: (key: string, value: any) => vars.set(key, value),
-    redirect: (url: string) => new Response(null, {
-      status: 302,
-      headers: { Location: url },
-    }),
-    json: (data: any, status?: number) => new Response(JSON.stringify(data), {
-      status: status || 200,
-      headers: { "Content-Type": "application/json" },
-    }),
+    redirect: (url: string) =>
+      new Response(null, {
+        status: 302,
+        headers: { Location: url },
+      }),
+    json: (data: any, status?: number) =>
+      new Response(JSON.stringify(data), {
+        status: status || 200,
+        headers: { "Content-Type": "application/json" },
+      }),
     req: {
       url: "https://auth.example.com/authorize",
       query: (key: string) => overrides.query?.[key],
@@ -159,8 +161,8 @@ describe("Session Integration - addAccountToSession", () => {
 
     const accounts = await sessionService.listAccounts(browserSession.id)
     expect(accounts.length).toBe(2)
-    expect(accounts.map(a => a.user_id)).toContain("user-1")
-    expect(accounts.map(a => a.user_id)).toContain("user-2")
+    expect(accounts.map((a) => a.user_id)).toContain("user-1")
+    expect(accounts.map((a) => a.user_id)).toContain("user-2")
   })
 
   test("updates existing account if already in session", async () => {
@@ -556,12 +558,7 @@ describe("Session Integration - handleAccountHint", () => {
   test("proceeds if no session", async () => {
     const ctx = createMockContext()
 
-    const result = await handleAccountHint(
-      ctx,
-      "user-1",
-      sessionService,
-      null,
-    )
+    const result = await handleAccountHint(ctx, "user-1", sessionService, null)
 
     expect(result.proceed).toBe(true)
   })
@@ -733,21 +730,13 @@ describe("Session Integration - validateSessionForSilentAuth", () => {
   })
 
   test("returns false if no browser session", () => {
-    const result = validateSessionForSilentAuth(
-      null,
-      accountSession,
-      "app-1",
-    )
+    const result = validateSessionForSilentAuth(null, accountSession, "app-1")
 
     expect(result).toBe(false)
   })
 
   test("returns false if no account session", () => {
-    const result = validateSessionForSilentAuth(
-      browserSession,
-      null,
-      "app-1",
-    )
+    const result = validateSessionForSilentAuth(browserSession, null, "app-1")
 
     expect(result).toBe(false)
   })

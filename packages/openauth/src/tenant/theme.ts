@@ -186,7 +186,10 @@ export function parseCssVars(cssVars: string): Partial<Theme> {
     return theme
   }
 
-  const pairs = cssVars.split(";").map((s) => s.trim()).filter(Boolean)
+  const pairs = cssVars
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean)
 
   for (const pair of pairs) {
     const [key, value] = pair.split(":").map((s) => s.trim())

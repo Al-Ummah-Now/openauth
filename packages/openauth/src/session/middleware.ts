@@ -125,7 +125,10 @@ export function createSessionMiddleware(
     }
 
     // Load browser session from storage
-    const browserSession = await service.getBrowserSession(payload.sid, payload.tid)
+    const browserSession = await service.getBrowserSession(
+      payload.sid,
+      payload.tid,
+    )
     if (!browserSession) {
       // Session not found or expired
       return next()
@@ -161,7 +164,8 @@ export function createSessionMiddleware(
       if (cookieOptions.httpOnly) cookieString += "; HttpOnly"
       if (cookieOptions.secure) cookieString += "; Secure"
       cookieString += `; SameSite=${cookieOptions.sameSite.charAt(0).toUpperCase() + cookieOptions.sameSite.slice(1)}`
-      if (cookieOptions.domain) cookieString += `; Domain=${cookieOptions.domain}`
+      if (cookieOptions.domain)
+        cookieString += `; Domain=${cookieOptions.domain}`
 
       c.header("Set-Cookie", cookieString)
     }

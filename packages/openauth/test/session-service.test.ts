@@ -124,7 +124,9 @@ describe("SessionServiceImpl", () => {
 
       // Fast forward past session lifetime (7 days + 1 second)
       setSystemTime(
-        Date.now() + DEFAULT_SESSION_CONFIG.sessionLifetimeSeconds * 1000 + 1000,
+        Date.now() +
+          DEFAULT_SESSION_CONFIG.sessionLifetimeSeconds * 1000 +
+          1000,
       )
 
       const retrieved = await service.getBrowserSession(session.id, tenantId)
@@ -642,7 +644,10 @@ describe("SessionServiceImpl", () => {
     })
 
     test("updates last_activity timestamp", async () => {
-      const before = await service.getBrowserSession(browserSession.id, tenantId)
+      const before = await service.getBrowserSession(
+        browserSession.id,
+        tenantId,
+      )
       const activityBefore = before!.last_activity
 
       setSystemTime(Date.now() + 5000) // 5 seconds later
@@ -688,7 +693,10 @@ describe("SessionServiceImpl", () => {
     test("removes account from session", async () => {
       await service.removeAccount(browserSession.id, "user-1")
 
-      const account = await service.getAccountSession(browserSession.id, "user-1")
+      const account = await service.getAccountSession(
+        browserSession.id,
+        "user-1",
+      )
       expect(account).toBeNull()
 
       const updated = await service.getBrowserSession(
@@ -734,7 +742,10 @@ describe("SessionServiceImpl", () => {
     })
 
     test("increments browser session version", async () => {
-      const before = await service.getBrowserSession(browserSession.id, tenantId)
+      const before = await service.getBrowserSession(
+        browserSession.id,
+        tenantId,
+      )
       const versionBefore = before!.version
 
       await service.removeAccount(browserSession.id, "user-1")
@@ -827,7 +838,10 @@ describe("SessionServiceImpl", () => {
     })
 
     test("increments browser session version", async () => {
-      const before = await service.getBrowserSession(browserSession.id, tenantId)
+      const before = await service.getBrowserSession(
+        browserSession.id,
+        tenantId,
+      )
       const versionBefore = before!.version
 
       await service.removeAllAccounts(browserSession.id)
@@ -939,7 +953,10 @@ describe("SessionServiceImpl", () => {
         ttl: 3600,
       })
 
-      const revokedCount = await service.revokeUserSessions("tenant-1", "user-1")
+      const revokedCount = await service.revokeUserSessions(
+        "tenant-1",
+        "user-1",
+      )
       expect(revokedCount).toBe(1)
 
       // Verify user still exists in tenant-2 session
@@ -1442,7 +1459,9 @@ describe("Cookie Utilities", () => {
 
   describe("secretToHex", () => {
     test("converts Uint8Array to hex string", () => {
-      const secret = new Uint8Array([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef])
+      const secret = new Uint8Array([
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+      ])
       const hex = secretToHex(secret)
 
       expect(hex).toBe("0123456789abcdef")

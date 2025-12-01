@@ -30,6 +30,7 @@ The OpenAuth Enterprise module provides a complete SSO solution with:
 ### 1. Choose Your Runtime
 
 **Cloudflare Workers:**
+
 ```bash
 cd examples/issuer/cloudflare
 bun install
@@ -37,6 +38,7 @@ wrangler dev
 ```
 
 **Bun:**
+
 ```bash
 cd examples/issuer/bun
 bun install
@@ -58,6 +60,7 @@ curl -X POST http://localhost:3000/tenants \
 ### 3. Test Authentication
 
 Navigate to:
+
 ```
 http://acme.localhost:3000/authorize?client_id=test&response_type=code&redirect_uri=http://localhost:3001/callback
 ```
@@ -67,6 +70,7 @@ http://acme.localhost:3000/authorize?client_id=test&response_type=code&redirect_
 ### Multi-Tenancy
 
 Each tenant gets:
+
 - Isolated storage (prefixed keys)
 - Custom subdomain (e.g., `acme.auth.example.com`)
 - White-label branding (logo, colors, theme)
@@ -84,24 +88,28 @@ Each tenant gets:
 ### Session Management
 
 Multi-account browser sessions allow users to:
+
 - Stay logged into multiple accounts simultaneously (default: 3)
 - Switch between accounts without re-authentication
 - Maintain sessions across browser restarts
 - Use sliding window expiration (activity extends lifetime)
 
 **Session Endpoints:**
+
 - `GET /session/accounts` - List all logged-in accounts
 - `POST /session/switch` - Switch active account
 - `DELETE /session/accounts/:userId` - Sign out one account
 - `DELETE /session/all` - Sign out all accounts
 
 **Admin Endpoints:**
+
 - `POST /admin/sessions/revoke-user` - Revoke all sessions for a user
 - `POST /admin/sessions/revoke` - Revoke specific session by ID
 
 ### RBAC (Role-Based Access Control)
 
 Hierarchical permission system with:
+
 - Apps (top-level applications)
 - Roles (collections of permissions)
 - Permissions (atomic capabilities)
@@ -110,12 +118,14 @@ Hierarchical permission system with:
 - Automatic token enrichment
 
 **RBAC Endpoints:**
+
 - `POST /rbac/check` - Check if user has permission
 - `POST /rbac/check/batch` - Check multiple permissions
 - `GET /rbac/permissions` - Get user's permissions
 - `GET /rbac/roles` - Get user's roles
 
 **Admin Endpoints:**
+
 - `POST /rbac/admin/apps` - Create application
 - `POST /rbac/admin/roles` - Create role
 - `POST /rbac/admin/permissions` - Create permission
@@ -125,6 +135,7 @@ Hierarchical permission system with:
 ### Audit Logging
 
 Track all token operations for compliance:
+
 - Token generation (OAuth flows)
 - Token refresh
 - Token revocation
@@ -136,6 +147,7 @@ Async audit logging for high-performance deployments.
 ### White-Label Branding
 
 Customize per tenant:
+
 ```typescript
 PUT /tenants/:id/branding
 {
@@ -203,12 +215,14 @@ PUT /tenants/:id/branding
 ### Prerequisites
 
 **For Cloudflare Workers:**
+
 - KV namespace for token storage
 - D1 database for RBAC and audit logs
 - Queue for async audit processing (optional)
 - Session secret (32-byte hex string)
 
 **For Bun/Node:**
+
 - Storage adapter (DynamoDB, PostgreSQL, or Memory)
 - Database for RBAC and audit logs
 - Session secret
@@ -343,6 +357,7 @@ bun -e "console.log(crypto.randomBytes(32).toString('hex'))"
 ### Cloudflare Workers Configuration
 
 **wrangler.toml:**
+
 ```toml
 name = "auth-server"
 main = "enterprise-issuer.ts"
@@ -366,6 +381,7 @@ BASE_DOMAIN = "auth.example.com"
 ```
 
 **Set secrets:**
+
 ```bash
 wrangler secret put SESSION_SECRET
 wrangler secret put GOOGLE_CLIENT_ID
@@ -378,67 +394,67 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 
 Standard OAuth 2.0 and OpenID Connect endpoints:
 
-| Method | Endpoint                                | Description                      |
-|--------|----------------------------------------|----------------------------------|
-| GET    | `/authorize`                           | Authorization endpoint           |
-| POST   | `/token`                               | Token endpoint                   |
-| GET    | `/userinfo`                            | UserInfo endpoint                |
-| GET    | `/.well-known/openid-configuration`    | OIDC discovery                   |
-| GET    | `/.well-known/oauth-authorization-server` | OAuth discovery               |
-| GET    | `/.well-known/jwks.json`               | JSON Web Key Set                 |
-| POST   | `/token/introspect`                    | Token introspection (RFC 7662)   |
-| POST   | `/token/revoke`                        | Token revocation (RFC 7009)      |
+| Method | Endpoint                                  | Description                    |
+| ------ | ----------------------------------------- | ------------------------------ |
+| GET    | `/authorize`                              | Authorization endpoint         |
+| POST   | `/token`                                  | Token endpoint                 |
+| GET    | `/userinfo`                               | UserInfo endpoint              |
+| GET    | `/.well-known/openid-configuration`       | OIDC discovery                 |
+| GET    | `/.well-known/oauth-authorization-server` | OAuth discovery                |
+| GET    | `/.well-known/jwks.json`                  | JSON Web Key Set               |
+| POST   | `/token/introspect`                       | Token introspection (RFC 7662) |
+| POST   | `/token/revoke`                           | Token revocation (RFC 7009)    |
 
 ### Session Management
 
-| Method | Endpoint                          | Description                    |
-|--------|-----------------------------------|--------------------------------|
-| GET    | `/session/accounts`               | List logged-in accounts        |
-| POST   | `/session/switch`                 | Switch active account          |
-| DELETE | `/session/accounts/:userId`       | Sign out one account           |
-| DELETE | `/session/all`                    | Sign out all accounts          |
-| GET    | `/session/check`                  | Silent session check           |
+| Method | Endpoint                    | Description             |
+| ------ | --------------------------- | ----------------------- |
+| GET    | `/session/accounts`         | List logged-in accounts |
+| POST   | `/session/switch`           | Switch active account   |
+| DELETE | `/session/accounts/:userId` | Sign out one account    |
+| DELETE | `/session/all`              | Sign out all accounts   |
+| GET    | `/session/check`            | Silent session check    |
 
 **Admin:**
-| Method | Endpoint                          | Description                    |
+| Method | Endpoint | Description |
 |--------|-----------------------------------|--------------------------------|
-| POST   | `/admin/sessions/revoke-user`     | Revoke all sessions for user   |
-| POST   | `/admin/sessions/revoke`          | Revoke specific session        |
+| POST | `/admin/sessions/revoke-user` | Revoke all sessions for user |
+| POST | `/admin/sessions/revoke` | Revoke specific session |
 
 ### RBAC Endpoints
 
-| Method | Endpoint                | Description                      |
-|--------|-------------------------|----------------------------------|
-| POST   | `/rbac/check`           | Check single permission          |
-| POST   | `/rbac/check/batch`     | Check multiple permissions       |
-| GET    | `/rbac/permissions`     | Get user permissions             |
-| GET    | `/rbac/roles`           | Get user roles                   |
+| Method | Endpoint            | Description                |
+| ------ | ------------------- | -------------------------- |
+| POST   | `/rbac/check`       | Check single permission    |
+| POST   | `/rbac/check/batch` | Check multiple permissions |
+| GET    | `/rbac/permissions` | Get user permissions       |
+| GET    | `/rbac/roles`       | Get user roles             |
 
 **Admin:**
-| Method | Endpoint                                    | Description                  |
+| Method | Endpoint | Description |
 |--------|---------------------------------------------|------------------------------|
-| POST   | `/rbac/admin/apps`                          | Create app                   |
-| GET    | `/rbac/admin/apps`                          | List apps                    |
-| POST   | `/rbac/admin/roles`                         | Create role                  |
-| GET    | `/rbac/admin/roles`                         | List roles                   |
-| POST   | `/rbac/admin/permissions`                   | Create permission            |
-| GET    | `/rbac/admin/permissions`                   | List permissions             |
-| POST   | `/rbac/admin/users/:userId/roles`           | Assign role to user          |
-| DELETE | `/rbac/admin/users/:userId/roles/:roleId`   | Remove role from user        |
-| POST   | `/rbac/admin/roles/:roleId/permissions`     | Assign permission to role    |
-| DELETE | `/rbac/admin/roles/:roleId/permissions/:permissionId` | Remove permission  |
+| POST | `/rbac/admin/apps` | Create app |
+| GET | `/rbac/admin/apps` | List apps |
+| POST | `/rbac/admin/roles` | Create role |
+| GET | `/rbac/admin/roles` | List roles |
+| POST | `/rbac/admin/permissions` | Create permission |
+| GET | `/rbac/admin/permissions` | List permissions |
+| POST | `/rbac/admin/users/:userId/roles` | Assign role to user |
+| DELETE | `/rbac/admin/users/:userId/roles/:roleId` | Remove role from user |
+| POST | `/rbac/admin/roles/:roleId/permissions` | Assign permission to role |
+| DELETE | `/rbac/admin/roles/:roleId/permissions/:permissionId` | Remove permission |
 
 ### Tenant Management
 
-| Method | Endpoint                    | Description              |
-|--------|-----------------------------|--------------------------|
-| POST   | `/tenants`                  | Create tenant            |
-| GET    | `/tenants`                  | List tenants             |
-| GET    | `/tenants/:id`              | Get tenant               |
-| PUT    | `/tenants/:id`              | Update tenant            |
-| DELETE | `/tenants/:id`              | Delete tenant            |
-| PUT    | `/tenants/:id/branding`     | Update branding          |
-| PUT    | `/tenants/:id/settings`     | Update settings          |
+| Method | Endpoint                | Description     |
+| ------ | ----------------------- | --------------- |
+| POST   | `/tenants`              | Create tenant   |
+| GET    | `/tenants`              | List tenants    |
+| GET    | `/tenants/:id`          | Get tenant      |
+| PUT    | `/tenants/:id`          | Update tenant   |
+| DELETE | `/tenants/:id`          | Delete tenant   |
+| PUT    | `/tenants/:id/branding` | Update branding |
+| PUT    | `/tenants/:id/settings` | Update settings |
 
 ## Examples
 
@@ -611,6 +627,7 @@ curl -X DELETE http://localhost:3000/session/all \
 ### Performance Optimization
 
 1. **Enable Permission Caching**
+
    ```typescript
    const rbacService = new RBACServiceImpl(adapter, storage, {
      cachePermissionsTTL: 60, // Cache for 60 seconds
@@ -618,6 +635,7 @@ curl -X DELETE http://localhost:3000/session/all \
    ```
 
 2. **Use Queue-Based Audit Logging** (Cloudflare)
+
    ```typescript
    const auditService = new AuditService({
      database: env.AUTH_DB,
@@ -635,6 +653,7 @@ curl -X DELETE http://localhost:3000/session/all \
 ### Monitoring
 
 Key metrics to track:
+
 - Authentication success/failure rates
 - Session creation/revocation rates
 - RBAC cache hit/miss rates
@@ -645,11 +664,13 @@ Key metrics to track:
 ### Scaling
 
 **Horizontal Scaling:**
+
 - Cloudflare Workers scale automatically
 - Use edge caching for tenant configuration
 - Offload audit processing to queues
 
 **Vertical Scaling:**
+
 - Increase D1 database limits
 - Optimize RBAC queries with proper indexes
 - Use CDN for static assets (branding)
@@ -671,6 +692,7 @@ Key metrics to track:
 ## Support
 
 For issues and questions:
+
 - GitHub Issues: https://github.com/openauthjs/openauth/issues
 - Documentation: https://openauth.js.org
 - Discord: https://discord.gg/openauth

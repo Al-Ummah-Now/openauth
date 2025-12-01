@@ -117,7 +117,11 @@ import {
 } from "./session-integration.js"
 
 import { getRelativeUrl, isDomainMatch, lazy } from "../util.js"
-import { OauthError, UnauthorizedClientError, UnknownStateError } from "../error.js"
+import {
+  OauthError,
+  UnauthorizedClientError,
+  UnknownStateError,
+} from "../error.js"
 
 // ============================================
 // MAIN FACTORY FUNCTION
@@ -143,9 +147,7 @@ import { OauthError, UnauthorizedClientError, UnknownStateError } from "../error
 export function createMultiTenantIssuer<
   Providers extends Record<string, Provider<any>>,
   Subjects extends SubjectSchema,
->(
-  config: EnterpriseIssuerConfig<Providers, Subjects>,
-): MultiTenantIssuer {
+>(config: EnterpriseIssuerConfig<Providers, Subjects>): MultiTenantIssuer {
   // Validate required config
   if (!config.tenantService) {
     throw new Error("tenantService is required")
@@ -462,7 +464,9 @@ export function createMultiTenantIssuer<
           throw new Error("Tenant not resolved in success callback")
         }
 
-        const browserSession = ctx.get("browserSession") as BrowserSession | null
+        const browserSession = ctx.get(
+          "browserSession",
+        ) as BrowserSession | null
         const authorization = ctx.get("authorization") as
           | EnterpriseAuthorizationState
           | undefined
@@ -525,7 +529,8 @@ export function createMultiTenantIssuer<
 
             // Call invalidate if provided
             if (successOpts?.invalidate) {
-              const subject = opts?.subject || (await resolveSubject(type, props))
+              const subject =
+                opts?.subject || (await resolveSubject(type, props))
               await successOpts.invalidate(subject)
             }
 
@@ -849,9 +854,7 @@ async function resolveSubject(type: string, properties: any): Promise<string> {
   const data = encoder.encode(jsonString)
   const hashBuffer = await crypto.subtle.digest("SHA-1", data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
   return `${type}:${hashHex.slice(0, 16)}`
 }
 
