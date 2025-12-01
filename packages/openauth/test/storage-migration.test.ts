@@ -69,7 +69,10 @@ describe("Storage Key Migration", () => {
       store.push([joinKey(["prefix", "new"]), { value: { id: "new" } }])
 
       // Add legacy format key
-      store.push([joinKeyLegacy(["prefix", "legacy"]), { value: { id: "legacy" } }])
+      store.push([
+        joinKeyLegacy(["prefix", "legacy"]),
+        { value: { id: "legacy" } },
+      ])
 
       // Create storage and inject store
       const storage = MemoryStorage()
