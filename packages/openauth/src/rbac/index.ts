@@ -1,51 +1,114 @@
 /**
- * RBAC (Role-Based Access Control) Module
+ * Role-Based Access Control (RBAC) for OpenAuth enterprise SSO.
  *
- * Provides role-based access control for OpenAuth enterprise SSO.
+ * This module provides fine-grained authorization by organizing permissions into
+ * roles that are assigned to users. Permissions are scoped to applications, and
+ * roles are scoped to tenants, enabling flexible multi-tenant access control.
  *
- * Features:
- * - Permission checking with caching (60s TTL)
- * - Batch permission checking
- * - Token claim enrichment (roles + permissions)
- * - Admin APIs for managing apps, roles, permissions
- * - Tenant isolation for all operations
+ * ## Features
  *
- * @packageDocumentation
+ * - **Permission Checking**: Fast permission verification with 60s cache TTL
+ * - **Batch Permission Checking**: Check multiple permissions in a single call
+ * - **Token Claim Enrichment**: Automatically add roles and permissions to JWTs
+ * - **Admin APIs**: Complete CRUD for apps, roles, permissions, and assignments
+ * - **Tenant Isolation**: All operations are scoped to the tenant context
  *
- * @example
- * ```typescript
+ * ## Quick Start
+ *
+ * ```ts title="rbac-setup.ts"
  * import {
  *   RBACServiceImpl,
  *   RBACAdapter,
  *   rbacEndpoints,
  *   rbacAdminEndpoints,
  *   enrichTokenWithRBAC,
- * } from './rbac';
+ * } from "@openauthjs/openauth/rbac"
  *
- * // Initialize
- * const adapter = new RBACAdapter(d1Database);
- * const service = new RBACServiceImpl(adapter, storageAdapter);
+ * // Initialize RBAC with D1 database
+ * const adapter = new RBACAdapter(d1Database)
+ * const service = new RBACServiceImpl(adapter, storage, {
+ *   maxPermissionsInToken: 50,
+ *   permissionCacheTTL: 60,
+ * })
  *
  * // Mount endpoints
- * const app = new Hono();
- * app.route('/rbac', rbacEndpoints(service));
- * app.route('/admin/rbac', rbacAdminEndpoints(service));
+ * const app = new Hono()
+ * app.route("/rbac", rbacEndpoints(service))
+ * app.route("/rbac/admin", rbacAdminEndpoints(service))
  *
- * // Check permissions
+ * // Check permissions in your application
  * const hasAccess = await service.checkPermission({
- *   userId: 'user-123',
- *   appId: 'my-app',
- *   tenantId: 'tenant-1',
- *   permission: 'posts:read'
- * });
+ *   userId: "user-123",
+ *   appId: "my-app",
+ *   tenantId: "tenant-1",
+ *   permission: "posts:read",
+ * })
  *
- * // Enrich tokens
+ * // Enrich tokens with RBAC claims
  * const claims = await enrichTokenWithRBAC(service, {
- *   userId: 'user-123',
- *   appId: 'my-app',
- *   tenantId: 'tenant-1'
- * });
+ *   userId: "user-123",
+ *   appId: "my-app",
+ *   tenantId: "tenant-1",
+ * })
+ * // { roles: ["editor"], permissions: ["posts:read", "posts:write"] }
  * ```
+ *
+ * ## Data Model
+ *
+ * ```
+ * Tenant
+ *   |
+ *   +-- App (defines permissions)
+ *   |     |
+ *   |     +-- Permission (resource:action)
+ *   |
+ *   +-- Role (collection of permissions)
+ *         |
+ *         +-- RolePermission (role -> permission mapping)
+ *         |
+ *         +-- UserRole (user -> role assignment)
+ * ```
+ *
+ * ## API Endpoints
+ *
+ * Permission checking endpoints:
+ *
+ * | Endpoint | Method | Description |
+ * |----------|--------|-------------|
+ * | `/rbac/check` | POST | Check single permission |
+ * | `/rbac/check/batch` | POST | Check multiple permissions |
+ * | `/rbac/permissions` | GET | Get user permissions for app |
+ * | `/rbac/roles` | GET | Get user roles |
+ *
+ * Admin management endpoints:
+ *
+ * | Endpoint | Method | Description |
+ * |----------|--------|-------------|
+ * | `/rbac/admin/apps` | POST/GET | Manage apps |
+ * | `/rbac/admin/roles` | POST/GET | Manage roles |
+ * | `/rbac/admin/permissions` | POST/GET | Manage permissions |
+ * | `/rbac/admin/users/:userId/roles` | POST/GET/DELETE | Manage user roles |
+ * | `/rbac/admin/roles/:roleId/permissions` | POST/GET/DELETE | Manage role permissions |
+ *
+ * ## Token Claims
+ *
+ * When enriched, tokens include:
+ * ```json
+ * {
+ *   "sub": "user-123",
+ *   "aud": "my-app",
+ *   "roles": ["editor", "viewer"],
+ *   "permissions": ["posts:read", "posts:write", "users:read"]
+ * }
+ * ```
+ *
+ * @see {@link RBACServiceImpl} - Main RBAC service implementation
+ * @see {@link RBACAdapter} - D1 database adapter
+ * @see {@link enrichTokenWithRBAC} - Token enrichment helper
+ * @see {@link rbacEndpoints} - Permission checking API routes
+ * @see {@link rbacAdminEndpoints} - Admin management API routes
+ *
+ * @packageDocumentation
  */
 
 // Re-export types

@@ -1,22 +1,25 @@
 /**
- * Enterprise Multi-Tenant OpenAuth Module
+ * Enterprise Multi-Tenant OpenAuth - Complete Authentication Platform
  *
- * This module provides a complete enterprise-grade authentication solution
- * that integrates:
+ * This module provides a production-ready enterprise authentication solution
+ * that combines all enterprise features into a unified, easy-to-use API.
  *
- * - **Multi-Tenancy**: Tenant resolution, isolation, and white-label branding
- * - **Session Management**: Multi-account browser sessions with SSO
- * - **RBAC**: Role-based access control with token enrichment
- * - **OIDC Compliance**: Support for prompt, max_age, login_hint parameters
+ * ## Core Features
+ *
+ * - **Multi-Tenancy**: Complete tenant isolation with white-label branding
+ * - **Multi-Account Sessions**: Users can be logged into up to 3 accounts per browser
+ * - **Role-Based Access Control**: Fine-grained permissions with token enrichment
+ * - **OIDC Compliance**: Full support for prompt, max_age, login_hint, account_hint
+ * - **Single Sign-On**: Cross-app authentication within a tenant
  *
  * ## Quick Start
  *
- * ```typescript
+ * ```ts title="enterprise-issuer.ts"
  * import {
  *   createMultiTenantIssuer,
  *   hexToSecret,
  * } from "@openauthjs/openauth/enterprise"
- * import { TenantServiceImpl, createTenantService } from "@openauthjs/openauth/tenant"
+ * import { createTenantService } from "@openauthjs/openauth/tenant"
  * import { SessionServiceImpl } from "@openauthjs/openauth/session"
  * import { RBACServiceImpl, RBACAdapter } from "@openauthjs/openauth/rbac"
  * import { DynamoStorage } from "@openauthjs/openauth/storage/dynamo"
@@ -24,7 +27,7 @@
  * import { createSubjects } from "@openauthjs/openauth/subject"
  * import { object, string, array } from "valibot"
  *
- * // Define subjects schema
+ * // Define subject schema with enterprise fields
  * const subjects = createSubjects({
  *   user: object({
  *     userId: string(),
@@ -38,14 +41,14 @@
  * // Initialize storage
  * const storage = DynamoStorage({ table: "auth-storage" })
  *
- * // Initialize services
+ * // Initialize enterprise services
  * const tenantService = createTenantService(storage)
  * const sessionService = new SessionServiceImpl(storage, {
  *   maxAccountsPerSession: 3,
  *   sessionLifetimeSeconds: 7 * 24 * 60 * 60, // 7 days
  * })
  *
- * // Optional: Initialize RBAC
+ * // Optional: Initialize RBAC (requires D1 database)
  * const rbacAdapter = new RBACAdapter(d1Database)
  * const rbacService = new RBACServiceImpl(rbacAdapter, storage)
  *
@@ -67,7 +70,6 @@
  *     baseDomain: "auth.example.com",
  *   },
  *   onSuccess: async (ctx, value, tenant) => {
- *     // Look up or create user in your database
  *     const userId = await findOrCreateUser({
  *       email: value.email,
  *       tenantId: tenant.id,
@@ -84,59 +86,98 @@
  *   },
  * })
  *
- * // Export for your runtime (Cloudflare Workers, Node, Bun, etc.)
+ * // Export for your runtime
  * export default app
+ * ```
+ *
+ * ## Architecture
+ *
+ * ```
+ * +-------------------------------------------------------------------+
+ * |                    Enterprise Multi-Tenant Issuer                 |
+ * +-------------------------------------------------------------------+
+ *        |                    |                    |
+ *        v                    v                    v
+ * +-------------+      +-------------+      +-------------+
+ * |   Tenant    |      |   Session   |      |    RBAC     |
+ * |   Service   |      |   Service   |      |   Service   |
+ * +-------------+      +-------------+      +-------------+
+ *        |                    |                    |
+ *        v                    v                    v
+ * +-------------------------------------------------------------------+
+ * |                      Storage Adapter (KV/Dynamo)                  |
+ * +-------------------------------------------------------------------+
  * ```
  *
  * ## API Endpoints
  *
- * The enterprise issuer exposes these endpoints:
+ * The enterprise issuer automatically mounts these endpoints:
  *
  * ### OAuth/OIDC
- * - `GET /authorize` - Authorization endpoint with OIDC extensions
- * - `POST /token` - Token endpoint (via providers)
- * - `GET /userinfo` - UserInfo endpoint
- * - `GET /.well-known/openid-configuration` - OIDC discovery
- * - `GET /.well-known/oauth-authorization-server` - OAuth discovery
- * - `GET /.well-known/jwks.json` - JSON Web Key Set
+ *
+ * | Endpoint | Method | Description |
+ * |----------|--------|-------------|
+ * | `/authorize` | GET | Authorization endpoint with OIDC extensions |
+ * | `/token` | POST | Token endpoint |
+ * | `/userinfo` | GET | UserInfo endpoint |
+ * | `/.well-known/openid-configuration` | GET | OIDC discovery document |
+ * | `/.well-known/oauth-authorization-server` | GET | OAuth discovery document |
+ * | `/.well-known/jwks.json` | GET | JSON Web Key Set |
  *
  * ### Session Management
- * - `GET /session/accounts` - List logged-in accounts
- * - `POST /session/switch` - Switch active account
- * - `DELETE /session/accounts/:userId` - Sign out one account
- * - `DELETE /session/all` - Sign out all accounts
- * - `GET /session/check` - Silent session check
  *
- * ### Admin Session Management
- * - `POST /admin/sessions/revoke-user` - Revoke all sessions for a user
- * - `POST /admin/sessions/revoke` - Revoke a specific session
+ * | Endpoint | Method | Description |
+ * |----------|--------|-------------|
+ * | `/session/accounts` | GET | List logged-in accounts |
+ * | `/session/switch` | POST | Switch active account |
+ * | `/session/accounts/:userId` | DELETE | Sign out one account |
+ * | `/session/all` | DELETE | Sign out all accounts |
+ * | `/session/check` | GET | Silent session check (CORS enabled) |
+ * | `/admin/sessions/revoke-user` | POST | Revoke all sessions for a user |
+ * | `/admin/sessions/revoke` | POST | Revoke a specific session |
  *
  * ### RBAC (if configured)
- * - `POST /rbac/check` - Check single permission
- * - `POST /rbac/check/batch` - Check multiple permissions
- * - `GET /rbac/permissions` - Get user permissions
- * - `GET /rbac/roles` - Get user roles
  *
- * ### RBAC Admin
- * - `POST /rbac/admin/apps` - Create app
- * - `GET /rbac/admin/apps` - List apps
- * - `POST /rbac/admin/roles` - Create role
- * - `GET /rbac/admin/roles` - List roles
- * - `POST /rbac/admin/permissions` - Create permission
- * - `GET /rbac/admin/permissions` - List permissions
- * - `POST /rbac/admin/users/:userId/roles` - Assign role
- * - `DELETE /rbac/admin/users/:userId/roles/:roleId` - Remove role
- * - `POST /rbac/admin/roles/:roleId/permissions` - Assign permission
- * - `DELETE /rbac/admin/roles/:roleId/permissions/:permissionId` - Remove permission
+ * | Endpoint | Method | Description |
+ * |----------|--------|-------------|
+ * | `/rbac/check` | POST | Check single permission |
+ * | `/rbac/check/batch` | POST | Check multiple permissions |
+ * | `/rbac/permissions` | GET | Get user permissions |
+ * | `/rbac/roles` | GET | Get user roles |
+ * | `/rbac/admin/*` | Various | Admin management endpoints |
  *
  * ### Tenant Management
- * - `POST /tenants` - Create tenant
- * - `GET /tenants` - List tenants
- * - `GET /tenants/:id` - Get tenant
- * - `PUT /tenants/:id` - Update tenant
- * - `DELETE /tenants/:id` - Delete tenant
- * - `PUT /tenants/:id/branding` - Update branding
- * - `PUT /tenants/:id/settings` - Update settings
+ *
+ * | Endpoint | Method | Description |
+ * |----------|--------|-------------|
+ * | `/tenants` | POST/GET | Create/list tenants |
+ * | `/tenants/:id` | GET/PUT/DELETE | Manage specific tenant |
+ * | `/tenants/:id/branding` | PUT | Update tenant branding |
+ * | `/tenants/:id/settings` | PUT | Update tenant settings |
+ *
+ * ## OIDC Parameters
+ *
+ * The enterprise issuer supports these OIDC parameters:
+ *
+ * | Parameter | Values | Description |
+ * |-----------|--------|-------------|
+ * | `prompt` | `none`, `login`, `consent`, `select_account` | Control auth UI behavior |
+ * | `login_hint` | email or user ID | Pre-fill login form |
+ * | `account_hint` | user ID | Select specific logged-in account |
+ * | `max_age` | seconds | Force re-auth if session older than |
+ *
+ * ## Security
+ *
+ * - Session cookies encrypted with AES-256-GCM (JWE)
+ * - 256-bit cryptographically random session IDs
+ * - Tenant isolation at storage level
+ * - RBAC with cached permission checking
+ *
+ * @see {@link createMultiTenantIssuer} - Main factory function
+ * @see {@link EnterpriseIssuerConfig} - Configuration options
+ * @see {@link EnterpriseSuccessContext} - Success callback context
+ * @see [ENTERPRISE_FEATURES.md](../docs/ENTERPRISE_FEATURES.md) - Full documentation
+ * @see [MIGRATION_GUIDE.md](../docs/MIGRATION_GUIDE.md) - Migration guide
  *
  * @packageDocumentation
  */

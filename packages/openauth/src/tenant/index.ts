@@ -1,27 +1,30 @@
 /**
- * Tenant Management Module
+ * Multi-tenant white-label infrastructure for OpenAuth enterprise SSO.
  *
- * Provides multi-tenant white-label infrastructure for OpenAuth enterprise SSO.
+ * This module enables a single OpenAuth deployment to serve multiple organizations
+ * with complete data isolation and customizable branding. Each tenant can have
+ * their own domain, theme, and authentication settings.
  *
- * Features:
- * - Tenant CRUD operations with storage abstraction
- * - Tenant-isolated storage (prefixed keys)
- * - Multiple tenant resolution strategies (domain, subdomain, path, header, query)
- * - White-label branding with theme injection
- * - RESTful API routes for tenant management
+ * ## Features
  *
- * @example
- * ```typescript
+ * - **Tenant CRUD Operations**: Full lifecycle management with storage abstraction
+ * - **Tenant-Isolated Storage**: All data automatically prefixed with tenant ID
+ * - **Multiple Resolution Strategies**: Domain, subdomain, path, header, or query parameter
+ * - **White-Label Branding**: Custom themes, logos, colors, and CSS per tenant
+ * - **RESTful Admin API**: Complete tenant management endpoints
+ *
+ * ## Quick Start
+ *
+ * ```ts title="tenant-setup.ts"
  * import {
  *   createTenantService,
  *   createTenantResolver,
  *   createTenantThemeMiddleware,
  *   tenantApiRoutes,
- *   TenantStorageImpl
  * } from "@openauthjs/openauth/tenant"
  *
  * // Create tenant service
- * const tenantService = createTenantService(storage)
+ * const tenantService = createTenantService(storage, d1Database)
  *
  * // Set up Hono app with tenant middleware
  * const app = new Hono()
@@ -33,12 +36,59 @@
  *   config: { baseDomain: "auth.example.com" }
  * }))
  *
- * // Apply theme middleware
+ * // Apply theme middleware for branding
  * app.use("*", createTenantThemeMiddleware())
  *
  * // Mount tenant admin API
  * app.route("/api/tenants", tenantApiRoutes(tenantService))
  * ```
+ *
+ * ## Tenant Resolution Strategies
+ *
+ * Tenants are resolved from requests in priority order:
+ *
+ * 1. **Custom Domain**: `auth.clientcorp.com` -> tenant "clientcorp"
+ * 2. **Subdomain**: `clientcorp.auth.example.com` -> tenant "clientcorp"
+ * 3. **Path Prefix**: `/tenants/clientcorp/authorize` -> tenant "clientcorp"
+ * 4. **HTTP Header**: `X-Tenant-ID: clientcorp` -> tenant "clientcorp"
+ * 5. **Query Parameter**: `?tenant=clientcorp` -> tenant "clientcorp"
+ *
+ * ## Storage Key Prefixing
+ *
+ * All tenant data is automatically isolated:
+ * ```
+ * t:{tenantId}:oauth:code:{code}
+ * t:{tenantId}:oauth:refresh:{subject}:{token}
+ * t:{tenantId}:client:{clientId}
+ * ```
+ *
+ * ## API Endpoints
+ *
+ * When mounted, the tenant API provides:
+ *
+ * | Endpoint | Method | Description |
+ * |----------|--------|-------------|
+ * | `/tenants` | POST | Create tenant |
+ * | `/tenants` | GET | List tenants |
+ * | `/tenants/:id` | GET | Get tenant by ID |
+ * | `/tenants/:id` | PUT | Update tenant |
+ * | `/tenants/:id` | DELETE | Delete tenant (soft delete) |
+ * | `/tenants/:id/branding` | PUT | Update branding only |
+ * | `/tenants/:id/settings` | PUT | Update settings only |
+ *
+ * ## Branding Configuration
+ *
+ * Each tenant can customize:
+ * - Theme colors (primary, secondary, background, text)
+ * - Logo images (light and dark variants)
+ * - Favicon
+ * - Custom CSS injection
+ * - Email templates
+ *
+ * @see {@link TenantServiceImpl} - Main tenant service implementation
+ * @see {@link createTenantResolver} - Middleware for tenant resolution
+ * @see {@link createTenantThemeMiddleware} - Middleware for theme injection
+ * @see {@link tenantApiRoutes} - REST API for tenant management
  *
  * @packageDocumentation
  */

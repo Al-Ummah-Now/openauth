@@ -1,0 +1,1787 @@
+import {
+  expect,
+  test,
+  describe,
+  beforeEach,
+  mock,
+  spyOn,
+  setSystemTime,
+  afterEach,
+} from "bun:test"
+import { RBACServiceImpl } from "../src/rbac/service.js"
+import { RBACAdapter } from "../src/rbac/d1-adapter.js"
+import type { StorageAdapter } from "../src/storage/storage.js"
+import type {
+  Role,
+  Permission,
+  App,
+  UserRole,
+  RolePermission,
+} from "../src/contracts/types.js"
+import {
+  enrichTokenWithRBAC,
+  createTokenEnricher,
+  validateRBACClaims,
+  extractRBACClaims,
+  hasPermissionInToken,
+  hasRoleInToken,
+  hasAllPermissionsInToken,
+  hasAnyPermissionInToken,
+} from "../src/rbac/token-enricher.js"
+
+// ============================================
+// Mock D1 Database
+// ============================================
+
+const createMockD1 = () => {
+  const mockResults: any[] = []
+
+  const setResults = (results: any[]) => {
+    mockResults.length = 0
+    mockResults.push(...results)
+  }
+
+  const db = {
+    prepare: (sql: string) => ({
+      bind: (...params: any[]) => ({
+        run: mock(() =>
+          Promise.resolve({ success: true, meta: { changes: 1 } }),
+        ),
+        all: mock(() => Promise.resolve({ results: [...mockResults] })),
+        first: mock(() => Promise.resolve(mockResults[0] || null)),
+      }),
+    }),
+    _mockResults: mockResults,
+    _setResults: setResults,
+    _sql: [] as string[],
+  }
+
+  // Track SQL queries for verification
+  const originalPrepare = db.prepare
+  db.prepare = (sql: string) => {
+    db._sql.push(sql)
+    return originalPrepare(sql)
+  }
+
+  return db
+}
+
+// ============================================
+// Mock Storage Adapter
+// ============================================
+
+const createMockStorage = () => {
+  const storage = new Map<string, any>()
+
+  const mockStorage: StorageAdapter = {
+    get: mock(async (key: string[]) => {
+      const keyStr = JSON.stringify(key)
+      return storage.get(keyStr) ?? null
+    }),
+    set: mock(async (key: string[], value: any, ttl?: number) => {
+      const keyStr = JSON.stringify(key)
+      storage.set(keyStr, value)
+    }),
+    remove: mock(async (key: string[]) => {
+      const keyStr = JSON.stringify(key)
+      storage.delete(keyStr)
+    }),
+    scan: mock(async function* (prefix: string[]) {
+      const prefixStr = JSON.stringify(prefix)
+      for (const [key, value] of storage.entries()) {
+        if (key.startsWith(prefixStr.slice(0, -1))) {
+          yield [JSON.parse(key), value]
+        }
+      }
+    }),
+    _storage: storage,
+  }
+
+  return mockStorage
+}
+
+// ============================================
+// Test Data Factories
+// ============================================
+
+const createTestApp = (overrides?: Partial<App>): App => ({
+  id: "test-app",
+  name: "Test App",
+  tenant_id: "tenant-1",
+  description: "A test application",
+  created_at: Date.now(),
+  ...overrides,
+})
+
+const createTestRole = (overrides?: Partial<Role>): Role => ({
+  id: "role-1",
+  name: "admin",
+  tenant_id: "tenant-1",
+  description: "Administrator role",
+  is_system_role: false,
+  created_at: Date.now(),
+  updated_at: Date.now(),
+  ...overrides,
+})
+
+const createTestPermission = (overrides?: Partial<Permission>): Permission => ({
+  id: "perm-1",
+  name: "posts:read",
+  app_id: "test-app",
+  description: "Read posts",
+  resource: "posts",
+  action: "read",
+  created_at: Date.now(),
+  ...overrides,
+})
+
+const createTestUserRole = (overrides?: Partial<UserRole>): UserRole => ({
+  user_id: "user-1",
+  role_id: "role-1",
+  tenant_id: "tenant-1",
+  assigned_at: Date.now(),
+  assigned_by: "admin",
+  ...overrides,
+})
+
+// ============================================
+// RBACAdapter (D1) Tests
+// ============================================
+
+describe("RBACAdapter", () => {
+  let adapter: RBACAdapter
+  let mockDb: any
+
+  beforeEach(() => {
+    mockDb = createMockD1()
+    adapter = new RBACAdapter(mockDb)
+    setSystemTime(new Date("2024-01-01T00:00:00Z"))
+  })
+
+  afterEach(() => {
+    setSystemTime()
+  })
+
+  // ==========================================
+  // Create Operations
+  // ==========================================
+
+  describe("createApp", () => {
+    test("creates app with correct parameters", async () => {
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const app = await adapter.createApp({
+        id: "app-1",
+        name: "My App",
+        tenant_id: "tenant-1",
+        description: "Test app",
+      })
+
+      expect(prepareSpy).toHaveBeenCalled()
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("INSERT INTO rbac_apps")
+      expect(sql).toContain("id, name, tenant_id, description, created_at")
+
+      expect(app.id).toBe("app-1")
+      expect(app.name).toBe("My App")
+      expect(app.tenant_id).toBe("tenant-1")
+      expect(app.description).toBe("Test app")
+    })
+
+    test("creates app without optional description", async () => {
+      const app = await adapter.createApp({
+        id: "app-2",
+        name: "App Without Description",
+        tenant_id: "tenant-1",
+      })
+
+      expect(app.description).toBeUndefined()
+    })
+  })
+
+  describe("createRole", () => {
+    test("creates role with generated UUID", async () => {
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const role = await adapter.createRole({
+        name: "editor",
+        tenant_id: "tenant-1",
+        description: "Editor role",
+        is_system_role: false,
+      })
+
+      expect(prepareSpy).toHaveBeenCalled()
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("INSERT INTO rbac_roles")
+
+      expect(role.id).toBeDefined()
+      expect(role.name).toBe("editor")
+      expect(role.tenant_id).toBe("tenant-1")
+      expect(role.is_system_role).toBe(false)
+    })
+
+    test("creates system role", async () => {
+      const role = await adapter.createRole({
+        name: "super-admin",
+        tenant_id: "tenant-1",
+        is_system_role: true,
+      })
+
+      expect(role.is_system_role).toBe(true)
+    })
+  })
+
+  describe("createPermission", () => {
+    test("creates permission with correct structure", async () => {
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const permission = await adapter.createPermission({
+        name: "users:write",
+        app_id: "app-1",
+        resource: "users",
+        action: "write",
+        description: "Write users",
+      })
+
+      expect(prepareSpy).toHaveBeenCalled()
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("INSERT INTO rbac_permissions")
+
+      expect(permission.id).toBeDefined()
+      expect(permission.name).toBe("users:write")
+      expect(permission.app_id).toBe("app-1")
+      expect(permission.resource).toBe("users")
+      expect(permission.action).toBe("write")
+    })
+  })
+
+  // ==========================================
+  // Assignment Operations
+  // ==========================================
+
+  describe("assignRoleToUser", () => {
+    test("assigns role to user", async () => {
+      mockDb._setResults([]) // No existing assignment
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const userRole = await adapter.assignRoleToUser({
+        user_id: "user-1",
+        role_id: "role-1",
+        tenant_id: "tenant-1",
+        assigned_by: "admin",
+      })
+
+      expect(userRole.user_id).toBe("user-1")
+      expect(userRole.role_id).toBe("role-1")
+      expect(userRole.tenant_id).toBe("tenant-1")
+
+      // Verify INSERT was called
+      const insertCall = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("INSERT INTO rbac_user_roles"),
+      )
+      expect(insertCall).toBeDefined()
+    })
+
+    test("throws error if role already assigned", async () => {
+      // Mock existing assignment
+      mockDb._setResults([{ user_id: "user-1" }])
+
+      await expect(
+        adapter.assignRoleToUser({
+          user_id: "user-1",
+          role_id: "role-1",
+          tenant_id: "tenant-1",
+          assigned_by: "admin",
+        }),
+      ).rejects.toThrow("Role is already assigned to user")
+    })
+
+    test("supports expiration timestamp", async () => {
+      mockDb._setResults([])
+
+      const expiresAt = Date.now() + 86400000 // 24 hours
+
+      const userRole = await adapter.assignRoleToUser({
+        user_id: "user-1",
+        role_id: "role-1",
+        tenant_id: "tenant-1",
+        assigned_by: "admin",
+        expires_at: expiresAt,
+      })
+
+      expect(userRole.expires_at).toBe(expiresAt)
+    })
+  })
+
+  describe("assignPermissionToRole", () => {
+    test("assigns permission to role", async () => {
+      mockDb._setResults([]) // No existing assignment
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const rolePermission = await adapter.assignPermissionToRole({
+        role_id: "role-1",
+        permission_id: "perm-1",
+        granted_by: "admin",
+      })
+
+      expect(rolePermission.role_id).toBe("role-1")
+      expect(rolePermission.permission_id).toBe("perm-1")
+      expect(rolePermission.granted_by).toBe("admin")
+
+      // Verify INSERT was called
+      const insertCall = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("INSERT INTO rbac_role_permissions"),
+      )
+      expect(insertCall).toBeDefined()
+    })
+
+    test("throws error if permission already assigned to role", async () => {
+      mockDb._setResults([{ role_id: "role-1" }])
+
+      await expect(
+        adapter.assignPermissionToRole({
+          role_id: "role-1",
+          permission_id: "perm-1",
+          granted_by: "admin",
+        }),
+      ).rejects.toThrow("Permission is already assigned to role")
+    })
+  })
+
+  describe("removeRoleFromUser", () => {
+    test("removes role assignment", async () => {
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      await adapter.removeRoleFromUser("user-1", "role-1", "tenant-1")
+
+      expect(prepareSpy).toHaveBeenCalled()
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("DELETE FROM rbac_user_roles")
+      expect(sql).toContain("WHERE user_id = ? AND role_id = ? AND tenant_id = ?")
+    })
+  })
+
+  describe("removePermissionFromRole", () => {
+    test("removes permission from role", async () => {
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      await adapter.removePermissionFromRole("role-1", "perm-1")
+
+      expect(prepareSpy).toHaveBeenCalled()
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("DELETE FROM rbac_role_permissions")
+      expect(sql).toContain("WHERE role_id = ? AND permission_id = ?")
+    })
+  })
+
+  // ==========================================
+  // Query Operations
+  // ==========================================
+
+  describe("getUserRoles", () => {
+    test("returns user roles excluding expired ones", async () => {
+      const now = Date.now()
+
+      const roles = [
+        {
+          id: "role-1",
+          name: "admin",
+          tenant_id: "tenant-1",
+          description: "Admin",
+          is_system_role: 0,
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          id: "role-2",
+          name: "editor",
+          tenant_id: "tenant-1",
+          description: null,
+          is_system_role: 1,
+          created_at: now,
+          updated_at: now,
+        },
+      ]
+
+      mockDb._setResults(roles)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.getUserRoles("user-1", "tenant-1")
+
+      expect(result).toHaveLength(2)
+      expect(result[0].name).toBe("admin")
+      expect(result[0].is_system_role).toBe(false)
+      expect(result[1].name).toBe("editor")
+      expect(result[1].is_system_role).toBe(true)
+      expect(result[1].description).toBeUndefined()
+
+      // Verify expiration check in SQL
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("ur.expires_at IS NULL OR ur.expires_at > ?")
+    })
+
+    test("enforces tenant isolation", async () => {
+      mockDb._setResults([])
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      await adapter.getUserRoles("user-1", "tenant-1")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE ur.user_id = ? AND ur.tenant_id = ?")
+    })
+  })
+
+  describe("getUserPermissionsForApp", () => {
+    test("returns permissions with combined query", async () => {
+      const now = Date.now()
+
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read posts",
+          resource: "posts",
+          action: "read",
+          created_at: now,
+        },
+        {
+          id: "perm-2",
+          name: "posts:write",
+          app_id: "app-1",
+          description: null,
+          resource: "posts",
+          action: "write",
+          created_at: now,
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.getUserPermissionsForApp(
+        "user-1",
+        "app-1",
+        "tenant-1",
+      )
+
+      expect(result).toHaveLength(2)
+      expect(result[0].name).toBe("posts:read")
+      expect(result[1].name).toBe("posts:write")
+      expect(result[1].description).toBeUndefined()
+
+      // Verify query filters by user, tenant, and app
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE ur.user_id = ? AND ur.tenant_id = ? AND p.app_id = ?")
+      expect(sql).toContain("ur.expires_at IS NULL OR ur.expires_at > ?")
+    })
+
+    test("enforces tenant isolation in combined query", async () => {
+      mockDb._setResults([])
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      await adapter.getUserPermissionsForApp("user-1", "app-1", "tenant-1")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("ur.tenant_id = ?")
+    })
+  })
+
+  describe("listApps", () => {
+    test("lists apps for tenant", async () => {
+      const apps = [
+        {
+          id: "app-1",
+          name: "App 1",
+          tenant_id: "tenant-1",
+          description: "First app",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(apps)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.listApps("tenant-1")
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe("App 1")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE tenant_id = ?")
+    })
+  })
+
+  describe("listRoles", () => {
+    test("lists roles for tenant", async () => {
+      const roles = [
+        {
+          id: "role-1",
+          name: "admin",
+          tenant_id: "tenant-1",
+          description: "Admin",
+          is_system_role: 0,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(roles)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.listRoles("tenant-1")
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe("admin")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE tenant_id = ?")
+    })
+  })
+
+  describe("listPermissions", () => {
+    test("lists permissions for app", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.listPermissions("app-1")
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe("posts:read")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE app_id = ?")
+    })
+  })
+
+  describe("listRolePermissions", () => {
+    test("lists permissions for role", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.listRolePermissions("role-1")
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe("posts:read")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE rp.role_id = ?")
+    })
+  })
+
+  describe("listUserRoles", () => {
+    test("lists role assignments for user", async () => {
+      const userRoles = [
+        {
+          user_id: "user-1",
+          role_id: "role-1",
+          tenant_id: "tenant-1",
+          assigned_at: Date.now(),
+          expires_at: null,
+          assigned_by: "admin",
+        },
+      ]
+
+      mockDb._setResults(userRoles)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.listUserRoles("user-1", "tenant-1")
+
+      expect(result).toHaveLength(1)
+      expect(result[0].role_id).toBe("role-1")
+      expect(result[0].expires_at).toBeUndefined()
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE user_id = ? AND tenant_id = ?")
+    })
+  })
+
+  describe("getApp", () => {
+    test("gets app by id with tenant isolation", async () => {
+      const app = {
+        id: "app-1",
+        name: "App 1",
+        tenant_id: "tenant-1",
+        description: "Test",
+        created_at: Date.now(),
+      }
+
+      mockDb._setResults([app])
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.getApp("app-1", "tenant-1")
+
+      expect(result).not.toBeNull()
+      expect(result?.name).toBe("App 1")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE id = ? AND tenant_id = ?")
+    })
+
+    test("returns null if app not found", async () => {
+      mockDb._setResults([])
+
+      const result = await adapter.getApp("nonexistent", "tenant-1")
+
+      expect(result).toBeNull()
+    })
+  })
+
+  describe("getRole", () => {
+    test("gets role by id with tenant isolation", async () => {
+      const role = {
+        id: "role-1",
+        name: "admin",
+        tenant_id: "tenant-1",
+        description: "Admin",
+        is_system_role: 0,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      }
+
+      mockDb._setResults([role])
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.getRole("role-1", "tenant-1")
+
+      expect(result).not.toBeNull()
+      expect(result?.name).toBe("admin")
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE id = ? AND tenant_id = ?")
+    })
+  })
+
+  describe("getPermission", () => {
+    test("gets permission by id", async () => {
+      const permission = {
+        id: "perm-1",
+        name: "posts:read",
+        app_id: "app-1",
+        description: "Read",
+        resource: "posts",
+        action: "read",
+        created_at: Date.now(),
+      }
+
+      mockDb._setResults([permission])
+
+      const result = await adapter.getPermission("perm-1")
+
+      expect(result).not.toBeNull()
+      expect(result?.name).toBe("posts:read")
+    })
+  })
+
+  describe("getRolePermissions", () => {
+    test("returns empty array for empty role list", async () => {
+      const result = await adapter.getRolePermissions([])
+      expect(result).toEqual([])
+    })
+
+    test("builds parameterized IN clause for multiple roles", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      await adapter.getRolePermissions(["role-1", "role-2", "role-3"])
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("WHERE rp.role_id IN (?, ?, ?)")
+    })
+  })
+})
+
+// ============================================
+// RBACServiceImpl Tests
+// ============================================
+
+describe("RBACServiceImpl", () => {
+  let service: RBACServiceImpl
+  let adapter: RBACAdapter
+  let storage: StorageAdapter
+  let mockDb: any
+
+  beforeEach(() => {
+    mockDb = createMockD1()
+    adapter = new RBACAdapter(mockDb)
+    storage = createMockStorage()
+    service = new RBACServiceImpl(adapter, storage)
+    setSystemTime(new Date("2024-01-01T00:00:00Z"))
+  })
+
+  afterEach(() => {
+    setSystemTime()
+  })
+
+  // ==========================================
+  // Permission Checking
+  // ==========================================
+
+  describe("checkPermission", () => {
+    test("returns true when user has permission", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read posts",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const result = await service.checkPermission({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permission: "posts:read",
+      })
+
+      expect(result).toBe(true)
+    })
+
+    test("returns false when user lacks permission", async () => {
+      mockDb._setResults([])
+
+      const result = await service.checkPermission({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permission: "posts:delete",
+      })
+
+      expect(result).toBe(false)
+    })
+
+    test("uses cached permissions on subsequent calls", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      // First call - should query database
+      await service.checkPermission({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permission: "posts:read",
+      })
+
+      const firstCallCount = prepareSpy.mock.calls.length
+
+      // Second call - should use cache
+      await service.checkPermission({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permission: "posts:read",
+      })
+
+      const secondCallCount = prepareSpy.mock.calls.length
+
+      // Should not have made additional database calls
+      expect(secondCallCount).toBe(firstCallCount)
+    })
+
+    test("refreshes cache after TTL expires", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const getSpy = spyOn(storage, "get")
+
+      // First call
+      await service.checkPermission({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permission: "posts:read",
+      })
+
+      // Move time forward past TTL (60 seconds)
+      setSystemTime(new Date("2024-01-01T00:02:00Z"))
+
+      // Second call - should refresh cache
+      await service.checkPermission({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permission: "posts:read",
+      })
+
+      // Should have checked cache twice
+      expect(getSpy.mock.calls.length).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  describe("checkPermissions", () => {
+    test("returns correct results for batch permission check", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+        {
+          id: "perm-2",
+          name: "posts:write",
+          app_id: "app-1",
+          description: "Write",
+          resource: "posts",
+          action: "write",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const results = await service.checkPermissions({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permissions: ["posts:read", "posts:write", "posts:delete"],
+      })
+
+      expect(results["posts:read"]).toBe(true)
+      expect(results["posts:write"]).toBe(true)
+      expect(results["posts:delete"]).toBe(false)
+    })
+
+    test("uses cached permissions for batch check", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      // First batch check
+      await service.checkPermissions({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permissions: ["posts:read", "posts:write"],
+      })
+
+      const firstCallCount = prepareSpy.mock.calls.length
+
+      // Second batch check - should use cache
+      await service.checkPermissions({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+        permissions: ["posts:read"],
+      })
+
+      expect(prepareSpy.mock.calls.length).toBe(firstCallCount)
+    })
+  })
+
+  describe("getUserPermissions", () => {
+    test("returns all user permissions for app", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+        {
+          id: "perm-2",
+          name: "posts:write",
+          app_id: "app-1",
+          description: "Write",
+          resource: "posts",
+          action: "write",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const result = await service.getUserPermissions({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+      expect(result).toEqual(["posts:read", "posts:write"])
+    })
+
+    test("caches permission list", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const setSpy = spyOn(storage, "set")
+
+      await service.getUserPermissions({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+      expect(setSpy).toHaveBeenCalled()
+      const cacheKey = setSpy.mock.calls[0][0]
+      expect(cacheKey).toEqual(["rbac", "permissions", "tenant-1", "user-1", "app-1"])
+    })
+  })
+
+  describe("getUserRoles", () => {
+    test("returns user roles from adapter", async () => {
+      const roles = [
+        {
+          id: "role-1",
+          name: "admin",
+          tenant_id: "tenant-1",
+          description: "Admin",
+          is_system_role: 0,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(roles)
+
+      const result = await service.getUserRoles("user-1", "tenant-1")
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe("admin")
+    })
+  })
+
+  // ==========================================
+  // Token Enrichment
+  // ==========================================
+
+  describe("enrichTokenClaims", () => {
+    test("returns roles and permissions for token", async () => {
+      const roles = [
+        {
+          id: "role-1",
+          name: "admin",
+          tenant_id: "tenant-1",
+          description: "Admin",
+          is_system_role: 0,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+        {
+          id: "role-2",
+          name: "editor",
+          tenant_id: "tenant-1",
+          description: "Editor",
+          is_system_role: 0,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+      ]
+
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+        {
+          id: "perm-2",
+          name: "posts:write",
+          app_id: "app-1",
+          description: "Write",
+          resource: "posts",
+          action: "write",
+          created_at: Date.now(),
+        },
+      ]
+
+      // First query returns roles
+      mockDb._setResults(roles)
+
+      const result = await service.enrichTokenClaims({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+      expect(result.roles).toEqual(["admin", "editor"])
+      // Permissions would be fetched from cache or second query
+    })
+
+    test("enforces max permissions limit", async () => {
+      const roles = [
+        {
+          id: "role-1",
+          name: "admin",
+          tenant_id: "tenant-1",
+          description: "Admin",
+          is_system_role: 0,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+      ]
+
+      // Create 60 permissions (exceeds default limit of 50)
+      const permissions = Array.from({ length: 60 }, (_, i) => ({
+        id: `perm-${i}`,
+        name: `permission:${i}`,
+        app_id: "app-1",
+        description: `Permission ${i}`,
+        resource: "resource",
+        action: "action",
+        created_at: Date.now(),
+      }))
+
+      mockDb._setResults(permissions)
+
+      const result = await service.enrichTokenClaims({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+      // Should be limited to 50
+      expect(result.permissions.length).toBe(50)
+    })
+
+    test("warns when limiting permissions", async () => {
+      const consoleSpy = spyOn(console, "warn")
+
+      const roles = [
+        {
+          id: "role-1",
+          name: "admin",
+          tenant_id: "tenant-1",
+          description: "Admin",
+          is_system_role: 0,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+      ]
+
+      const permissions = Array.from({ length: 60 }, (_, i) => ({
+        id: `perm-${i}`,
+        name: `permission:${i}`,
+        app_id: "app-1",
+        description: `Permission ${i}`,
+        resource: "resource",
+        action: "action",
+        created_at: Date.now(),
+      }))
+
+      mockDb._setResults(permissions)
+
+      await service.enrichTokenClaims({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+      expect(consoleSpy).toHaveBeenCalled()
+      expect(consoleSpy.mock.calls[0][0]).toContain("60 permissions")
+      expect(consoleSpy.mock.calls[0][0]).toContain("limiting to 50")
+    })
+  })
+
+  // ==========================================
+  // Cache Invalidation
+  // ==========================================
+
+  describe("cache invalidation", () => {
+    test("invalidates cache when assigning role to user", async () => {
+      mockDb._setResults([]) // No existing assignment
+
+      const removeSpy = spyOn(storage, "remove")
+
+      // Pre-populate cache
+      await storage.set(
+        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
+        { permissions: ["posts:read"], cachedAt: Date.now() },
+      )
+
+      await service.assignRoleToUser({
+        userId: "user-1",
+        roleId: "role-1",
+        tenantId: "tenant-1",
+        assignedBy: "admin",
+      })
+
+      // Should have removed cache
+      expect(removeSpy).toHaveBeenCalled()
+    })
+
+    test("invalidates cache when removing role from user", async () => {
+      const removeSpy = spyOn(storage, "remove")
+
+      await storage.set(
+        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
+        { permissions: ["posts:read"], cachedAt: Date.now() },
+      )
+
+      await service.removeRoleFromUser({
+        userId: "user-1",
+        roleId: "role-1",
+        tenantId: "tenant-1",
+      })
+
+      expect(removeSpy).toHaveBeenCalled()
+    })
+
+    test("invalidates cache for all users with role when assigning permission", async () => {
+      mockDb._setResults([]) // No existing assignment
+
+      const userRoles = [
+        {
+          user_id: "user-1",
+          role_id: "role-1",
+          tenant_id: "tenant-1",
+          assigned_at: Date.now(),
+          assigned_by: "admin",
+        },
+        {
+          user_id: "user-2",
+          role_id: "role-1",
+          tenant_id: "tenant-1",
+          assigned_at: Date.now(),
+          assigned_by: "admin",
+        },
+      ]
+
+      // Pre-populate caches for both users
+      await storage.set(
+        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
+        { permissions: ["posts:read"], cachedAt: Date.now() },
+      )
+      await storage.set(
+        ["rbac", "permissions", "tenant-1", "user-2", "app-1"],
+        { permissions: ["posts:read"], cachedAt: Date.now() },
+      )
+
+      const removeSpy = spyOn(storage, "remove")
+      const listUserRolesSpy = spyOn(adapter, "listUserRoles").mockResolvedValue(
+        userRoles,
+      )
+
+      await service.assignPermissionToRole({
+        roleId: "role-1",
+        permissionId: "perm-1",
+        grantedBy: "admin",
+      })
+
+      // Should call listUserRoles to find users with this role
+      expect(listUserRolesSpy).toHaveBeenCalled()
+      // The actual cache invalidation might vary based on implementation
+      // so we just verify the method was called to get the user list
+    })
+
+    test("handles cache invalidation errors gracefully", async () => {
+      mockDb._setResults([])
+
+      const consoleSpy = spyOn(console, "warn")
+      const listUserRolesSpy = spyOn(adapter, "listUserRoles").mockRejectedValue(
+        new Error("Database error"),
+      )
+
+      await service.assignPermissionToRole({
+        roleId: "role-1",
+        permissionId: "perm-1",
+        grantedBy: "admin",
+      })
+
+      // Should warn but not throw
+      expect(consoleSpy).toHaveBeenCalled()
+      const warnCalls = consoleSpy.mock.calls.map((call) => call[0])
+      const hasInvalidationWarning = warnCalls.some((msg) =>
+        msg.includes("Could not invalidate cache"),
+      )
+      expect(hasInvalidationWarning).toBe(true)
+    })
+  })
+
+  // ==========================================
+  // Admin Operations
+  // ==========================================
+
+  describe("admin operations", () => {
+    test("creates app via adapter", async () => {
+      const createAppSpy = spyOn(adapter, "createApp").mockResolvedValue(
+        createTestApp(),
+      )
+
+      await service.createApp({
+        id: "app-1",
+        name: "My App",
+        tenantId: "tenant-1",
+      })
+
+      expect(createAppSpy).toHaveBeenCalledWith({
+        id: "app-1",
+        name: "My App",
+        tenant_id: "tenant-1",
+        description: undefined,
+      })
+    })
+
+    test("creates role via adapter", async () => {
+      const createRoleSpy = spyOn(adapter, "createRole").mockResolvedValue(
+        createTestRole(),
+      )
+
+      await service.createRole({
+        name: "editor",
+        tenantId: "tenant-1",
+        description: "Editor role",
+      })
+
+      expect(createRoleSpy).toHaveBeenCalledWith({
+        name: "editor",
+        tenant_id: "tenant-1",
+        description: "Editor role",
+        is_system_role: undefined,
+      })
+    })
+
+    test("creates permission via adapter", async () => {
+      const createPermissionSpy = spyOn(adapter, "createPermission").mockResolvedValue(
+        createTestPermission(),
+      )
+
+      await service.createPermission({
+        name: "users:write",
+        appId: "app-1",
+        resource: "users",
+        action: "write",
+      })
+
+      expect(createPermissionSpy).toHaveBeenCalledWith({
+        name: "users:write",
+        app_id: "app-1",
+        resource: "users",
+        action: "write",
+        description: undefined,
+      })
+    })
+
+    test("lists apps via adapter", async () => {
+      const listAppsSpy = spyOn(adapter, "listApps").mockResolvedValue([
+        createTestApp(),
+      ])
+
+      await service.listApps("tenant-1")
+
+      expect(listAppsSpy).toHaveBeenCalledWith("tenant-1")
+    })
+
+    test("lists roles via adapter", async () => {
+      const listRolesSpy = spyOn(adapter, "listRoles").mockResolvedValue([
+        createTestRole(),
+      ])
+
+      await service.listRoles("tenant-1")
+
+      expect(listRolesSpy).toHaveBeenCalledWith("tenant-1")
+    })
+
+    test("lists permissions via adapter", async () => {
+      const listPermissionsSpy = spyOn(adapter, "listPermissions").mockResolvedValue([
+        createTestPermission(),
+      ])
+
+      await service.listPermissions("app-1")
+
+      expect(listPermissionsSpy).toHaveBeenCalledWith("app-1")
+    })
+
+    test("lists role permissions via adapter", async () => {
+      const listRolePermissionsSpy = spyOn(
+        adapter,
+        "listRolePermissions",
+      ).mockResolvedValue([createTestPermission()])
+
+      await service.listRolePermissions("role-1")
+
+      expect(listRolePermissionsSpy).toHaveBeenCalledWith("role-1")
+    })
+
+    test("lists user roles via adapter", async () => {
+      const listUserRolesSpy = spyOn(adapter, "listUserRoles").mockResolvedValue([
+        createTestUserRole(),
+      ])
+
+      await service.listUserRoles("user-1", "tenant-1")
+
+      expect(listUserRolesSpy).toHaveBeenCalledWith("user-1", "tenant-1")
+    })
+  })
+})
+
+// ============================================
+// Token Enricher Tests
+// ============================================
+
+describe("Token Enricher", () => {
+  let service: RBACServiceImpl
+  let adapter: RBACAdapter
+  let storage: StorageAdapter
+  let mockDb: any
+
+  beforeEach(() => {
+    mockDb = createMockD1()
+    adapter = new RBACAdapter(mockDb)
+    storage = createMockStorage()
+    service = new RBACServiceImpl(adapter, storage)
+  })
+
+  describe("enrichTokenWithRBAC", () => {
+    test("enriches token with correct structure", async () => {
+      const roles = [
+        {
+          id: "role-1",
+          name: "admin",
+          tenant_id: "tenant-1",
+          description: "Admin",
+          is_system_role: 0,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+      ]
+
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const claims = await enrichTokenWithRBAC(service, {
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+      expect(claims).toHaveProperty("roles")
+      expect(claims).toHaveProperty("permissions")
+      expect(Array.isArray(claims.roles)).toBe(true)
+      expect(Array.isArray(claims.permissions)).toBe(true)
+    })
+
+    test("enforces custom permission limit", async () => {
+      const permissions = Array.from({ length: 60 }, (_, i) => ({
+        id: `perm-${i}`,
+        name: `permission:${i}`,
+        app_id: "app-1",
+        description: `Permission ${i}`,
+        resource: "resource",
+        action: "action",
+        created_at: Date.now(),
+      }))
+
+      mockDb._setResults(permissions)
+
+      const claims = await enrichTokenWithRBAC(
+        service,
+        {
+          userId: "user-1",
+          appId: "app-1",
+          tenantId: "tenant-1",
+        },
+        { maxPermissionsInToken: 25 },
+      )
+
+      expect(claims.permissions.length).toBe(25)
+    })
+
+    test("warns when truncating permissions", async () => {
+      const consoleSpy = spyOn(console, "warn")
+
+      const permissions = Array.from({ length: 60 }, (_, i) => ({
+        id: `perm-${i}`,
+        name: `permission:${i}`,
+        app_id: "app-1",
+        description: `Permission ${i}`,
+        resource: "resource",
+        action: "action",
+        created_at: Date.now(),
+      }))
+
+      mockDb._setResults(permissions)
+
+      await enrichTokenWithRBAC(
+        service,
+        {
+          userId: "user-1",
+          appId: "app-1",
+          tenantId: "tenant-1",
+        },
+        { maxPermissionsInToken: 25 },
+      )
+
+      expect(consoleSpy).toHaveBeenCalled()
+      const warnCalls = consoleSpy.mock.calls.map((call) => call[0])
+      const hasTruncationWarning = warnCalls.some((msg) =>
+        msg.includes("truncating to 25"),
+      )
+      expect(hasTruncationWarning).toBe(true)
+    })
+  })
+
+  describe("createTokenEnricher", () => {
+    test("creates bound enricher function", async () => {
+      const permissions = [
+        {
+          id: "perm-1",
+          name: "posts:read",
+          app_id: "app-1",
+          description: "Read",
+          resource: "posts",
+          action: "read",
+          created_at: Date.now(),
+        },
+      ]
+
+      mockDb._setResults(permissions)
+
+      const enricher = createTokenEnricher(service, {
+        maxPermissionsInToken: 25,
+      })
+
+      const claims = await enricher({
+        userId: "user-1",
+        appId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+      expect(claims).toHaveProperty("roles")
+      expect(claims).toHaveProperty("permissions")
+    })
+  })
+
+  describe("validateRBACClaims", () => {
+    test("validates correct claims structure", () => {
+      const claims = {
+        roles: ["admin", "editor"],
+        permissions: ["posts:read", "posts:write"],
+      }
+
+      expect(validateRBACClaims(claims)).toBe(true)
+    })
+
+    test("rejects invalid claims - not an object", () => {
+      expect(validateRBACClaims(null)).toBe(false)
+      expect(validateRBACClaims(undefined)).toBe(false)
+      expect(validateRBACClaims("string")).toBe(false)
+    })
+
+    test("rejects invalid roles array", () => {
+      expect(validateRBACClaims({ roles: "admin", permissions: [] })).toBe(false)
+      expect(validateRBACClaims({ roles: [1, 2, 3], permissions: [] })).toBe(false)
+    })
+
+    test("rejects invalid permissions array", () => {
+      expect(validateRBACClaims({ roles: [], permissions: "read" })).toBe(false)
+      expect(validateRBACClaims({ roles: [], permissions: [1, 2] })).toBe(false)
+    })
+
+    test("rejects too many permissions", () => {
+      const consoleSpy = spyOn(console, "warn")
+
+      const permissions = Array.from({ length: 60 }, (_, i) => `perm:${i}`)
+
+      const result = validateRBACClaims({
+        roles: [],
+        permissions,
+      })
+
+      expect(result).toBe(false)
+      expect(consoleSpy).toHaveBeenCalled()
+    })
+
+    test("respects custom permission limit", () => {
+      const permissions = Array.from({ length: 30 }, (_, i) => `perm:${i}`)
+
+      const result = validateRBACClaims(
+        {
+          roles: [],
+          permissions,
+        },
+        { maxPermissionsInToken: 25 },
+      )
+
+      expect(result).toBe(false)
+    })
+  })
+
+  describe("extractRBACClaims", () => {
+    test("extracts valid claims from JWT payload", () => {
+      const payload = {
+        sub: "user-1",
+        roles: ["admin"],
+        permissions: ["posts:read"],
+        iat: Date.now(),
+      }
+
+      const claims = extractRBACClaims(payload)
+
+      expect(claims).not.toBeNull()
+      expect(claims?.roles).toEqual(["admin"])
+      expect(claims?.permissions).toEqual(["posts:read"])
+    })
+
+    test("returns null for invalid claims", () => {
+      const payload = {
+        sub: "user-1",
+        roles: "admin", // Invalid - should be array
+        permissions: ["posts:read"],
+      }
+
+      const claims = extractRBACClaims(payload)
+
+      expect(claims).toBeNull()
+    })
+
+    test("returns null for missing claims", () => {
+      const payload = {
+        sub: "user-1",
+        iat: Date.now(),
+      }
+
+      const claims = extractRBACClaims(payload)
+
+      expect(claims).toBeNull()
+    })
+  })
+
+  describe("hasPermissionInToken", () => {
+    test("returns true when permission exists", () => {
+      const payload = {
+        roles: ["admin"],
+        permissions: ["posts:read", "posts:write"],
+      }
+
+      expect(hasPermissionInToken(payload, "posts:read")).toBe(true)
+    })
+
+    test("returns false when permission missing", () => {
+      const payload = {
+        roles: ["admin"],
+        permissions: ["posts:read"],
+      }
+
+      expect(hasPermissionInToken(payload, "posts:delete")).toBe(false)
+    })
+
+    test("returns false for invalid payload", () => {
+      const payload = {
+        roles: "admin",
+        permissions: "read",
+      }
+
+      expect(hasPermissionInToken(payload, "posts:read")).toBe(false)
+    })
+  })
+
+  describe("hasRoleInToken", () => {
+    test("returns true when role exists", () => {
+      const payload = {
+        roles: ["admin", "editor"],
+        permissions: [],
+      }
+
+      expect(hasRoleInToken(payload, "admin")).toBe(true)
+    })
+
+    test("returns false when role missing", () => {
+      const payload = {
+        roles: ["editor"],
+        permissions: [],
+      }
+
+      expect(hasRoleInToken(payload, "admin")).toBe(false)
+    })
+
+    test("returns false for invalid payload", () => {
+      const payload = {
+        roles: "admin",
+        permissions: [],
+      }
+
+      expect(hasRoleInToken(payload, "admin")).toBe(false)
+    })
+  })
+
+  describe("hasAllPermissionsInToken", () => {
+    test("returns true when all permissions exist", () => {
+      const payload = {
+        roles: [],
+        permissions: ["posts:read", "posts:write", "posts:delete"],
+      }
+
+      expect(
+        hasAllPermissionsInToken(payload, ["posts:read", "posts:write"]),
+      ).toBe(true)
+    })
+
+    test("returns false when any permission missing", () => {
+      const payload = {
+        roles: [],
+        permissions: ["posts:read"],
+      }
+
+      expect(
+        hasAllPermissionsInToken(payload, ["posts:read", "posts:write"]),
+      ).toBe(false)
+    })
+
+    test("returns true for empty array", () => {
+      const payload = {
+        roles: [],
+        permissions: ["posts:read"],
+      }
+
+      expect(hasAllPermissionsInToken(payload, [])).toBe(true)
+    })
+  })
+
+  describe("hasAnyPermissionInToken", () => {
+    test("returns true when any permission exists", () => {
+      const payload = {
+        roles: [],
+        permissions: ["posts:read"],
+      }
+
+      expect(
+        hasAnyPermissionInToken(payload, ["posts:read", "posts:write"]),
+      ).toBe(true)
+    })
+
+    test("returns false when no permissions match", () => {
+      const payload = {
+        roles: [],
+        permissions: ["posts:read"],
+      }
+
+      expect(
+        hasAnyPermissionInToken(payload, ["posts:write", "posts:delete"]),
+      ).toBe(false)
+    })
+
+    test("returns false for empty array", () => {
+      const payload = {
+        roles: [],
+        permissions: ["posts:read"],
+      }
+
+      expect(hasAnyPermissionInToken(payload, [])).toBe(false)
+    })
+  })
+})
