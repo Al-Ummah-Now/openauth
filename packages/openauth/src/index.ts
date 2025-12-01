@@ -24,3 +24,12 @@ export {
   issuer as authorizer,
   issuer,
 }
+
+// Enterprise SSO exports
+export {
+  /**
+   * Create a multi-tenant enterprise issuer with session, tenant, and RBAC support.
+   * @see import { createMultiTenantIssuer } from "@openauthjs/openauth/enterprise"
+   */
+  createMultiTenantIssuer,
+} from "./enterprise/index.js"
