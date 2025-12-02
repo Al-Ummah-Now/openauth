@@ -28,7 +28,7 @@
  *
  * @packageDocumentation
  */
-import { joinKey, splitKey, StorageAdapter } from "./storage.js"
+import { joinKey, joinKeyLegacy, splitKey, StorageAdapter } from "./storage.js"
 import { existsSync, readFileSync } from "node:fs"
 import { writeFile } from "node:fs/promises"
 
@@ -86,7 +86,12 @@ export function MemoryStorage(input?: MemoryStorageOptions): StorageAdapter {
   }
   return {
     async get(key: string[]) {
-      const match = search(joinKey(key))
+      // Try new format first
+      let match = search(joinKey(key))
+      if (!match.found) {
+        // Fall back to legacy format for migration
+        match = search(joinKeyLegacy(key))
+      }
       if (!match.found) return undefined
       const entry = store[match.index][1]
       if (entry.expiry && Date.now() >= entry.expiry) {
@@ -115,20 +120,35 @@ export function MemoryStorage(input?: MemoryStorageOptions): StorageAdapter {
       await save()
     },
     async remove(key: string[]) {
-      const joined = joinKey(key)
-      const match = search(joined)
-      if (match.found) {
-        store.splice(match.index, 1)
+      // Remove both new and legacy format keys
+      const newMatch = search(joinKey(key))
+      if (newMatch.found) {
+        store.splice(newMatch.index, 1)
+      }
+      const legacyMatch = search(joinKeyLegacy(key))
+      if (legacyMatch.found) {
+        store.splice(legacyMatch.index, 1)
+      }
+      if (newMatch.found || legacyMatch.found) {
         await save()
       }
     },
     async *scan(prefix: string[]) {
       const now = Date.now()
       const prefixStr = joinKey(prefix)
+      const legacyPrefixStr = joinKeyLegacy(prefix)
+      const seenKeys = new Set<string>()
       for (const [key, entry] of store) {
-        if (!key.startsWith(prefixStr)) continue
+        // Match both new and legacy format prefixes
+        if (!key.startsWith(prefixStr) && !key.startsWith(legacyPrefixStr))
+          continue
         if (entry.expiry && now >= entry.expiry) continue
-        yield [splitKey(key), entry.value]
+        // Deduplicate by parsed key
+        const parsedKey = splitKey(key)
+        const keyStr = JSON.stringify(parsedKey)
+        if (seenKeys.has(keyStr)) continue
+        seenKeys.add(keyStr)
+        yield [parsedKey, entry.value]
       }
     },
   }

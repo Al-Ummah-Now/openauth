@@ -5,19 +5,35 @@ export interface StorageAdapter {
   scan(prefix: string[]): AsyncIterable<[string[], any]>
 }
 
-const SEPERATOR = String.fromCharCode(0x1f)
+/** New separator - double colon is KV-friendly and won't conflict with single colons in key names */
+const SEPARATOR = "::"
+
+/** Legacy separator for migration support */
+const LEGACY_SEPARATOR = String.fromCharCode(0x1f)
 
 export function joinKey(key: string[]) {
-  return key.join(SEPERATOR)
+  return key.join(SEPARATOR)
 }
 
 export function splitKey(key: string) {
-  return key.split(SEPERATOR)
+  // Support both new and legacy separators when splitting
+  if (key.includes(LEGACY_SEPARATOR)) {
+    return key.split(LEGACY_SEPARATOR)
+  }
+  return key.split(SEPARATOR)
+}
+
+/** Join key with legacy separator (for migration reads) */
+export function joinKeyLegacy(key: string[]) {
+  return key.join(LEGACY_SEPARATOR)
 }
 
 export namespace Storage {
   function encode(key: string[]) {
-    return key.map((k) => k.replaceAll(SEPERATOR, ""))
+    // Strip separators from key segments to prevent injection
+    return key.map((k) =>
+      k.replaceAll(SEPARATOR, "").replaceAll(LEGACY_SEPARATOR, ""),
+    )
   }
   export function get<T>(adapter: StorageAdapter, key: string[]) {
     return adapter.get(encode(key)) as Promise<T | null>

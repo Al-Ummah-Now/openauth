@@ -20,7 +20,7 @@
  */
 
 import { client } from "./aws.js"
-import { joinKey, StorageAdapter } from "./storage.js"
+import { joinKey, joinKeyLegacy, StorageAdapter } from "./storage.js"
 
 /**
  * Configure the DynamoDB table that's created.
@@ -71,7 +71,8 @@ export function DynamoStorage(options: DynamoStorageOptions): StorageAdapter {
   const ttl = options.ttl || "expiry"
   const tableName = options.table
 
-  function parseKey(key: string[]) {
+  function parseKey(key: string[], useLegacy = false) {
+    const join = useLegacy ? joinKeyLegacy : joinKey
     if (key.length === 2) {
       return {
         pk: key[0],
@@ -79,8 +80,8 @@ export function DynamoStorage(options: DynamoStorageOptions): StorageAdapter {
       }
     }
     return {
-      pk: joinKey(key.slice(0, 2)),
-      sk: joinKey(key.slice(2)),
+      pk: join(key.slice(0, 2)),
+      sk: join(key.slice(2)),
     }
   }
 
@@ -106,6 +107,7 @@ export function DynamoStorage(options: DynamoStorageOptions): StorageAdapter {
 
   return {
     async get(key: string[]) {
+      // Try new format first
       const { pk: keyPk, sk: keySk } = parseKey(key)
       const params = {
         TableName: tableName,
@@ -114,7 +116,21 @@ export function DynamoStorage(options: DynamoStorageOptions): StorageAdapter {
           [sk]: { S: keySk },
         },
       }
-      const result = await dynamo("GetItem", params)
+      let result = await dynamo("GetItem", params)
+
+      // Fall back to legacy format if not found
+      if (!result.Item) {
+        const { pk: legacyPk, sk: legacySk } = parseKey(key, true)
+        const legacyParams = {
+          TableName: tableName,
+          Key: {
+            [pk]: { S: legacyPk },
+            [sk]: { S: legacySk },
+          },
+        }
+        result = await dynamo("GetItem", legacyParams)
+      }
+
       if (!result.Item) return
       if (result.Item[ttl] && result.Item[ttl].N < Date.now() / 1000) {
         return
@@ -141,53 +157,86 @@ export function DynamoStorage(options: DynamoStorageOptions): StorageAdapter {
     },
 
     async remove(key: string[]) {
+      // Remove both new and legacy format keys
       const { pk: keyPk, sk: keySk } = parseKey(key)
-      const params = {
-        TableName: tableName,
-        Key: {
-          [pk]: { S: keyPk },
-          [sk]: { S: keySk },
-        },
-      }
+      const { pk: legacyPk, sk: legacySk } = parseKey(key, true)
 
-      await dynamo("DeleteItem", params)
+      await Promise.all([
+        dynamo("DeleteItem", {
+          TableName: tableName,
+          Key: {
+            [pk]: { S: keyPk },
+            [sk]: { S: keySk },
+          },
+        }),
+        dynamo("DeleteItem", {
+          TableName: tableName,
+          Key: {
+            [pk]: { S: legacyPk },
+            [sk]: { S: legacySk },
+          },
+        }),
+      ])
     },
 
-    async *scan(prefix: string[]) {
-      const prefixPk =
-        prefix.length >= 2 ? joinKey(prefix.slice(0, 2)) : prefix[0]
-      const prefixSk = prefix.length > 2 ? joinKey(prefix.slice(2)) : ""
-      let lastEvaluatedKey = undefined
+    async *scan(
+      prefix: string[],
+    ): AsyncGenerator<[string[], any], void, unknown> {
+      const seenKeys = new Set<string>()
       const now = Date.now() / 1000
-      while (true) {
-        const params = {
-          TableName: tableName,
-          ExclusiveStartKey: lastEvaluatedKey,
-          KeyConditionExpression: prefixSk
-            ? `#pk = :pk AND begins_with(#sk, :sk)`
-            : `#pk = :pk`,
-          ExpressionAttributeNames: {
-            "#pk": pk,
-            ...(prefixSk && { "#sk": sk }),
-          },
-          ExpressionAttributeValues: {
-            ":pk": { S: prefixPk },
-            ...(prefixSk && { ":sk": { S: prefixSk } }),
-          },
-        }
 
-        const result = await dynamo("Query", params)
+      // Helper to run a scan with a specific join function
+      async function* scanWithJoin(
+        join: typeof joinKey,
+      ): AsyncGenerator<[string[], any], void, unknown> {
+        const prefixPk =
+          prefix.length >= 2 ? join(prefix.slice(0, 2)) : prefix[0]
+        const prefixSk = prefix.length > 2 ? join(prefix.slice(2)) : ""
+        let lastEvaluatedKey: any = undefined
 
-        for (const item of result.Items || []) {
-          if (item[ttl] && item[ttl].N < now) {
-            continue
+        while (true) {
+          const params = {
+            TableName: tableName,
+            ExclusiveStartKey: lastEvaluatedKey,
+            KeyConditionExpression: prefixSk
+              ? `#pk = :pk AND begins_with(#sk, :sk)`
+              : `#pk = :pk`,
+            ExpressionAttributeNames: {
+              "#pk": pk,
+              ...(prefixSk && { "#sk": sk }),
+            },
+            ExpressionAttributeValues: {
+              ":pk": { S: prefixPk },
+              ...(prefixSk && { ":sk": { S: prefixSk } }),
+            },
           }
-          yield [[item[pk].S, item[sk].S], JSON.parse(item.value.S)]
-        }
 
-        if (!result.LastEvaluatedKey) break
-        lastEvaluatedKey = result.LastEvaluatedKey
+          const result = await dynamo("Query", params)
+
+          for (const item of result.Items || []) {
+            if (item[ttl] && item[ttl].N < now) {
+              continue
+            }
+            const keyStr = JSON.stringify([item[pk].S, item[sk].S])
+            if (!seenKeys.has(keyStr)) {
+              seenKeys.add(keyStr)
+              yield [[item[pk].S, item[sk].S], JSON.parse(item.value.S)] as [
+                string[],
+                any,
+              ]
+            }
+          }
+
+          if (!result.LastEvaluatedKey) break
+          lastEvaluatedKey = result.LastEvaluatedKey
+        }
       }
+
+      // Scan with new format
+      yield* scanWithJoin(joinKey)
+
+      // Also scan with legacy format for migration
+      yield* scanWithJoin(joinKeyLegacy)
     },
   }
 }
