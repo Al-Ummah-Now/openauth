@@ -169,7 +169,10 @@ async function getDefaultTenant(
     return tenant
   } catch (error) {
     // Log error but don't block application
-    console.error("[default-tenant-cache] Failed to load default tenant:", error)
+    console.error(
+      "[default-tenant-cache] Failed to load default tenant:",
+      error,
+    )
 
     // Mark as loaded to prevent repeated failures
     // Cache the failure for a shorter period (30 seconds) to allow recovery

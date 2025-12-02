@@ -7,12 +7,14 @@ When `createMultiTenantIssuer` is called without a `config.theme`, the system cu
 ## Problem Statement
 
 Current behavior:
+
 - `createMultiTenantIssuer` accepts optional `config.theme` parameter
 - If not provided, the theme middleware falls back to empty theme `{}`
 - This requires code changes to update default theme
 - Multi-tenant apps have no way to set organization-wide defaults in DB
 
 Desired behavior:
+
 - Support a "default" tenant stored in the database
 - When `config.theme` is not provided, fetch default tenant's branding
 - Cache the default tenant to avoid DB hits on every request
@@ -23,38 +25,45 @@ Desired behavior:
 ### 1. Default Tenant Identification Strategy
 
 **Option A: Reserved ID** (RECOMMENDED)
+
 ```typescript
 const DEFAULT_TENANT_ID = "default"
 ```
 
 **Pros:**
+
 - Simple and explicit
 - Easy to query
 - No slug normalization issues
 
 **Cons:**
+
 - Blocks "default" as a regular tenant ID
 - Less flexible
 
 **Option B: Flag-based**
+
 ```typescript
 interface Tenant {
   id: string
-  is_default: boolean  // New field
+  is_default: boolean // New field
   // ... existing fields
 }
 ```
 
 **Pros:**
+
 - Any tenant can be marked as default
 - More flexible
 
 **Cons:**
+
 - Requires schema change
 - More complex queries
 - Need uniqueness constraint on is_default
 
 **Decision: Use Option A (Reserved ID)**
+
 - Simpler implementation
 - Explicit convention
 - Minimal schema impact
@@ -65,30 +74,35 @@ interface Tenant {
 **Two-tier caching strategy:**
 
 #### Tier 1: Application Startup Cache (Eager Loading)
+
 ```typescript
 interface DefaultTenantCache {
   tenant: Tenant | null
   loadedAt: number
-  ttl: number  // Time-to-live in seconds
+  ttl: number // Time-to-live in seconds
 }
 ```
 
 **Loading Strategy:**
+
 - Load default tenant at application startup
 - Store in module-level variable
 - Use lazy initialization pattern for serverless cold starts
 
 **TTL Strategy:**
+
 - Default: 3600 seconds (1 hour)
 - Configurable via `EnterpriseIssuerConfig.defaultTenantCacheTTL`
 - Expires after TTL, forces reload on next request
 
 #### Tier 2: Request-level Cache
+
 - Once loaded in a request, reuse for entire request lifecycle
 - Avoids multiple fetches in middleware chain
 - Stored in Hono context variables
 
 **Cache Invalidation:**
+
 ```typescript
 // Manual invalidation when default tenant is updated
 async function invalidateDefaultTenantCache(): Promise<void> {
@@ -98,6 +112,7 @@ async function invalidateDefaultTenantCache(): Promise<void> {
 ```
 
 **Invalidation Triggers:**
+
 1. Manual API call to `/tenants/default/invalidate` (admin endpoint)
 2. TTL expiration (automatic)
 3. On `updateTenant("default", ...)` completion (future enhancement)
@@ -112,19 +127,21 @@ await tenantService.getTenant("default")
 ```
 
 **Why no new method needed:**
+
 - "default" is just a regular tenant with special ID
 - Existing CRUD operations work as-is
 - Simpler architecture with less surface area
 
 ### 4. Startup vs Per-Request Loading Tradeoffs
 
-| Approach | Pros | Cons | Use Case |
-|----------|------|------|----------|
-| **Startup Loading** | - Faster request processing<br>- Predictable performance<br>- Single DB query | - Stale data until restart/TTL<br>- Memory overhead | Long-running servers (Node.js, Bun) |
-| **Per-Request Loading** | - Always fresh data<br>- No memory overhead | - DB hit on every request<br>- Slower response time | Serverless, low-memory |
-| **Lazy + Cache (RECOMMENDED)** | - Best of both worlds<br>- Adapts to runtime | - Slightly complex | Universal (works everywhere) |
+| Approach                       | Pros                                                                          | Cons                                                | Use Case                            |
+| ------------------------------ | ----------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------- |
+| **Startup Loading**            | - Faster request processing<br>- Predictable performance<br>- Single DB query | - Stale data until restart/TTL<br>- Memory overhead | Long-running servers (Node.js, Bun) |
+| **Per-Request Loading**        | - Always fresh data<br>- No memory overhead                                   | - DB hit on every request<br>- Slower response time | Serverless, low-memory              |
+| **Lazy + Cache (RECOMMENDED)** | - Best of both worlds<br>- Adapts to runtime                                  | - Slightly complex                                  | Universal (works everywhere)        |
 
 **Decision: Lazy + Cache with TTL**
+
 - First request loads default tenant, caches it
 - Subsequent requests use cache until TTL expires
 - Works for both long-running and serverless
@@ -181,6 +198,7 @@ interface EnterpriseIssuerConfig {
 ### 7. Error Handling Strategy
 
 **Scenario: Default tenant doesn't exist**
+
 ```typescript
 const defaultTenant = await tenantService.getTenant("default")
 if (!defaultTenant) {
@@ -191,6 +209,7 @@ if (!defaultTenant) {
 ```
 
 **Scenario: Default tenant is suspended/deleted**
+
 ```typescript
 if (defaultTenant.status !== "active") {
   console.warn(`Default tenant status: ${defaultTenant.status}, ignoring`)
@@ -199,6 +218,7 @@ if (defaultTenant.status !== "active") {
 ```
 
 **Scenario: DB connection failure**
+
 ```typescript
 try {
   const defaultTenant = await tenantService.getTenant("default")
@@ -215,12 +235,14 @@ try {
 ### 8. Middleware Integration
 
 **Current theme middleware flow:**
+
 ```typescript
 app.use("*", createTenantResolver(...))
 app.use("*", createTenantThemeMiddleware())
 ```
 
 **Enhanced flow with default tenant:**
+
 ```typescript
 // In createMultiTenantIssuer()
 
@@ -241,6 +263,7 @@ app.use("*", createTenantThemeMiddleware({
 ```
 
 **Theme resolution priority:**
+
 1. Tenant-specific theme (if tenant resolved)
 2. Config-provided theme (if `config.theme` set)
 3. Default tenant theme (from DB)
@@ -265,12 +288,12 @@ let cache: DefaultTenantCache = {
 
 export async function getDefaultTenant(
   service: TenantService,
-  ttl: number = 3600
+  ttl: number = 3600,
 ): Promise<Tenant | null> {
   const now = Date.now()
 
   // Check cache validity
-  if (cache.tenant && (now - cache.loadedAt) < cache.ttl * 1000) {
+  if (cache.tenant && now - cache.loadedAt < cache.ttl * 1000) {
     return cache.tenant
   }
 
@@ -290,7 +313,6 @@ export async function getDefaultTenant(
     cache.loadedAt = now
     cache.ttl = ttl
     return null
-
   } catch (error) {
     console.error("Failed to load default tenant:", error)
     // Don't update cache on error - retry next time
@@ -305,10 +327,11 @@ export function invalidateDefaultTenantCache(): void {
 
 export function getDefaultTheme(
   service: TenantService,
-  ttl?: number
+  ttl?: number,
 ): Promise<Theme | null> {
-  return getDefaultTenant(service, ttl)
-    .then(tenant => tenant?.branding?.theme || null)
+  return getDefaultTenant(service, ttl).then(
+    (tenant) => tenant?.branding?.theme || null,
+  )
 }
 ```
 
@@ -341,6 +364,7 @@ app.put("/tenants/default", async (c) => {
 ### 11. Testing Strategy
 
 **Unit Tests:**
+
 1. `getDefaultTenant()` returns cached tenant within TTL
 2. `getDefaultTenant()` reloads after TTL expiration
 3. `getDefaultTenant()` handles missing default tenant gracefully
@@ -350,6 +374,7 @@ app.put("/tenants/default", async (c) => {
 7. TTL=0 disables caching (always fetch)
 
 **Integration Tests:**
+
 1. Create default tenant, verify theme applied
 2. Update default tenant, invalidate cache, verify new theme
 3. Delete default tenant, verify graceful fallback
@@ -357,6 +382,7 @@ app.put("/tenants/default", async (c) => {
 5. Concurrent requests share cached default tenant
 
 **Performance Tests:**
+
 1. Cache hit latency < 1ms
 2. Cache miss latency < 50ms (single DB query)
 3. No memory leak with long-running cache
@@ -389,6 +415,7 @@ INSERT INTO tenants (
 ```
 
 **Backward compatibility:**
+
 - Existing apps without default tenant: No changes needed, works as before
 - Existing apps with `config.theme`: No changes needed, config takes precedence
 - New apps: Can create default tenant via API or SQL
@@ -396,6 +423,7 @@ INSERT INTO tenants (
 ### 13. Documentation Requirements
 
 **User-facing docs:**
+
 1. Concept: Default tenant for organization-wide branding
 2. Setup: How to create default tenant via API/SQL
 3. Configuration: TTL and caching options
@@ -403,6 +431,7 @@ INSERT INTO tenants (
 5. Priority: config.theme > default tenant > empty theme
 
 **Developer docs:**
+
 1. Cache module API documentation
 2. Testing guidelines for default tenant features
 3. Performance characteristics and benchmarks
@@ -410,16 +439,19 @@ INSERT INTO tenants (
 ### 14. Security Considerations
 
 **Tenant ID collision:**
+
 - Reserve "default" as system tenant ID
 - Validate `tenantService.createTenant()` to reject id="default" from user API
 - Only allow default tenant creation via admin/setup scripts
 
 **Cache poisoning:**
+
 - Cache stores immutable tenant snapshots
 - Cache invalidation requires admin privileges
 - No user input in cache key (fixed "default" string)
 
 **Information disclosure:**
+
 - Default tenant branding is public (used in login UI)
 - No sensitive data should be in default tenant branding
 - Document this security boundary in guidelines
@@ -459,13 +491,13 @@ INSERT INTO tenants (
 
 ## Risk Mitigation
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Default tenant DB query blocks startup | High | Lazy load + timeout + graceful fallback |
-| Cache never invalidates | Medium | TTL + manual invalidation API |
-| Memory leak in long-running process | Medium | Bounded cache size (single tenant) |
-| Stale theme after update | Low | Document cache invalidation in update workflow |
-| "default" ID collision | Low | Validate in createTenant API |
+| Risk                                   | Impact | Mitigation                                     |
+| -------------------------------------- | ------ | ---------------------------------------------- |
+| Default tenant DB query blocks startup | High   | Lazy load + timeout + graceful fallback        |
+| Cache never invalidates                | Medium | TTL + manual invalidation API                  |
+| Memory leak in long-running process    | Medium | Bounded cache size (single tenant)             |
+| Stale theme after update               | Low    | Document cache invalidation in update workflow |
+| "default" ID collision                 | Low    | Validate in createTenant API                   |
 
 ## Success Metrics
 

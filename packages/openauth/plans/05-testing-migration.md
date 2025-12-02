@@ -12,11 +12,13 @@ This document outlines the comprehensive testing strategy and migration guide fo
 ## Architecture Context
 
 ### Current State
+
 - **Regular Issuer**: Uses `config.theme` with `setTheme()/getTheme()` via global state
 - **Multi-Tenant Issuer**: Uses tenant branding with HTTP headers and per-tenant theme resolution
 - **Problem**: Two separate systems with different mechanisms and no unified approach
 
 ### Target State
+
 - **Regular Issuer**: Continue to support `config.theme` for backward compatibility
 - **Multi-Tenant Issuer**:
   - Support `config.theme` as default fallback for all tenants
@@ -56,7 +58,9 @@ describe("Regular Issuer - Theme Support", () => {
     const auth = issuer({
       theme: THEME_SST,
       storage: MemoryStorage(),
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
       // ...
     })
@@ -73,7 +77,9 @@ describe("Regular Issuer - Theme Support", () => {
   test("uses default theme when no theme specified", async () => {
     const auth = issuer({
       storage: MemoryStorage(),
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -94,7 +100,9 @@ describe("Regular Issuer - Theme Support", () => {
     const auth = issuer({
       theme: customTheme,
       storage: MemoryStorage(),
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -110,7 +118,9 @@ describe("Regular Issuer - Theme Support", () => {
     const auth = issuer({
       theme: THEME_TERMINAL,
       storage: MemoryStorage(),
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -156,7 +166,9 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // Default theme
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -185,7 +197,9 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // Default theme
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -208,7 +222,9 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       storage,
       sessionSecret,
       // No theme specified in config
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -236,7 +252,9 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -245,8 +263,12 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
     })
 
     // Verify theme headers
-    expect(response.headers.get("X-Theme-Vars")).toContain("--oa-primary: #007bff")
-    expect(response.headers.get("X-Theme-Vars")).toContain("--oa-secondary: #6c757d")
+    expect(response.headers.get("X-Theme-Vars")).toContain(
+      "--oa-primary: #007bff",
+    )
+    expect(response.headers.get("X-Theme-Vars")).toContain(
+      "--oa-secondary: #6c757d",
+    )
   })
 })
 ```
@@ -285,7 +307,7 @@ describe("Theme Resolution Functions", () => {
     const cssVars = buildCssVars(theme)
 
     expect(cssVars).toBe(
-      "--oa-primary: #007bff; --oa-secondary: #6c757d; --oa-background: #ffffff"
+      "--oa-primary: #007bff; --oa-secondary: #6c757d; --oa-background: #ffffff",
     )
   })
 
@@ -351,7 +373,9 @@ describe("Theme Concurrency - Race Condition Tests", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -362,15 +386,18 @@ describe("Theme Concurrency - Race Condition Tests", () => {
       const expectedColor = i % 2 === 0 ? "#ff0000" : "#00ff00"
 
       requests.push(
-        app.request("/password/authorize", {
-          headers: { Host: domain },
-        }).then(async (response) => {
-          const html = await response.text()
-          expect(html).toContain(expectedColor)
-          // Should NOT contain the other tenant's color
-          const otherColor = expectedColor === "#ff0000" ? "#00ff00" : "#ff0000"
-          expect(html).not.toContain(otherColor)
-        })
+        app
+          .request("/password/authorize", {
+            headers: { Host: domain },
+          })
+          .then(async (response) => {
+            const html = await response.text()
+            expect(html).toContain(expectedColor)
+            // Should NOT contain the other tenant's color
+            const otherColor =
+              expectedColor === "#ff0000" ? "#00ff00" : "#ff0000"
+            expect(html).not.toContain(otherColor)
+          }),
       )
     }
 
@@ -393,7 +420,9 @@ describe("Theme Concurrency - Race Condition Tests", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -403,7 +432,7 @@ describe("Theme Concurrency - Race Condition Tests", () => {
       requests.push(
         app.request("/password/authorize", {
           headers: { Host: "auth.test.com" },
-        })
+        }),
       )
     }
 
@@ -484,13 +513,17 @@ describe("Theme E2E - Complete Flows", () => {
     expect(html1).toContain("https://test.com/logo.png")
 
     // Step 2: Submit credentials (themed)
-    const response2 = await cookieJar.fetch(app, "https://auth.test.com/password/authorize", {
-      method: "POST",
-      body: new URLSearchParams({
-        email: "test@example.com",
-        password: "password123",
-      }),
-    })
+    const response2 = await cookieJar.fetch(
+      app,
+      "https://auth.test.com/password/authorize",
+      {
+        method: "POST",
+        body: new URLSearchParams({
+          email: "test@example.com",
+          password: "password123",
+        }),
+      },
+    )
 
     const html2 = await response2.text()
     expect(html2).toContain("#007bff") // Still themed
@@ -573,9 +606,12 @@ describe("Theme Backward Compatibility", () => {
       subjects,
     })
 
-    const response = await app.request("/authorize?client_id=test&redirect_uri=https://app.test.com&response_type=code", {
-      headers: { Host: "auth.test.com" },
-    })
+    const response = await app.request(
+      "/authorize?client_id=test&redirect_uri=https://app.test.com&response_type=code",
+      {
+        headers: { Host: "auth.test.com" },
+      },
+    )
 
     // Verify headers are still set
     expect(response.headers.has("X-Theme-Vars")).toBe(true)
@@ -617,7 +653,9 @@ describe("Theme Migration Scenarios", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -628,7 +666,9 @@ describe("Theme Migration Scenarios", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // NEW: Default theme
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -656,7 +696,9 @@ describe("Theme Migration Scenarios", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // Default theme
-      providers: { /* ... */ },
+      providers: {
+        /* ... */
+      },
       subjects,
     })
 
@@ -692,6 +734,7 @@ export default issuer({
 ```
 
 **No migration needed for**:
+
 - Existing `config.theme` usage
 - Built-in themes (THEME_SST, THEME_TERMINAL, etc.)
 - Custom theme objects
@@ -722,6 +765,7 @@ const { app } = createMultiTenantIssuer({
 ```
 
 **Benefits**:
+
 - Consistent branding across all tenants
 - Easy to change globally
 - Per-tenant overrides still work
@@ -843,6 +887,7 @@ Frontend applications can continue reading these headers to apply branding dynam
 ## Implementation Checklist
 
 ### Phase 1: Core Implementation
+
 - [ ] Implement `resolveTheme()` function with proper precedence
 - [ ] Update `createMultiTenantIssuer` to accept `theme` config option
 - [ ] Modify theme resolution middleware to use new logic
@@ -850,6 +895,7 @@ Frontend applications can continue reading these headers to apply branding dynam
 - [ ] Update type definitions
 
 ### Phase 2: Testing
+
 - [ ] Write unit tests for regular issuer theming
 - [ ] Write unit tests for multi-tenant theming
 - [ ] Write theme resolution logic tests
@@ -859,6 +905,7 @@ Frontend applications can continue reading these headers to apply branding dynam
 - [ ] Write E2E integration tests
 
 ### Phase 3: Documentation
+
 - [ ] Update API documentation
 - [ ] Create migration guide
 - [ ] Add code examples
@@ -866,6 +913,7 @@ Frontend applications can continue reading these headers to apply branding dynam
 - [ ] Create troubleshooting guide
 
 ### Phase 4: Validation
+
 - [ ] Run full test suite
 - [ ] Performance benchmarks
 - [ ] Security review
@@ -874,6 +922,7 @@ Frontend applications can continue reading these headers to apply branding dynam
 ## Test Execution Plan
 
 ### Local Development
+
 ```bash
 # Run all theme tests
 bun test test/theme/
@@ -888,6 +937,7 @@ bun test --coverage test/theme/
 ```
 
 ### CI/CD Pipeline
+
 ```yaml
 # .github/workflows/test-theme.yml
 name: Theme Tests
@@ -941,6 +991,7 @@ function invalidateThemeCache(tenantId: string): void {
 ## Success Criteria
 
 ### Functional Requirements
+
 - ✅ Regular issuer continues to work without changes
 - ✅ Multi-tenant issuer supports config.theme as default
 - ✅ Per-tenant branding overrides default theme
@@ -949,6 +1000,7 @@ function invalidateThemeCache(tenantId: string): void {
 - ✅ Theme resolution follows documented precedence
 
 ### Non-Functional Requirements
+
 - ✅ Test coverage > 95% for theme code
 - ✅ No performance degradation (< 5ms overhead)
 - ✅ Zero breaking changes for existing code
@@ -962,12 +1014,14 @@ function invalidateThemeCache(tenantId: string): void {
 **Symptoms**: Tenant shows default theme instead of custom theme.
 
 **Diagnosis**:
+
 1. Check tenant branding in database
 2. Verify domain resolution is working
 3. Check theme resolution precedence
 4. Look for conflicting config
 
 **Solution**:
+
 ```typescript
 // Debug theme resolution
 const tenant = await tenantService.getTenant(tenantId)
@@ -986,11 +1040,13 @@ console.log("Resolved theme:", resolved)
 **Symptoms**: One tenant's theme appears in another tenant's requests.
 
 **Diagnosis**:
+
 1. Check for global state usage
 2. Verify request isolation
 3. Review concurrency test failures
 
 **Solution**:
+
 - Ensure theme is resolved per-request
 - Avoid storing theme in global variables
 - Use context variables for theme data
@@ -1000,15 +1056,27 @@ console.log("Resolved theme:", resolved)
 **Symptoms**: API consumers not receiving theme headers.
 
 **Diagnosis**:
+
 1. Check if theme middleware is applied
 2. Verify middleware order
 3. Check header keys
 
 **Solution**:
+
 ```typescript
 // Ensure middleware is applied AFTER tenant resolution
-app.use("*", createTenantResolver({ /* ... */ }))
-app.use("*", createTenantThemeMiddleware({ /* ... */ }))
+app.use(
+  "*",
+  createTenantResolver({
+    /* ... */
+  }),
+)
+app.use(
+  "*",
+  createTenantThemeMiddleware({
+    /* ... */
+  }),
+)
 ```
 
 ## Appendix A: Test Data Fixtures
@@ -1055,12 +1123,12 @@ export const TEST_TENANTS = {
 
 Target performance metrics:
 
-| Operation | Target | Threshold |
-|-----------|--------|-----------|
-| Theme resolution (cached) | < 1ms | < 5ms |
-| Theme resolution (uncached) | < 5ms | < 10ms |
-| HTTP header injection | < 0.5ms | < 2ms |
-| CSS variable generation | < 0.1ms | < 1ms |
+| Operation                    | Target         | Threshold      |
+| ---------------------------- | -------------- | -------------- |
+| Theme resolution (cached)    | < 1ms          | < 5ms          |
+| Theme resolution (uncached)  | < 5ms          | < 10ms         |
+| HTTP header injection        | < 0.5ms        | < 2ms          |
+| CSS variable generation      | < 0.1ms        | < 1ms          |
 | Concurrent request isolation | No degradation | < 10% overhead |
 
 ## References

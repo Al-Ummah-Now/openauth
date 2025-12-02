@@ -7,6 +7,7 @@ This document outlines the architectural changes needed to make the OpenAuth UI 
 **Architectural Impact: HIGH**
 
 This change affects:
+
 - Core UI rendering system (`src/ui/base.tsx`)
 - Theme management API (`src/ui/theme.ts`)
 - All UI components that depend on theming
@@ -34,15 +35,18 @@ export function getTheme() {
 ```
 
 **Problems:**
+
 1. **Race Condition**: Concurrent requests overwrite each other's theme
 2. **No Tenant Isolation**: All requests share the same global theme
 3. **Tight Coupling**: UI components are tightly coupled to global state
 4. **Testing Difficulty**: Global state makes unit testing harder
 
 **Comment Analysis:**
+
 ```typescript
 // i really don't wanna use async local storage for this so get over it
 ```
+
 The original author avoided AsyncLocalStorage, which is the correct decision for performance. Our solution avoids AsyncLocalStorage while fixing the race condition.
 
 ### 2. UI Component Dependency
@@ -55,7 +59,7 @@ export function Layout(
     size?: "small"
   }>,
 ) {
-  const theme = getTheme()  // ← Reads from globalThis
+  const theme = getTheme() // ← Reads from globalThis
   function get(key: "primary" | "background" | "logo", mode: "light" | "dark") {
     if (!theme) return
     if (!theme[key]) return
@@ -67,6 +71,7 @@ export function Layout(
 ```
 
 **Problem:**
+
 - `Layout` component immediately calls `getTheme()` which reads from `globalThis`
 - No way to pass theme as a parameter
 - Every concurrent request sees the same theme
@@ -82,6 +87,7 @@ if (input.theme) {
 ```
 
 **Analysis:**
+
 - Single-tenant issuer sets theme once at startup
 - Works fine for single-tenant (no concurrency issue)
 - Must remain working after our changes
@@ -99,6 +105,7 @@ app.use("*", createTenantThemeMiddleware())
 The multi-tenant issuer uses middleware to inject theme via HTTP headers, but this doesn't help with server-side rendering since the UI components still call `getTheme()` which reads from `globalThis`.
 
 **Gap:**
+
 - Middleware sets headers for **client-side** theming
 - Server-side rendering still uses `globalThis.OPENAUTH_THEME`
 - Race condition remains for SSR components
@@ -120,6 +127,7 @@ The multi-tenant issuer uses middleware to inject theme via HTTP headers, but th
 The solution is simple: add an optional `theme` prop to the `Layout` component that takes precedence over the global theme.
 
 **Why This Works:**
+
 - **Single-tenant**: Doesn't pass theme prop → falls back to `globalThis` → works as before
 - **Multi-tenant**: Passes theme prop per-request → no race condition
 - **Simple**: No complex context API or async storage
@@ -186,6 +194,7 @@ export interface ThemeProps {
 ```
 
 **Rationale:**
+
 - No breaking changes to existing API
 - `resolveTheme()` encapsulates fallback logic
 - Type exports improve developer experience
@@ -251,11 +260,13 @@ export function Layout(
 ```
 
 **Changes Summary:**
+
 - ✅ Add optional `theme` prop to component
 - ✅ Replace `getTheme()` with `resolveTheme(props.theme)`
 - ✅ All other code remains identical
 
 **Backwards Compatibility:**
+
 - Existing calls without `theme` prop: ✅ Works (falls back to global)
 - New calls with `theme` prop: ✅ Works (uses provided theme)
 
@@ -345,12 +356,13 @@ for (const [name, provider] of Object.entries(config.providers)) {
             primary: tenant.branding.theme.primary,
             secondary: tenant.branding.theme.secondary,
             background: tenant.branding.theme.background,
-            logo: tenant.branding.logoLight && tenant.branding.logoDark
-              ? {
-                  light: tenant.branding.logoLight,
-                  dark: tenant.branding.logoDark,
-                }
-              : undefined,
+            logo:
+              tenant.branding.logoLight && tenant.branding.logoDark
+                ? {
+                    light: tenant.branding.logoLight,
+                    dark: tenant.branding.logoDark,
+                  }
+                : undefined,
             favicon: tenant.branding.favicon,
             // ... map other branding fields
           }
@@ -443,13 +455,16 @@ import { issuer } from "@openauthjs/openauth"
 import { THEME_SST } from "@openauthjs/openauth/ui/theme"
 
 export default issuer({
-  theme: THEME_SST,  // ← Still works exactly as before
-  providers: { /* ... */ },
+  theme: THEME_SST, // ← Still works exactly as before
+  providers: {
+    /* ... */
+  },
   // ...
 })
 ```
 
 **What happens under the hood:**
+
 1. `issuer()` calls `setTheme(input.theme)` at startup
 2. UI components call `resolveTheme(undefined)`
 3. Falls back to `getTheme()` which returns the global theme
@@ -465,12 +480,15 @@ import { createMultiTenantIssuer } from "@openauthjs/openauth/enterprise"
 
 const { app } = createMultiTenantIssuer({
   tenantService,
-  providers: { /* ... */ },
+  providers: {
+    /* ... */
+  },
   // Theme is automatically resolved from tenant.branding
 })
 ```
 
 **What happens under the hood:**
+
 1. Tenant resolver middleware sets `tenant` in context
 2. Request handler extracts `tenant.branding.theme`
 3. Passes theme to `Layout` component via prop
@@ -511,6 +529,7 @@ export function MyCustomUI(props: MyProps & { theme?: Theme }) {
 **Scenario:** Password provider needs to render UI in multi-tenant context
 
 **Solution:**
+
 ```typescript
 // Provider should accept and forward theme
 provider.init(route, {
@@ -549,6 +568,7 @@ function ComplexUI(props: { theme?: Theme }) {
 **Scenario:** Error pages need theming
 
 **Solution:**
+
 ```typescript
 app.onError(async (err, c) => {
   const theme = c.get("theme") as Theme | undefined
@@ -566,6 +586,7 @@ app.onError(async (err, c) => {
 **Scenario:** Some pages are SSR, others client-side
 
 **Solution:**
+
 - **SSR**: Use `theme` prop (per-request)
 - **Client-side**: Use HTTP headers (already handled by `createTenantThemeMiddleware`)
 
@@ -574,6 +595,7 @@ Both approaches work together - SSR gets immediate theme, client-side can overri
 ### Edge Case 5: Testing
 
 **Before (harder):**
+
 ```typescript
 test("renders with theme", () => {
   setTheme(THEME_SST)  // Pollutes global state
@@ -583,6 +605,7 @@ test("renders with theme", () => {
 ```
 
 **After (easier):**
+
 ```typescript
 test("renders with theme", () => {
   const result = render(
@@ -602,10 +625,12 @@ test("renders with theme", () => {
 ### Memory Impact
 
 **Before:**
+
 - 1 global theme object shared by all requests
 - Memory: O(1)
 
 **After:**
+
 - Still 1 global theme object (backwards compat)
 - Multi-tenant: 1 theme object per request (garbage collected)
 - Memory: O(1) for single-tenant, O(concurrent_requests) for multi-tenant
@@ -615,13 +640,15 @@ test("renders with theme", () => {
 ### CPU Impact
 
 **Before:**
+
 ```typescript
-const theme = getTheme()  // Simple property access
+const theme = getTheme() // Simple property access
 ```
 
 **After:**
+
 ```typescript
-const theme = resolveTheme(props.theme)  // One additional null check
+const theme = resolveTheme(props.theme) // One additional null check
 ```
 
 **Overhead:** Negligible - single `||` operator
@@ -629,6 +656,7 @@ const theme = resolveTheme(props.theme)  // One additional null check
 ### No AsyncLocalStorage
 
 **Decision Rationale:**
+
 - AsyncLocalStorage has measurable overhead (~5-10% in some benchmarks)
 - Our solution uses explicit prop passing - zero overhead
 - Maintains author's original performance goal
@@ -743,24 +771,28 @@ describe("Multi-tenant theming", () => {
 ## Rollout Plan
 
 ### Phase 1: Core Changes (Week 1)
+
 - ✅ Update `src/ui/theme.ts` with `resolveTheme()`
 - ✅ Update `src/ui/base.tsx` with optional `theme` prop
 - ✅ Write unit tests
 - ✅ Verify backwards compatibility with single-tenant tests
 
 ### Phase 2: Component Updates (Week 2)
+
 - ✅ Update password provider UI
 - ✅ Update code provider UI
 - ✅ Update select UI
 - ✅ Update any other UI components
 
 ### Phase 3: Multi-Tenant Integration (Week 3)
+
 - ✅ Update enterprise issuer to pass themes
 - ✅ Add `buildThemeFromTenant()` helper
 - ✅ Update provider route handlers
 - ✅ Write integration tests
 
 ### Phase 4: Documentation & Release (Week 4)
+
 - ✅ Update API documentation
 - ✅ Write migration guide
 - ✅ Update examples in docs
@@ -771,6 +803,7 @@ describe("Multi-tenant theming", () => {
 ## Success Criteria
 
 ### Functional Requirements
+
 - ✅ Single-tenant issuer works without changes
 - ✅ Multi-tenant issuer has no race conditions
 - ✅ Each tenant gets correct theme per request
@@ -778,6 +811,7 @@ describe("Multi-tenant theming", () => {
 - ✅ All existing tests pass
 
 ### Non-Functional Requirements
+
 - ✅ Zero breaking changes (backwards compatible)
 - ✅ No performance degradation
 - ✅ No AsyncLocalStorage overhead
@@ -785,6 +819,7 @@ describe("Multi-tenant theming", () => {
 - ✅ Edge cases handled
 
 ### Quality Metrics
+
 - ✅ Unit test coverage > 90% for new code
 - ✅ Integration tests for multi-tenant scenarios
 - ✅ Documentation covers all use cases
@@ -795,18 +830,22 @@ describe("Multi-tenant theming", () => {
 ## Risk Assessment
 
 ### Risk 1: Provider UIs Missing Theme Prop
+
 **Severity:** Medium
 **Mitigation:** Comprehensive audit of all UI components, add theme prop to all
 
 ### Risk 2: Third-Party Providers
+
 **Severity:** Low
 **Mitigation:** Fallback to global theme ensures compatibility
 
 ### Risk 3: Performance Regression
+
 **Severity:** Low
 **Mitigation:** Benchmark before/after, solution adds minimal overhead
 
 ### Risk 4: Type Incompatibilities
+
 **Severity:** Low
 **Mitigation:** Theme type unchanged, only adding optional prop
 
@@ -815,26 +854,31 @@ describe("Multi-tenant theming", () => {
 ## Alternative Approaches Considered
 
 ### Alternative 1: AsyncLocalStorage
+
 **Pros:** No prop drilling
 **Cons:** Performance overhead, complexity
 **Decision:** Rejected due to performance concerns
 
 ### Alternative 2: React Context API
+
 **Pros:** Idiomatic React pattern
 **Cons:** Doesn't work with Hono JSX, adds complexity
 **Decision:** Rejected - not compatible with Hono
 
 ### Alternative 3: Middleware State
+
 **Pros:** Centralized theme management
 **Cons:** Still uses global-like state, race conditions possible
 **Decision:** Rejected - doesn't solve core problem
 
 ### Alternative 4: Separate Theme Function per Request
+
 **Pros:** Complete isolation
 **Cons:** Major breaking change, complex API
 **Decision:** Rejected - too invasive
 
 ### Chosen Solution: Optional Theme Prop
+
 **Pros:** Simple, backwards compatible, no overhead
 **Cons:** Minor prop drilling needed
 **Decision:** ✅ Best balance of simplicity and correctness
@@ -854,6 +898,7 @@ This architecture plan provides a **simple, backwards-compatible solution** to t
 The solution respects the original author's concerns about AsyncLocalStorage while providing a robust foundation for multi-tenant theming.
 
 **Next Steps:**
+
 1. Review and approve this plan
 2. Implement Phase 1 (core changes)
 3. Validate with existing tests
@@ -864,6 +909,7 @@ The solution respects the original author's concerns about AsyncLocalStorage whi
 ## Appendix: Code Diff Summary
 
 ### `src/ui/theme.ts`
+
 ```diff
 +/**
 + * Get theme with explicit precedence.
@@ -882,6 +928,7 @@ The solution respects the original author's concerns about AsyncLocalStorage whi
 ```
 
 ### `src/ui/base.tsx`
+
 ```diff
 -import { getTheme } from "./theme.js"
 +import { resolveTheme, type Theme } from "./theme.js"
@@ -898,6 +945,7 @@ The solution respects the original author's concerns about AsyncLocalStorage whi
 ```
 
 ### Total Lines Changed
+
 - **Added:** ~50 lines (helpers, types, tests)
 - **Modified:** 3 lines (base.tsx)
 - **Deleted:** 0 lines

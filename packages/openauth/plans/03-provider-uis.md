@@ -1,11 +1,13 @@
 # Provider UI Integration - Architectural Plan
 
 ## Overview
+
 This plan details the integration of theme support into provider UIs (CodeUI, PasswordUI, SelectUI) by enabling them to receive theme context from the Hono request context and pass it to the Layout component, replacing the current global theme access pattern.
 
 ## Current Architecture
 
 ### Provider Rendering Flow
+
 ```
 Issuer Route Handler (Hono Context)
     ↓
@@ -28,6 +30,7 @@ Response with HTML string
    - `Select(props)` → returns async function that receives providers and request
 
 2. **Callback Signatures**:
+
    ```typescript
    // CodeUI
    request: (req: Request, state, form?, error?) => Promise<Response>
@@ -54,11 +57,13 @@ Response with HTML string
 ## Problem Statement
 
 ### Multi-Tenant Requirements
+
 - Tenants need different themes (branding, colors, logos)
 - Current global theme approach only supports single theme
 - Provider UIs need access to tenant-specific theme from context
 
 ### Architectural Constraints
+
 1. Provider callbacks only receive `Request` (not Hono `Context`)
 2. Layout component has no context awareness
 3. Cannot easily pass context through JSX component tree
@@ -89,23 +94,30 @@ Response with themed HTML
 ### Design Decisions
 
 #### Decision 1: Request Header Transport
+
 **Rationale**: Minimal API surface change while enabling theme propagation
+
 - Preserves existing callback signatures
 - No breaking changes to provider interface
 - Headers naturally flow with Request object
 - Easy to implement fallback for backwards compatibility
 
 **Alternative Considered**: Modify callback signatures to accept Context
+
 - Rejected: Breaking change for all existing custom providers
 - Would require version bump and migration guide
 
 #### Decision 2: Layout Component Enhancement
+
 **Rationale**: Support both prop-based and global theme access
+
 ```typescript
-export function Layout(props: PropsWithChildren<{
-  size?: "small"
-  theme?: Theme  // NEW: explicit theme prop
-}>) {
+export function Layout(
+  props: PropsWithChildren<{
+    size?: "small"
+    theme?: Theme // NEW: explicit theme prop
+  }>,
+) {
   // Priority: props.theme > request header > globalThis
   const theme = props.theme ?? getTheme()
   // ... rest unchanged
@@ -113,7 +125,9 @@ export function Layout(props: PropsWithChildren<{
 ```
 
 #### Decision 3: Header Name Convention
+
 Use `X-OpenAuth-Theme` header for internal theme transport
+
 - Clear namespace
 - Internal implementation detail
 - Can be removed in provider before returning Response
@@ -127,6 +141,7 @@ Use `X-OpenAuth-Theme` header for internal theme transport
 **Change Location**: Line 156-159 (transition function)
 
 **Current Code**:
+
 ```typescript
 async function transition(
   c: Context,
@@ -135,15 +150,13 @@ async function transition(
   err?: CodeProviderError,
 ) {
   await ctx.set<CodeProviderState>(c, "provider", 60 * 60 * 24, next)
-  const resp = ctx.forward(
-    c,
-    await config.request(c.req.raw, next, fd, err),
-  )
+  const resp = ctx.forward(c, await config.request(c.req.raw, next, fd, err))
   return resp
 }
 ```
 
 **Proposed Change**:
+
 ```typescript
 async function transition(
   c: Context,
@@ -166,10 +179,7 @@ async function transition(
       })
     : c.req.raw
 
-  const resp = ctx.forward(
-    c,
-    await config.request(req, next, fd, err),
-  )
+  const resp = ctx.forward(c, await config.request(req, next, fd, err))
   return resp
 }
 ```
@@ -183,6 +193,7 @@ async function transition(
 **Change Locations**: Multiple callback invocations
 
 1. **Lines 278, 284** (login routes):
+
 ```typescript
 // Helper to enrich request with theme
 function enrichRequest(c: Context): Request {
@@ -211,6 +222,7 @@ routes.post("/authorize", async (c) => {
 ```
 
 2. **Lines 318, 337** (register route):
+
 ```typescript
 routes.get("/register", async (c) => {
   // ...
@@ -224,6 +236,7 @@ routes.post("/register", async (c) => {
 ```
 
 3. **Lines 432, 446** (change route):
+
 ```typescript
 routes.get("/change", async (c) => {
   // ...
@@ -246,6 +259,7 @@ async function transition(...) {
 **Change Location**: Lines 121, 151 (Layout component calls)
 
 **Add Helper Function** (top of file, after imports):
+
 ```typescript
 /**
  * Extracts theme from request header if available
@@ -264,6 +278,7 @@ function getThemeFromRequest(req: Request): Theme | undefined {
 ```
 
 **Update request callback** (lines 121-148):
+
 ```typescript
 request: async (req, state, _form, error): Promise<Response> => {
   const theme = getThemeFromRequest(req)  // NEW
@@ -303,6 +318,7 @@ request: async (req, state, _form, error): Promise<Response> => {
 **Change Location**: Lines 165, 210, 301 (Layout component calls)
 
 **Add Helper Function** (after imports, same as code.tsx):
+
 ```typescript
 /**
  * Extracts theme from request header if available
@@ -323,6 +339,7 @@ function getThemeFromRequest(req: Request): Theme | undefined {
 **Update all three callbacks**:
 
 1. **login callback** (line 165):
+
 ```typescript
 login: async (req, form, error): Promise<Response> => {
   const theme = getThemeFromRequest(req)  // NEW
@@ -338,6 +355,7 @@ login: async (req, form, error): Promise<Response> => {
 ```
 
 2. **register callback** (line 210):
+
 ```typescript
 register: async (req, state, form, error): Promise<Response> => {
   const theme = getThemeFromRequest(req)  // NEW
@@ -354,6 +372,7 @@ register: async (req, state, form, error): Promise<Response> => {
 ```
 
 3. **change callback** (line 301):
+
 ```typescript
 change: async (req, state, form, error): Promise<Response> => {
   const theme = getThemeFromRequest(req)  // NEW
@@ -380,15 +399,13 @@ change: async (req, state, form, error): Promise<Response> => {
 **Change Location**: Line 1233 (select invocation)
 
 **Current Code**:
+
 ```typescript
 return auth.forward(
   c,
   await select()(
     Object.fromEntries(
-      Object.entries(input.providers).map(([key, value]) => [
-        key,
-        value.type,
-      ]),
+      Object.entries(input.providers).map(([key, value]) => [key, value.type]),
     ),
     c.req.raw,
   ),
@@ -396,6 +413,7 @@ return auth.forward(
 ```
 
 **Proposed Change**:
+
 ```typescript
 // Extract theme from context if available
 const theme = c.get("theme") || c.get("tenantTheme")
@@ -414,12 +432,9 @@ return auth.forward(
   c,
   await select()(
     Object.fromEntries(
-      Object.entries(input.providers).map(([key, value]) => [
-        key,
-        value.type,
-      ]),
+      Object.entries(input.providers).map(([key, value]) => [key, value.type]),
     ),
-    req,  // Pass enriched request
+    req, // Pass enriched request
   ),
 )
 ```
@@ -433,6 +448,7 @@ return auth.forward(
 **Change Location**: Line 67 (Layout component call)
 
 **Add Helper Function** (after imports):
+
 ```typescript
 /**
  * Extracts theme from request header if available
@@ -451,11 +467,13 @@ function getThemeFromRequest(req: Request): Theme | undefined {
 ```
 
 **Add Import**:
+
 ```typescript
 import type { Theme } from "./theme.js"
 ```
 
 **Update Select function** (line 62-95):
+
 ```typescript
 export function Select(props?: SelectProps) {
   return async (
@@ -492,6 +510,7 @@ export function Select(props?: SelectProps) {
 **Change Location**: Lines 5-10 (Layout function signature and theme access)
 
 **Current Code**:
+
 ```typescript
 export function Layout(
   props: PropsWithChildren<{
@@ -504,13 +523,14 @@ export function Layout(
 ```
 
 **Proposed Change**:
+
 ```typescript
 import type { Theme } from "./theme.js"
 
 export function Layout(
   props: PropsWithChildren<{
     size?: "small"
-    theme?: Theme  // NEW: optional theme prop
+    theme?: Theme // NEW: optional theme prop
   }>,
 ) {
   // Priority: explicit prop > global theme
@@ -527,6 +547,7 @@ export function Layout(
 ```
 
 **Impact**:
+
 - Backwards compatible - existing code without theme prop continues to work
 - New code can pass explicit theme via prop
 - Clear precedence: prop > global
@@ -552,6 +573,7 @@ export function Layout(
 ## Backwards Compatibility Strategy
 
 ### For Library Consumers
+
 1. **No Breaking Changes**: All existing provider UIs continue to work
    - If no theme in context → falls back to global theme
    - If no global theme → uses THEME_OPENAUTH default
@@ -561,6 +583,7 @@ export function Layout(
    - No code changes required in provider UI definitions
 
 ### For Custom Provider Implementations
+
 1. **Existing Custom UIs**: Continue to work without modification
    - They receive Request (unchanged)
    - Their Layout calls work (theme prop is optional)
@@ -574,11 +597,14 @@ export function Layout(
 ## Integration with Multi-Tenant Architecture
 
 ### Context Variable Names
+
 The implementation checks for theme in this priority order:
+
 1. `c.get("theme")` - Regular issuer theme
 2. `c.get("tenantTheme")` - Tenant-specific theme (set by tenant middleware)
 
 ### Flow in Multi-Tenant Scenario
+
 ```
 Request to tenant subdomain
     ↓
@@ -600,6 +626,7 @@ Rendered with tenant branding
 ```
 
 ### Regular Issuer (Non-Tenant)
+
 ```
 Request to regular issuer
     ↓
@@ -695,17 +722,20 @@ Rendered with issuer theme
 ## Migration Path
 
 ### Phase 1: Internal Changes (Non-Breaking)
+
 1. Update Layout component to accept theme prop
 2. Add helper functions to provider UIs
 3. Update provider calls to enrich requests
 4. Deploy and test with existing setups
 
 ### Phase 2: Enable Multi-Tenant (Additive)
+
 1. Tenant middleware sets theme in context
 2. Provider UIs automatically pick it up
 3. No changes to provider definitions
 
 ### Phase 3: Documentation (Informative)
+
 1. Document theme prop in Layout
 2. Show examples of custom provider UIs with theming
 3. Explain theme precedence
@@ -722,19 +752,23 @@ Rendered with issuer theme
 ## Files Modified Summary
 
 ### Core Provider Files
+
 - `src/provider/code.ts` - Add request enrichment in transition function
 - `src/provider/password.ts` - Add request enrichment helper and use in all routes
 
 ### UI Component Files
+
 - `src/ui/base.tsx` - Add optional theme prop to Layout
 - `src/ui/code.tsx` - Extract theme from request, pass to Layout
 - `src/ui/password.tsx` - Extract theme from request, pass to Layout
 - `src/ui/select.tsx` - Extract theme from request, pass to Layout
 
 ### Issuer File
+
 - `src/issuer.ts` - Enrich request with theme before calling select()
 
 ### Type Files
+
 - `src/ui/theme.ts` - Export Theme type (already done)
 
 **Total Files**: 7 files
@@ -764,6 +798,7 @@ Rendered with issuer theme
 ## Next Steps
 
 After implementing this plan:
+
 1. Review and test all provider UI flows
 2. Add comprehensive unit tests
 3. Update integration tests for multi-tenant scenarios

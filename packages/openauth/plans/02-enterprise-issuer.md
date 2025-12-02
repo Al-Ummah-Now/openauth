@@ -11,19 +11,22 @@ This plan outlines the architectural changes needed to unify theme handling betw
 **File**: `src/issuer.ts`
 
 The regular issuer uses a straightforward approach:
+
 ```typescript
 if (input.theme) {
-  setTheme(input.theme)  // Sets to globalThis.OPENAUTH_THEME
+  setTheme(input.theme) // Sets to globalThis.OPENAUTH_THEME
 }
 ```
 
 **Mechanism**:
+
 - Uses `setTheme()` from `src/ui/theme.ts` (line 308-311)
 - Stores theme directly in `globalThis.OPENAUTH_THEME`
 - UI components call `getTheme()` which returns `globalThis.OPENAUTH_THEME || THEME_OPENAUTH`
 - Works perfectly for single-tenant deployments
 
 **Limitations**:
+
 - Single theme per issuer instance
 - No per-request theme resolution
 - Not compatible with multi-tenant scenarios
@@ -33,11 +36,13 @@ if (input.theme) {
 **File**: `src/enterprise/issuer.ts` (line 233)
 
 Current implementation:
+
 ```typescript
 app.use("*", createTenantThemeMiddleware())
 ```
 
 **Current Behavior**:
+
 - `createTenantThemeMiddleware()` defined in `src/tenant/theme.ts` (lines 85-142)
 - Runs AFTER request processing (`await next()`)
 - Only sets HTTP response headers:
@@ -47,6 +52,7 @@ app.use("*", createTenantThemeMiddleware())
 - Does NOT set `globalThis.OPENAUTH_THEME`
 
 **Problem**:
+
 - Headers are only useful for client-side applications
 - SSR components (like account picker, provider selection) call `getTheme()`
 - `getTheme()` reads from `globalThis`, not from headers
@@ -57,8 +63,13 @@ app.use("*", createTenantThemeMiddleware())
 **File**: `src/enterprise/issuer.ts`
 
 Provider selection UI (lines 864-951):
+
 ```typescript
-function renderProviderSelection(ctx: Context, providers: Record<string, Provider<any>>, tenant: Tenant): Response {
+function renderProviderSelection(
+  ctx: Context,
+  providers: Record<string, Provider<any>>,
+  tenant: Tenant,
+): Response {
   const theme = tenant.branding?.theme || {}
 
   const html = `
@@ -72,8 +83,13 @@ function renderProviderSelection(ctx: Context, providers: Record<string, Provide
 ```
 
 Account picker UI (lines 956-1103):
+
 ```typescript
-function renderAccountPicker(ctx: Context, accounts: AccountPickerAccount[], authorization: EnterpriseAuthorizationState): Response {
+function renderAccountPicker(
+  ctx: Context,
+  accounts: AccountPickerAccount[],
+  authorization: EnterpriseAuthorizationState,
+): Response {
   const tenant = getTenant(ctx)
   const theme = tenant?.branding?.theme || {}
   // Similar inline CSS generation
@@ -81,6 +97,7 @@ function renderAccountPicker(ctx: Context, accounts: AccountPickerAccount[], aut
 ```
 
 **Current Workaround**:
+
 - SSR functions manually extract theme from tenant object
 - Inline CSS generation duplicates logic
 - Inconsistent with regular issuer's approach
@@ -112,16 +129,19 @@ When resolving theme for a request:
 ### Rationale
 
 **Why prioritize tenant over config?**
+
 - Multi-tenant issuer's primary purpose is per-tenant isolation
 - Tenant-specific branding is the expected behavior
 - Config theme serves as fallback when tenant has no branding
 
 **Why include default tenant?**
+
 - Allows runtime theme updates without code deployment
 - Consistent with tenant-based architecture
 - Provides flexible default management
 
 **When to use each level?**
+
 ```
 Request for tenant "acme":
 ├─ Has theme? → Use tenant.branding.theme ✓
@@ -158,12 +178,13 @@ function createEnterpriseThemeMiddleware(options: {
   configTheme?: Theme
 }): MiddlewareHandler {
   // Cache for default tenant to avoid repeated DB lookups
-  let defaultTenantCache: { tenant: Tenant | null; timestamp: number } | null = null
+  let defaultTenantCache: { tenant: Tenant | null; timestamp: number } | null =
+    null
   const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
   return async function enterpriseThemeMiddleware(
     ctx: Context,
-    next: Next
+    next: Next,
   ): Promise<Response | void> {
     // Get resolved tenant from context (set by tenant resolver)
     const tenant = getTenant(ctx)
@@ -184,7 +205,10 @@ function createEnterpriseThemeMiddleware(options: {
     if (!resolvedTheme) {
       // Check cache
       const now = Date.now()
-      if (defaultTenantCache && (now - defaultTenantCache.timestamp) < CACHE_TTL) {
+      if (
+        defaultTenantCache &&
+        now - defaultTenantCache.timestamp < CACHE_TTL
+      ) {
         if (defaultTenantCache.tenant?.branding?.theme) {
           resolvedTheme = defaultTenantCache.tenant.branding.theme
         }
@@ -237,6 +261,7 @@ app.use("*", createSessionMiddleware(...))
 ```
 
 **Why this order?**
+
 1. Tenant resolver must run first (theme depends on tenant)
 2. Theme must be set before any route handlers (SSR needs theme)
 3. Session middleware can run after theme (no dependency)
@@ -260,12 +285,14 @@ export interface EnterpriseContextVariables {
 ```
 
 **Usage**:
+
 ```typescript
 // In route handlers or UI generators
 const theme = ctx.get("resolvedTheme")
 ```
 
 **Benefits**:
+
 - Programmatic access to resolved theme
 - Type-safe access via context
 - Debugging and introspection
@@ -274,8 +301,13 @@ const theme = ctx.get("resolvedTheme")
 ### Migration Path for Existing SSR Functions
 
 **Current Pattern** (lines 864-951):
+
 ```typescript
-function renderProviderSelection(ctx: Context, providers: Record<string, Provider<any>>, tenant: Tenant): Response {
+function renderProviderSelection(
+  ctx: Context,
+  providers: Record<string, Provider<any>>,
+  tenant: Tenant,
+): Response {
   const theme = tenant.branding?.theme || {}
 
   const html = `
@@ -288,8 +320,13 @@ function renderProviderSelection(ctx: Context, providers: Record<string, Provide
 ```
 
 **New Pattern**:
+
 ```typescript
-function renderProviderSelection(ctx: Context, providers: Record<string, Provider<any>>, tenant: Tenant): Response {
+function renderProviderSelection(
+  ctx: Context,
+  providers: Record<string, Provider<any>>,
+  tenant: Tenant,
+): Response {
   // Theme already resolved by middleware and set to globalThis
   const theme = getTheme() // Returns fully resolved theme
 
@@ -303,6 +340,7 @@ function renderProviderSelection(ctx: Context, providers: Record<string, Provide
 ```
 
 **Benefits**:
+
 - Consistent with regular issuer
 - Automatic fallback handling
 - Less code duplication
@@ -336,6 +374,7 @@ function renderProviderSelection(ctx: Context, providers: Record<string, Provide
 **Recommendation**: Keep Both
 
 Rationale:
+
 - Clear separation of concerns
 - No breaking changes
 - Different use cases (SSR vs API)
@@ -346,9 +385,13 @@ Rationale:
 ### File: `src/enterprise/types.ts`
 
 **Current** (lines 59-171):
+
 ```typescript
 export interface EnterpriseIssuerConfig<
-  Providers extends Record<string, Provider<any>> = Record<string, Provider<any>>,
+  Providers extends Record<string, Provider<any>> = Record<
+    string,
+    Provider<any>
+  >,
   Subjects extends SubjectSchema = SubjectSchema,
 > {
   // ... existing properties
@@ -356,9 +399,13 @@ export interface EnterpriseIssuerConfig<
 ```
 
 **Proposed Addition**:
-```typescript
+
+````typescript
 export interface EnterpriseIssuerConfig<
-  Providers extends Record<string, Provider<any>> = Record<string, Provider<any>>,
+  Providers extends Record<string, Provider<any>> = Record<
+    string,
+    Provider<any>
+  >,
   Subjects extends SubjectSchema = SubjectSchema,
 > {
   // ... existing properties
@@ -387,9 +434,10 @@ export interface EnterpriseIssuerConfig<
    */
   theme?: Theme
 }
-```
+````
 
 **Notes**:
+
 - Property already exists in types (line 116)
 - JSDoc needs enhancement with priority chain explanation
 - Example shows usage with built-in theme
@@ -403,12 +451,14 @@ export interface EnterpriseIssuerConfig<
 **Method Used**: `tenantService.getTenant("default")`
 
 **Caching Strategy**:
+
 - Cache default tenant for 5 minutes
 - Invalidate on write operations (future enhancement)
 - In-memory cache per worker/instance
 - Separate from HTTP cache layer
 
 **Error Handling**:
+
 ```typescript
 try {
   const defaultTenant = await options.tenantService.getTenant("default")
@@ -424,11 +474,13 @@ try {
 **Import Path**: `@openauthjs/openauth/ui/theme`
 
 **Functions Used**:
+
 - `setTheme(theme: Theme)`: Set theme to globalThis
 - `getTheme()`: Retrieve theme from globalThis
 - `THEME_OPENAUTH`: Default fallback theme
 
 **Type Import**:
+
 ```typescript
 import type { Theme } from "../ui/theme.js"
 import { setTheme, getTheme, THEME_OPENAUTH } from "../ui/theme.js"
@@ -443,6 +495,7 @@ import { setTheme, getTheme, THEME_OPENAUTH } from "../ui/theme.js"
 **Helper Function**: `getTenant(ctx)`
 
 **Error Case**: If tenant is null:
+
 ```typescript
 const tenant = getTenant(ctx)
 // tenant may be null for optional tenant resolution
@@ -452,16 +505,19 @@ const tenant = getTenant(ctx)
 ### 4. UI Component Integration
 
 **Existing Components** (in `src/ui/`):
+
 - Should work automatically with new middleware
 - Already use `getTheme()` for theme access
 - No changes needed
 
 **SSR Functions** (in `src/enterprise/issuer.ts`):
+
 - `renderProviderSelection()` (lines 864-951)
 - `renderAccountPicker()` (lines 956-1103)
 - Should be refactored to use `getTheme()` instead of manual extraction
 
 **Future UI Components**:
+
 - Can be shared between regular and enterprise issuer
 - Use `getTheme()` for theme access
 - No tenant awareness needed
@@ -526,6 +582,7 @@ const tenant = getTenant(ctx)
 **Test Cases**:
 
 1. Theme Priority Chain
+
 ```typescript
 describe("Theme Resolution Priority", () => {
   it("should use tenant theme when available", async () => {
@@ -555,6 +612,7 @@ describe("Theme Resolution Priority", () => {
 ```
 
 2. Caching Behavior
+
 ```typescript
 describe("Default Tenant Caching", () => {
   it("should cache default tenant for TTL duration", async () => {
@@ -572,6 +630,7 @@ describe("Default Tenant Caching", () => {
 ```
 
 3. Context Variable
+
 ```typescript
 describe("Resolved Theme Context", () => {
   it("should set resolvedTheme in context", async () => {
@@ -590,6 +649,7 @@ describe("Resolved Theme Context", () => {
 **Test Scenarios**:
 
 1. Multi-Tenant Theme Isolation
+
 ```typescript
 describe("Multi-Tenant Theme Isolation", () => {
   it("should render different themes for different tenants", async () => {
@@ -601,6 +661,7 @@ describe("Multi-Tenant Theme Isolation", () => {
 ```
 
 2. SSR Consistency
+
 ```typescript
 describe("SSR Theme Consistency", () => {
   it("should render provider selection with tenant theme", async () => {
@@ -615,6 +676,7 @@ describe("SSR Theme Consistency", () => {
 ```
 
 3. Middleware Order
+
 ```typescript
 describe("Middleware Execution Order", () => {
   it("should fail if tenant resolver not before theme middleware", async () => {
@@ -641,12 +703,14 @@ describe("Middleware Execution Order", () => {
 ### Caching Strategy
 
 **Default Tenant Cache**:
+
 - **Location**: In-memory, per worker/instance
 - **TTL**: 5 minutes (configurable)
 - **Invalidation**: Time-based only (future: event-based)
 - **Memory**: Minimal (single tenant object)
 
 **Impact**:
+
 - Reduces DB calls for default tenant
 - Acceptable staleness for theme updates
 - No cross-request contamination
@@ -654,6 +718,7 @@ describe("Middleware Execution Order", () => {
 ### Request Performance
 
 **Middleware Overhead**:
+
 - Tenant lookup: Already resolved by tenant middleware
 - Theme lookup: 1 additional object access
 - Default tenant: Cached (only initial request hits DB)
@@ -662,6 +727,7 @@ describe("Middleware Execution Order", () => {
 **Estimated Impact**: < 1ms per request
 
 **Optimization Opportunities**:
+
 - Pre-load default tenant on startup
 - Use edge caching for static themes
 - Consider theme CDN for assets
@@ -669,16 +735,19 @@ describe("Middleware Execution Order", () => {
 ### Memory Considerations
 
 **GlobalThis Usage**:
+
 - Current pattern used by regular issuer
 - Single theme object per request context
 - Proper scoping in request lifecycle
 
 **Potential Issues**:
+
 - Concurrent requests may overwrite globalThis
 - **Mitigation**: Hono's context isolation
 - **Alternative**: AsyncLocalStorage (overkill per comment in theme.ts:303)
 
 **Recommendation**: Current approach is acceptable given comment in `src/ui/theme.ts`:
+
 ```typescript
 // i really don't wanna use async local storage for this so get over it
 ```
@@ -688,11 +757,13 @@ describe("Middleware Execution Order", () => {
 ### Theme Data Validation
 
 **Input Validation**:
+
 - Theme objects from database should be validated
 - Prevent XSS via theme properties (colors, URLs)
 - Sanitize custom CSS if supported
 
 **Recommendations**:
+
 ```typescript
 function sanitizeTheme(theme: unknown): Theme | null {
   // Validate structure
@@ -705,11 +776,13 @@ function sanitizeTheme(theme: unknown): Theme | null {
 ### Default Tenant Access Control
 
 **Security Risk**:
+
 - Default tenant theme is public (accessible to all tenants)
 - Should not contain sensitive information
 - Considered "branding only"
 
 **Recommendations**:
+
 - Document that default tenant is shared
 - Ensure default tenant contains only theme data
 - Separate secrets from theme configuration
@@ -719,6 +792,7 @@ function sanitizeTheme(theme: unknown): Theme | null {
 **Risk**: Malicious default tenant could affect all tenants
 
 **Mitigation**:
+
 - Validate theme data from database
 - Implement checksum/version in cache
 - Monitor default tenant updates
@@ -731,6 +805,7 @@ function sanitizeTheme(theme: unknown): Theme | null {
 **None**: This is an additive change
 
 **Existing Behavior**:
+
 - Current multi-tenant issuer has no `theme` config property being used
 - Adding it does not break existing deployments
 - SSR functions currently work (via manual extraction)
@@ -738,11 +813,13 @@ function sanitizeTheme(theme: unknown): Theme | null {
 ### Migration Required
 
 **No migration needed** for existing deployments:
+
 - Existing code continues to work
 - New middleware is additive
 - Manual theme extraction still functional
 
 **Optional Improvements**:
+
 - Refactor SSR functions to use `getTheme()`
 - Add `theme` config for better defaults
 - Create "default" tenant for centralized theming
@@ -750,15 +827,18 @@ function sanitizeTheme(theme: unknown): Theme | null {
 ### Deprecation Timeline
 
 **Phase 1** (Current Release):
+
 - Add new middleware
 - Keep existing header middleware
 - Document both approaches
 
 **Phase 2** (Next Release):
+
 - Encourage migration to new pattern
 - Mark header middleware as legacy
 
 **Phase 3** (Major Version):
+
 - Consider consolidating middleware
 - Potential breaking changes with migration guide
 
@@ -782,6 +862,7 @@ interface Theme {
 **Concept**: Theme updates without restart
 
 **Mechanism**:
+
 - Webhook on theme update
 - Invalidate cache
 - Next request picks up new theme
@@ -805,6 +886,7 @@ interface TenantBranding {
 **Concept**: Serve theme assets via CDN
 
 **Benefits**:
+
 - Faster asset loading
 - Reduced origin traffic
 - Better caching
@@ -814,6 +896,7 @@ interface TenantBranding {
 **Concept**: Centralized theme validation
 
 **Features**:
+
 - WCAG contrast checking
 - Asset URL validation
 - CSS safety scanning
@@ -827,6 +910,7 @@ interface TenantBranding {
 **Current Approach**: GlobalThis (per theme.ts:303 comment)
 
 **Trade-offs**:
+
 - AsyncLocalStorage: Better isolation, more complexity
 - GlobalThis: Simple, adequate for Hono's request lifecycle
 
@@ -839,6 +923,7 @@ interface TenantBranding {
 **Current Approach**: Hardcoded "default"
 
 **Alternative**:
+
 ```typescript
 interface EnterpriseIssuerConfig {
   defaultTenantId?: string // Default: "default"
@@ -852,6 +937,7 @@ interface EnterpriseIssuerConfig {
 **Question**: How to invalidate default tenant cache on updates?
 
 **Options**:
+
 1. Time-based only (current)
 2. Event-based (webhook/message)
 3. Versioning in tenant object
@@ -864,6 +950,7 @@ interface EnterpriseIssuerConfig {
 **Question**: Should themes be shallow or deep merged?
 
 **Example**:
+
 ```typescript
 // Tenant theme
 { primary: "red", font: { family: "Arial" } }

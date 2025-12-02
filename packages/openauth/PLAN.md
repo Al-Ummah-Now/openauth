@@ -4,15 +4,16 @@
 
 The regular `issuer()` and `createMultiTenantIssuer()` handle theming differently:
 
-| Aspect | Regular Issuer | Multi-Tenant Issuer |
-|--------|---------------|---------------------|
-| Theme source | `config.theme` → `setTheme()` → `globalThis` | `tenant.branding` → HTTP headers |
-| UI reads from | `getTheme()` → `globalThis.OPENAUTH_THEME` | Same (broken - headers ignored) |
-| Result | Works | UI shows default theme, ignores tenant |
+| Aspect        | Regular Issuer                               | Multi-Tenant Issuer                    |
+| ------------- | -------------------------------------------- | -------------------------------------- |
+| Theme source  | `config.theme` → `setTheme()` → `globalThis` | `tenant.branding` → HTTP headers       |
+| UI reads from | `getTheme()` → `globalThis.OPENAUTH_THEME`   | Same (broken - headers ignored)        |
+| Result        | Works                                        | UI shows default theme, ignores tenant |
 
 ## Goal
 
 Make multi-tenant issuer theme the same way as regular issuer:
+
 1. If `config.theme` provided → use as default for all tenants
 2. If no config theme → pull default from "default" tenant in DB
 3. Per-tenant: override with `tenant.branding.theme`
@@ -41,6 +42,7 @@ Change `getTheme()` to read from Hono context instead of globalThis, allowing pe
 #### Changes Required:
 
 1. **src/ui/theme.ts** - Add context-aware theme functions:
+
 ```typescript
 // Keep setTheme/getTheme for backwards compat (regular issuer)
 export function setTheme(value: Theme) {
@@ -62,17 +64,21 @@ export function getRequestTheme(ctx: Context): Theme {
 ```
 
 2. **src/ui/base.tsx** - Accept theme as prop:
+
 ```typescript
-export function Layout(props: PropsWithChildren<{
-  size?: "small"
-  theme?: Theme  // New: optional theme override
-}>) {
+export function Layout(
+  props: PropsWithChildren<{
+    size?: "small"
+    theme?: Theme // New: optional theme override
+  }>,
+) {
   const theme = props.theme || getTheme()
   // ... rest unchanged
 }
 ```
 
 3. **src/enterprise/issuer.ts** - Build theme and pass to UI:
+
 ```typescript
 // In createMultiTenantIssuer, replace createTenantThemeMiddleware with:
 app.use("*", async (c, next) => {
@@ -87,7 +93,11 @@ app.use("*", async (c, next) => {
 
   // Also set logos, favicon from tenant branding
   if (tenant?.branding) {
-    if (tenant.branding.logoLight) theme.logo = { light: tenant.branding.logoLight, dark: tenant.branding.logoDark }
+    if (tenant.branding.logoLight)
+      theme.logo = {
+        light: tenant.branding.logoLight,
+        dark: tenant.branding.logoDark,
+      }
     if (tenant.branding.favicon) theme.favicon = tenant.branding.favicon
   }
 
@@ -97,6 +107,7 @@ app.use("*", async (c, next) => {
 ```
 
 4. **Provider UIs** - Pass theme from context:
+
 ```typescript
 // In provider render functions, get theme from context and pass to Layout
 const theme = getRequestTheme(c)

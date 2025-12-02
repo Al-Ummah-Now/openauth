@@ -49,7 +49,7 @@ const app = issuer({
           // In production, send this via email
           console.log(`Verification code for ${email}: ${code}`)
         },
-      })
+      }),
     ),
   },
   async success(ctx, value) {
@@ -72,17 +72,20 @@ export default app
 ### Running the Server
 
 **Node.js:**
+
 ```typescript
 import { serve } from "@hono/node-server"
 serve(app, { port: 3000 })
 ```
 
 **Bun:**
+
 ```typescript
 export default app
 ```
 
 **Cloudflare Workers:**
+
 ```typescript
 export default app
 ```
@@ -154,7 +157,7 @@ const app = issuer({
             body: `Your code is: ${code}`,
           })
         },
-      })
+      }),
     ),
     code: CodeProvider(
       CodeUI({
@@ -165,7 +168,7 @@ const app = issuer({
             body: `Your code is: ${code}`,
           })
         },
-      })
+      }),
     ),
   },
 
@@ -184,10 +187,10 @@ const app = issuer({
 
   // Token TTL configuration (optional)
   ttl: {
-    access: 60 * 60 * 24 * 30,    // 30 days
-    refresh: 60 * 60 * 24 * 365,   // 1 year
-    reuse: 60,                      // 60 second reuse window
-    retention: 0,                   // No retention after reuse
+    access: 60 * 60 * 24 * 30, // 30 days
+    refresh: 60 * 60 * 24 * 365, // 1 year
+    reuse: 60, // 60 second reuse window
+    retention: 0, // No retention after reuse
   },
 
   // Client authorization check (optional)
@@ -199,7 +202,7 @@ const app = issuer({
     }
     // Check against allowed domains
     const allowedDomains = ["myapp.com", "staging.myapp.com"]
-    return allowedDomains.some(domain => redir.endsWith(domain))
+    return allowedDomains.some((domain) => redir.endsWith(domain))
   },
 
   // Success callback (required)
@@ -227,7 +230,7 @@ const app = issuer({
           headers: {
             Authorization: `Bearer ${value.tokenset.access}`,
           },
-        }).then(r => r.json())
+        }).then((r) => r.json())
 
         email = githubUser.email
         name = githubUser.name
@@ -308,6 +311,7 @@ export type Subjects = typeof subjects
 ```
 
 **Best Practices for Subjects:**
+
 - Only include data that rarely changes (userID, email)
 - Avoid frequently changing data (roles, preferences)
 - Keep the payload small for better performance
@@ -322,6 +326,7 @@ For SaaS applications requiring multi-tenant support, use `createMultiTenantIssu
 ### When to Use Multi-Tenant Issuer
 
 Use `createMultiTenantIssuer()` when you need:
+
 - **Multi-tenant isolation**: Each tenant has isolated data and configuration
 - **White-label branding**: Per-tenant themes, logos, and custom CSS
 - **Multi-account sessions**: Users logged into multiple accounts simultaneously
@@ -382,7 +387,7 @@ export default {
             sendCode: async (email, code) => {
               // Send verification email
             },
-          })
+          }),
         ),
       },
 
@@ -429,26 +434,31 @@ export default {
 The enterprise issuer resolves tenants in the following priority order:
 
 #### 1. Custom Domain
+
 ```
 auth.acme-corp.com -> tenant "acme-corp"
 ```
 
 #### 2. Subdomain
+
 ```
 acme-corp.auth.myapp.com -> tenant "acme-corp"
 ```
 
 #### 3. Path Prefix
+
 ```
 /tenants/acme-corp/authorize -> tenant "acme-corp"
 ```
 
 #### 4. Header
+
 ```
 X-Tenant-ID: acme-corp -> tenant "acme-corp"
 ```
 
 #### 5. Query Parameter
+
 ```
 /authorize?tenant=acme-corp -> tenant "acme-corp"
 ```
@@ -495,9 +505,9 @@ The enterprise issuer supports multi-account browser sessions (like Google's acc
 ```typescript
 // Session configuration
 const sessionConfig = {
-  maxAccountsPerSession: 3,     // Max accounts per browser
+  maxAccountsPerSession: 3, // Max accounts per browser
   sessionLifetimeSeconds: 604800, // 7 days
-  slidingWindowSeconds: 86400,   // Extend session on activity
+  slidingWindowSeconds: 86400, // Extend session on activity
   cookieName: "__session",
 }
 
@@ -537,7 +547,7 @@ const { app } = createMultiTenantIssuer({
     return ctx.subject("user", {
       userID: value.userID,
       tenantID: tenant.id,
-      roles: value.roles,        // e.g., ["admin", "editor"]
+      roles: value.roles, // e.g., ["admin", "editor"]
       permissions: value.permissions, // e.g., ["posts:write", "users:read"]
     })
   },
@@ -566,6 +576,7 @@ OpenAuth supports multiple authentication providers out of the box.
 ### OAuth2 Providers
 
 #### Google
+
 ```typescript
 import { GoogleProvider } from "@openauthjs/openauth/provider/google"
 
@@ -574,13 +585,14 @@ GoogleProvider({
   clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
   scopes: ["openid", "email", "profile"],
   query: {
-    access_type: "offline",  // Get refresh token
-    prompt: "consent",       // Force consent screen
+    access_type: "offline", // Get refresh token
+    prompt: "consent", // Force consent screen
   },
 })
 ```
 
 #### Google OIDC (No client secret needed)
+
 ```typescript
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 
@@ -590,6 +602,7 @@ GoogleOidcProvider({
 ```
 
 #### GitHub
+
 ```typescript
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 
@@ -601,6 +614,7 @@ GithubProvider({
 ```
 
 #### Facebook
+
 ```typescript
 import { FacebookProvider } from "@openauthjs/openauth/provider/facebook"
 
@@ -612,6 +626,7 @@ FacebookProvider({
 ```
 
 #### Microsoft
+
 ```typescript
 import { MicrosoftProvider } from "@openauthjs/openauth/provider/microsoft"
 
@@ -623,6 +638,7 @@ MicrosoftProvider({
 ```
 
 #### Apple
+
 ```typescript
 import { AppleProvider } from "@openauthjs/openauth/provider/apple"
 
@@ -634,6 +650,7 @@ AppleProvider({
 ```
 
 #### Discord
+
 ```typescript
 import { DiscordProvider } from "@openauthjs/openauth/provider/discord"
 
@@ -683,11 +700,12 @@ PasswordProvider(
       }
       return undefined // Valid
     },
-  })
+  }),
 )
 ```
 
 **Password Provider Routes:**
+
 - `GET /password/authorize` - Login form
 - `POST /password/authorize` - Submit login
 - `GET /password/register` - Registration form
@@ -728,7 +746,7 @@ CodeProvider(
         })
       }
     },
-  })
+  }),
 )
 ```
 
@@ -955,7 +973,7 @@ const response = await fetch("/session/switch", {
 })
 
 // List all accounts in the session
-const accounts = await fetch("/session/accounts").then(r => r.json())
+const accounts = await fetch("/session/accounts").then((r) => r.json())
 // [{ userId: "user-123", isActive: true }, { userId: "user-456", isActive: false }]
 
 // Add another account (triggers new auth flow)
@@ -988,16 +1006,16 @@ const myTheme: Theme = {
   logo: "https://myapp.com/logo.svg",
   // OR
   logo: {
-    light: "https://myapp.com/logo-dark.svg",  // Used on light backgrounds
-    dark: "https://myapp.com/logo-light.svg",   // Used on dark backgrounds
+    light: "https://myapp.com/logo-dark.svg", // Used on light backgrounds
+    dark: "https://myapp.com/logo-light.svg", // Used on dark backgrounds
   },
 
   // Primary color (buttons, links)
   primary: "#FF5E00",
   // OR
   primary: {
-    light: "#FF5E00",  // Light mode
-    dark: "#FF8C4A",   // Dark mode
+    light: "#FF5E00", // Light mode
+    dark: "#FF8C4A", // Dark mode
   },
 
   // Background color
@@ -1032,11 +1050,11 @@ const myTheme: Theme = {
 
 ```typescript
 import {
-  THEME_OPENAUTH,   // Default minimal theme
-  THEME_SST,        // SST-inspired theme
-  THEME_TERMINAL,   // Terminal.shop inspired
-  THEME_VERCEL,     // Vercel-inspired
-  THEME_SUPABASE,   // Supabase-inspired
+  THEME_OPENAUTH, // Default minimal theme
+  THEME_SST, // SST-inspired theme
+  THEME_TERMINAL, // Terminal.shop inspired
+  THEME_VERCEL, // Vercel-inspired
+  THEME_SUPABASE, // Supabase-inspired
 } from "@openauthjs/openauth/ui/theme"
 
 const app = issuer({
@@ -1104,6 +1122,7 @@ await tenantService.createTenant({
 ```
 
 **Theme Resolution Priority (Enterprise):**
+
 1. `tenant.branding.theme` - Per-tenant customization
 2. `config.theme` - Default from `createMultiTenantIssuer`
 3. Default tenant theme - Tenant with ID "default"
@@ -1136,8 +1155,8 @@ import { DynamoStorage } from "@openauthjs/openauth/storage/dynamo"
 
 const storage = DynamoStorage({
   table: "openauth-store",
-  pk: "pk",      // Primary key column name
-  sk: "sk",      // Sort key column name
+  pk: "pk", // Primary key column name
+  sk: "sk", // Sort key column name
   ttl: "expiry", // TTL column name
 
   // Optional: Custom endpoint (for local development)
@@ -1214,7 +1233,7 @@ class PostgresStorage implements StorageAdapter {
     const joinedKey = key.join("::")
     const result = await this.pool.query(
       "SELECT value FROM auth_store WHERE key = $1 AND (expiry IS NULL OR expiry > NOW())",
-      [joinedKey]
+      [joinedKey],
     )
     return result.rows[0]?.value
   }
@@ -1225,23 +1244,20 @@ class PostgresStorage implements StorageAdapter {
       `INSERT INTO auth_store (key, value, expiry)
        VALUES ($1, $2, $3)
        ON CONFLICT (key) DO UPDATE SET value = $2, expiry = $3`,
-      [joinedKey, JSON.stringify(value), expiry]
+      [joinedKey, JSON.stringify(value), expiry],
     )
   }
 
   async remove(key: string[]): Promise<void> {
     const joinedKey = key.join("::")
-    await this.pool.query(
-      "DELETE FROM auth_store WHERE key = $1",
-      [joinedKey]
-    )
+    await this.pool.query("DELETE FROM auth_store WHERE key = $1", [joinedKey])
   }
 
   async *scan(prefix: string[]): AsyncIterable<[string[], any]> {
     const joinedPrefix = prefix.join("::") + "::"
     const result = await this.pool.query(
       "SELECT key, value FROM auth_store WHERE key LIKE $1 AND (expiry IS NULL OR expiry > NOW())",
-      [joinedPrefix + "%"]
+      [joinedPrefix + "%"],
     )
     for (const row of result.rows) {
       yield [row.key.split("::"), JSON.parse(row.value)]
@@ -1286,6 +1302,7 @@ export default {
 ```
 
 **wrangler.toml:**
+
 ```toml
 name = "openauth-server"
 main = "worker.ts"
@@ -1326,6 +1343,7 @@ export const handler = aws(app)
 ```
 
 **serverless.yml:**
+
 ```yaml
 service: openauth-server
 
@@ -1440,25 +1458,25 @@ bun run server.ts
 
 The issuer exposes the following OAuth/OIDC endpoints:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/authorize` | GET | Start authorization flow |
-| `/token` | POST | Exchange code for tokens |
-| `/userinfo` | GET | Get user info from token |
-| `/.well-known/jwks.json` | GET | Public signing keys |
-| `/.well-known/oauth-authorization-server` | GET | OAuth metadata |
-| `/.well-known/openid-configuration` | GET | OIDC discovery |
-| `/token/introspect` | POST | Token introspection (RFC 7662) |
-| `/token/revoke` | POST | Token revocation (RFC 7009) |
+| Endpoint                                  | Method | Description                    |
+| ----------------------------------------- | ------ | ------------------------------ |
+| `/authorize`                              | GET    | Start authorization flow       |
+| `/token`                                  | POST   | Exchange code for tokens       |
+| `/userinfo`                               | GET    | Get user info from token       |
+| `/.well-known/jwks.json`                  | GET    | Public signing keys            |
+| `/.well-known/oauth-authorization-server` | GET    | OAuth metadata                 |
+| `/.well-known/openid-configuration`       | GET    | OIDC discovery                 |
+| `/token/introspect`                       | POST   | Token introspection (RFC 7662) |
+| `/token/revoke`                           | POST   | Token revocation (RFC 7009)    |
 
 ### Provider Endpoints
 
 Each provider exposes routes under `/{provider}/`:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/{provider}/authorize` | GET | Start provider auth |
-| `/{provider}/callback` | GET | OAuth callback |
+| Endpoint                | Method | Description         |
+| ----------------------- | ------ | ------------------- |
+| `/{provider}/authorize` | GET    | Start provider auth |
+| `/{provider}/callback`  | GET    | OAuth callback      |
 
 For Password provider:
 | Endpoint | Method | Description |

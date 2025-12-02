@@ -392,9 +392,7 @@ describe("Default Tenant Cache - TenantService Integration", () => {
     expect(tenant?.branding?.logoLight).toBe(
       "https://default.com/logo-light.png",
     )
-    expect(tenant?.branding?.logoDark).toBe(
-      "https://default.com/logo-dark.png",
-    )
+    expect(tenant?.branding?.logoDark).toBe("https://default.com/logo-dark.png")
     expect(tenant?.branding?.favicon).toBe("https://default.com/favicon.ico")
     expect(tenant?.branding?.customCss).toBe("body { margin: 0; }")
   })
