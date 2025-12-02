@@ -163,7 +163,7 @@ The component is fully typed with TypeScript, including:
 1. **Session Cookies**: The component uses `credentials: "include"` to send session cookies with all requests
 2. **Page Refresh**: After switching accounts, the page reloads to ensure all user data is refreshed
 3. **Confirmations**: Destructive actions (sign out) require user confirmation
-4. **OAuth Redirect**: Adding accounts uses `prompt=login` to force account selection
+4. **OAuth Redirect**: Adding accounts uses `prompt=select_account` to show the server-side account picker (Google-style flow)
 5. **Redirect URI**: The current page URL is passed as the redirect URI for seamless return after auth
 
 ## Security Considerations

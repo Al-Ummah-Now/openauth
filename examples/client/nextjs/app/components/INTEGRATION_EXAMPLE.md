@@ -663,4 +663,4 @@ Ensure:
 - Authorization URL is correct
 - OAuth client is configured properly
 - Redirect URI is whitelisted
-- `prompt=login` parameter is included
+- `prompt=select_account` parameter is included (shows server-side account picker like Google)

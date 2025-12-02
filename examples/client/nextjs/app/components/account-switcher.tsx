@@ -325,20 +325,33 @@ export function AccountSwitcher({
   }, [apiBaseUrl, onSignOut])
 
   /**
-   * Add another account
+   * Add another account (Google-style flow)
    *
-   * Redirects to the OAuth authorization endpoint with prompt=login
-   * to force the user to log in with a different account. After
-   * successful authentication, the user will be redirected back with
-   * the new account added to their browser session.
+   * Redirects to the OAuth authorization endpoint with prompt=select_account
+   * to show the server-side account picker. This displays:
+   * 1. All accounts already in the browser session
+   * 2. A "+ Use another account" link (which uses prompt=login)
+   *
+   * This matches Google's behavior where clicking "Add account" first shows
+   * the account picker, allowing users to either:
+   * - Select an existing account they're already signed into
+   * - Click "Use another account" to enter new credentials
+   *
+   * Flow:
+   * 1. User clicks "Add Account" → prompt=select_account
+   * 2. Server shows account picker with existing accounts
+   * 3. User clicks "+ Use another account" → prompt=login
+   * 4. User enters credentials for new account
+   * 5. New account added to browser session
    */
   const addAccount = useCallback(() => {
-    // Construct authorization URL with prompt=login to force account selection
+    // Construct authorization URL with prompt=select_account
+    // This shows the server-side account picker (like Google)
     const url = new URL(authorizeUrl, window.location.origin)
-    url.searchParams.set("prompt", "login")
+    url.searchParams.set("prompt", "select_account")
     url.searchParams.set("redirect_uri", window.location.href)
 
-    // Redirect to authorization
+    // Redirect to authorization - server will show account picker
     window.location.href = url.toString()
   }, [authorizeUrl])
 
