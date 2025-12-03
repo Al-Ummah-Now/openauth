@@ -369,8 +369,32 @@ export function createMultiTenantIssuer<
             }
 
             // Add account to session after successful auth
-            // This is done via the session service when we have a valid session
-            // The actual session update happens in the session middleware response
+            // Extract userId from properties (different providers may use different keys)
+            const userId =
+              (baseProperties as any).userId ||
+              (baseProperties as any).userID ||
+              (baseProperties as any).id ||
+              (baseProperties as any).sub
+            if (session && userId) {
+              try {
+                // Generate a session-specific refresh token
+                // This is separate from the OAuth refresh token managed by base issuer
+                const sessionRefreshToken = crypto.randomUUID()
+
+                await config.sessionService.addAccountToSession({
+                  browserSessionId: session.id,
+                  userId: String(userId),
+                  subjectType: type as string,
+                  subjectProperties: enrichedProperties,
+                  refreshToken: sessionRefreshToken,
+                  clientId: authorization?.client_id || "default",
+                  ttl: sessionConfig.sessionLifetimeSeconds,
+                })
+              } catch (err) {
+                // Log but don't fail the auth flow
+                console.error("Failed to add account to session:", err)
+              }
+            }
 
             // Delegate to base responder for actual token generation
             return responder.subject(
