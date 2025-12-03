@@ -327,13 +327,31 @@ export function createMultiTenantIssuer<
       }
 
       const tenant = ctx.tenant
-      const browserSession = ctx.browserSession
+      let browserSession = ctx.browserSession
       const authorization = ctx.authorization
 
-      // Get or create browser session
+      // Track if we need to set a session cookie
+      let sessionCookieHeader: string | null = null
+
+      // Create browser session if one doesn't exist
+      if (!browserSession) {
+        browserSession = await config.sessionService.createBrowserSession({
+          tenantId: tenant.id,
+          userAgent: req.headers.get("User-Agent") || "unknown",
+          ipAddress:
+            req.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ||
+            "unknown",
+        })
+        // Generate the cookie header to add to the response
+        sessionCookieHeader = await createSessionCookieHeader(
+          browserSession,
+          config.sessionSecret,
+          sessionConfig.cookieName,
+        )
+      }
+
+      // Get or create browser session reference
       let session = browserSession
-      // Note: Session creation is handled by session middleware
-      // New sessions are created during the session middleware if needed
 
       // Enrich with RBAC claims if service available
       let rbacClaims: RBACClaims = { roles: [], permissions: [] }
@@ -399,29 +417,70 @@ export function createMultiTenantIssuer<
             }
 
             // Delegate to base responder for actual token generation
-            return responder.subject(
+            const response = await responder.subject(
               type as any,
               enrichedProperties as any,
               opts,
             )
+
+            // Add session cookie if we created a new session
+            if (sessionCookieHeader) {
+              const headers = new Headers(response.headers)
+              headers.append("Set-Cookie", sessionCookieHeader)
+              return new Response(response.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers,
+              })
+            }
+
+            return response
           },
         }
 
       // Call user's success callback or default
       if (config.onSuccess) {
-        return config.onSuccess(enterpriseCtx, enterpriseResult, tenant)
+        const response = await config.onSuccess(
+          enterpriseCtx,
+          enterpriseResult,
+          tenant,
+        )
+        // Add session cookie if we created a new session
+        if (sessionCookieHeader) {
+          const headers = new Headers(response.headers)
+          headers.append("Set-Cookie", sessionCookieHeader)
+          return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          })
+        }
+        return response
       }
 
       // Default: use base subject method with enriched properties
       const defaultType = (value as any).type || "user"
       const defaultProperties = (value as any).properties || value
 
-      return enterpriseCtx.subject(defaultType, {
+      const response = await enterpriseCtx.subject(defaultType, {
         ...defaultProperties,
         tenantId: tenant.id,
         roles: rbacClaims.roles,
         permissions: rbacClaims.permissions,
       })
+
+      // Add session cookie if we created a new session
+      if (sessionCookieHeader) {
+        const headers = new Headers(response.headers)
+        headers.append("Set-Cookie", sessionCookieHeader)
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        })
+      }
+
+      return response
     },
 
     // Provider selection UI (inherits from base)
