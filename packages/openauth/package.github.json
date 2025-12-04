@@ -1,11 +1,11 @@
 {
-  "name": "@meywd/openauth",
+  "name": "@al-ummah-now/openauth",
   "version": "0.4.3",
   "type": "module",
-  "description": "OpenAuth with enterprise features - private fork",
+  "description": "OpenAuth with enterprise features - AlUmmahNow Identity Platform",
   "repository": {
     "type": "git",
-    "url": "https://github.com/meywd/openauth.git"
+    "url": "https://github.com/Al-Ummah-Now/openauth.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
