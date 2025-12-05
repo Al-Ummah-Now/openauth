@@ -112,8 +112,6 @@ import {
   generateAddAccountUrl,
 } from "./session-integration.js"
 
-import { ensureMigrationsOnce } from "../migrations/index.js"
-
 import {
   issuer as createBaseIssuer,
   type OnSuccessResponder,
@@ -524,23 +522,7 @@ export function createMultiTenantIssuer<
   }
 
   // ============================================
-  // 2. AUTO-MIGRATE DATABASE (if enabled)
-  // ============================================
-
-  // Default: auto-migrate if clientDb is provided
-  const shouldAutoMigrate = config.autoMigrate ?? !!config.clientDb
-
-  if (shouldAutoMigrate && config.clientDb) {
-    const db = config.clientDb
-    app.use("*", async (ctx, next) => {
-      // Run migrations once per isolate (cached)
-      await ensureMigrationsOnce(db)
-      await next()
-    })
-  }
-
-  // ============================================
-  // 3. APPLY TENANT RESOLVER MIDDLEWARE
+  // 2. TENANT RESOLVER MIDDLEWARE
   // ============================================
 
   const tenantResolverConfig: BaseTenantResolverOptions = {
@@ -561,7 +543,7 @@ export function createMultiTenantIssuer<
   app.use("*", createTenantResolver(tenantResolverConfig))
 
   // ============================================
-  // 4. APPLY THEME RESOLUTION MIDDLEWARE
+  // 3. THEME RESOLUTION MIDDLEWARE
   // ============================================
 
   app.use(
@@ -576,7 +558,7 @@ export function createMultiTenantIssuer<
   app.use("*", createTenantThemeMiddleware())
 
   // ============================================
-  // 5. APPLY SESSION MIDDLEWARE
+  // 4. SESSION MIDDLEWARE
   // ============================================
 
   app.use(
@@ -611,7 +593,7 @@ export function createMultiTenantIssuer<
   })
 
   // ============================================
-  // 6. MOUNT ENTERPRISE-SPECIFIC ROUTES
+  // 6. ENTERPRISE ROUTES
   // ============================================
 
   // User-facing session routes: /session/*
@@ -630,7 +612,7 @@ export function createMultiTenantIssuer<
   app.route("/tenants", tenantApiRoutes(config.tenantService))
 
   // ============================================
-  // 7. ENHANCED /authorize WITH OIDC PROMPT SUPPORT
+  // 7. ENHANCED /authorize
   // ============================================
   // Override the base /authorize to add OIDC prompt parameter handling
   // before delegating to the base issuer
@@ -741,7 +723,7 @@ export function createMultiTenantIssuer<
   })
 
   // ============================================
-  // 8. ENHANCED WELL-KNOWN ENDPOINTS
+  // 8. WELL-KNOWN ENDPOINTS
   // ============================================
   // Override to include enterprise-specific claims
 
@@ -805,7 +787,7 @@ export function createMultiTenantIssuer<
   )
 
   // ============================================
-  // 9. MOUNT BASE ISSUER FOR ALL OTHER ROUTES
+  // 9. BASE ISSUER
   // ============================================
   // The base issuer handles:
   // - /token (authorization_code, refresh_token, client_credentials)
@@ -819,7 +801,7 @@ export function createMultiTenantIssuer<
   app.route("/", baseIssuer)
 
   // ============================================
-  // 10. ERROR HANDLER
+  // 10. ERROR HANDLING
   // ============================================
 
   app.onError(async (err, c) => {

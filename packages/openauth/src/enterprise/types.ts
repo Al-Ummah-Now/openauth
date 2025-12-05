@@ -113,30 +113,6 @@ export interface EnterpriseIssuerConfig<
   clientDb?: D1Database
 
   /**
-   * Automatically run database migrations on first request.
-   *
-   * When true and clientDb is provided, OpenAuth will automatically
-   * create all required tables (tenants, sessions, rbac, etc.) on
-   * the first request if they don't exist.
-   *
-   * - Uses CREATE TABLE IF NOT EXISTS (idempotent)
-   * - Caches migration state per worker isolate
-   * - Safe to enable in production
-   *
-   * @default true when clientDb is provided
-   *
-   * @example
-   * ```typescript
-   * createMultiTenantIssuer({
-   *   clientDb: env.DB,
-   *   autoMigrate: true, // Tables created automatically
-   *   // ...
-   * })
-   * ```
-   */
-  autoMigrate?: boolean
-
-  /**
    * Optional theme configuration for UI customization.
    *
    * This theme serves as the default for all tenants that don't have
