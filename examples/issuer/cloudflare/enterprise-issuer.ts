@@ -284,11 +284,7 @@ export default {
 
         // Get user's roles and permissions from RBAC
         // These will be automatically added to the JWT if configured
-        const roles = await rbacService.getUserRoles({
-          userId,
-          appId: "default-app", // Your application ID
-          tenantId: tenant.id,
-        })
+        const roles = await rbacService.getUserRoles(userId, tenant.id)
 
         const permissions = await rbacService.getUserPermissions({
           userId,
@@ -310,7 +306,7 @@ export default {
           // RBAC claims are automatically added if configured in rbacService
           // but you can also manually include them:
           roles: roles.map((r) => r.name),
-          permissions: permissions.map((p) => p.name),
+          permissions, // Already string[] from getUserPermissions
         })
       },
 

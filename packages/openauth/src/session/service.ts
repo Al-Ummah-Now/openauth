@@ -32,6 +32,17 @@ import type {
   SessionConfig,
 } from "../contracts/types.js"
 import { SessionError, DEFAULT_SESSION_CONFIG } from "../contracts/types.js"
+import { D1SessionAdapter, type D1Database } from "./d1-adapter.js"
+
+/**
+ * Extended session configuration with dual-write support
+ */
+export interface ExtendedSessionConfig extends Partial<SessionConfig> {
+  /** D1 database for dual-write (optional) */
+  d1Database?: D1Database
+  /** Enable dual-write to both KV and D1 (default: true if d1Database provided) */
+  dualWriteEnabled?: boolean
+}
 
 /**
  * Implementation of the SessionService interface for multi-account session management.
@@ -39,16 +50,41 @@ import { SessionError, DEFAULT_SESSION_CONFIG } from "../contracts/types.js"
 export class SessionServiceImpl implements SessionService {
   private readonly storage: StorageAdapter
   private readonly config: SessionConfig
+  private readonly d1Adapter: D1SessionAdapter | null
+  private readonly dualWriteEnabled: boolean
 
   /**
    * Create a new SessionServiceImpl instance.
    *
-   * @param storage - Storage adapter for persisting sessions
-   * @param config - Optional session configuration (defaults to DEFAULT_SESSION_CONFIG)
+   * @param storage - Storage adapter for persisting sessions (KV primary)
+   * @param config - Optional session configuration with dual-write support
    */
-  constructor(storage: StorageAdapter, config?: Partial<SessionConfig>) {
+  constructor(storage: StorageAdapter, config?: ExtendedSessionConfig) {
     this.storage = storage
     this.config = { ...DEFAULT_SESSION_CONFIG, ...config }
+
+    // Initialize D1 adapter if database provided
+    if (config?.d1Database) {
+      this.d1Adapter = new D1SessionAdapter({ database: config.d1Database })
+      this.dualWriteEnabled = config.dualWriteEnabled !== false // Default true if D1 provided
+    } else {
+      this.d1Adapter = null
+      this.dualWriteEnabled = false
+    }
+  }
+
+  /**
+   * Write to D1 if dual-write is enabled (fire and forget for non-critical path)
+   */
+  private async writeToD1<T>(operation: () => Promise<T>): Promise<void> {
+    if (!this.dualWriteEnabled || !this.d1Adapter) return
+
+    try {
+      await operation()
+    } catch (error) {
+      // Log error but don't fail the primary operation
+      console.error("[SessionService] D1 dual-write failed:", error)
+    }
   }
 
   /**
@@ -125,11 +161,24 @@ export class SessionServiceImpl implements SessionService {
       account_user_ids: [],
     }
 
+    // Write to KV (primary)
     await Storage.set(
       this.storage,
       this.browserSessionKey(params.tenantId, sessionId),
       session,
       this.getSessionTTL(),
+    )
+
+    // Dual-write to D1 (if enabled)
+    await this.writeToD1(() =>
+      this.d1Adapter!.createBrowserSession({
+        id: sessionId,
+        tenantId: params.tenantId,
+        userAgent: params.userAgent,
+        ipAddress: params.ipAddress,
+        createdAt: now,
+        lastActivity: now,
+      }),
     )
 
     return session
@@ -188,11 +237,21 @@ export class SessionServiceImpl implements SessionService {
       this.config.sessionLifetimeSeconds - elapsed,
     )
 
+    // Write to KV (primary)
     await Storage.set(
       this.storage,
       this.browserSessionKey(session.tenant_id, session.id),
       session,
       remainingTTL,
+    )
+
+    // Dual-write to D1 (if enabled)
+    await this.writeToD1(() =>
+      this.d1Adapter!.updateBrowserSession(session.id, {
+        last_activity: session.last_activity,
+        active_user_id: session.active_user_id,
+        version: session.version,
+      }),
     )
   }
 
@@ -216,6 +275,12 @@ export class SessionServiceImpl implements SessionService {
           this.storage,
           this.accountSessionKey(sessionId, userId),
         )
+
+        // Dual-write to D1
+        await this.writeToD1(() =>
+          this.d1Adapter!.removeAccountSession(sessionId, userId),
+        )
+
         await Storage.remove(
           this.storage,
           this.userIndexKey(tenantId, userId, sessionId),
@@ -223,11 +288,14 @@ export class SessionServiceImpl implements SessionService {
       }
     }
 
-    // Remove the browser session
+    // Remove the browser session from KV
     await Storage.remove(
       this.storage,
       this.browserSessionKey(tenantId, sessionId),
     )
+
+    // Dual-write to D1
+    await this.writeToD1(() => this.d1Adapter!.deleteBrowserSession(sessionId))
   }
 
   /**
@@ -353,12 +421,25 @@ export class SessionServiceImpl implements SessionService {
       }
     }
 
-    // Store account session
+    // Store account session in KV (primary)
     await Storage.set(
       this.storage,
       this.accountSessionKey(params.browserSessionId, params.userId),
       accountSession,
       params.ttl,
+    )
+
+    // Dual-write account session to D1
+    await this.writeToD1(() =>
+      this.d1Adapter!.addAccountSession({
+        browserSessionId: params.browserSessionId,
+        userId: params.userId,
+        subjectType: params.subjectType,
+        subjectProperties: params.subjectProperties,
+        refreshToken: params.refreshToken,
+        clientId: params.clientId,
+        ttl: params.ttl,
+      }),
     )
 
     // Store user index entry for reverse lookup
@@ -518,6 +599,15 @@ export class SessionServiceImpl implements SessionService {
           currentAccount,
           remainingTTL,
         )
+
+        // Dual-write to D1
+        await this.writeToD1(() =>
+          this.d1Adapter!.setAccountActive(
+            browserSessionId,
+            browserSession.active_user_id!,
+            false,
+          ),
+        )
       }
     }
 
@@ -534,7 +624,12 @@ export class SessionServiceImpl implements SessionService {
       remainingTTL,
     )
 
-    // Update browser session
+    // Dual-write to D1
+    await this.writeToD1(() =>
+      this.d1Adapter!.setAccountActive(browserSessionId, userId, true),
+    )
+
+    // Update browser session (includes D1 dual-write)
     browserSession.active_user_id = userId
     browserSession.version += 1
     browserSession.last_activity = Date.now()
@@ -553,10 +648,15 @@ export class SessionServiceImpl implements SessionService {
       return // Session doesn't exist, nothing to remove
     }
 
-    // Remove account session
+    // Remove account session from KV
     await Storage.remove(
       this.storage,
       this.accountSessionKey(browserSessionId, userId),
+    )
+
+    // Dual-write to D1
+    await this.writeToD1(() =>
+      this.d1Adapter!.removeAccountSession(browserSessionId, userId),
     )
 
     // Remove user index entry
@@ -624,6 +724,12 @@ export class SessionServiceImpl implements SessionService {
         this.storage,
         this.accountSessionKey(browserSessionId, userId),
       )
+
+      // Dual-write to D1
+      await this.writeToD1(() =>
+        this.d1Adapter!.removeAccountSession(browserSessionId, userId),
+      )
+
       await Storage.remove(
         this.storage,
         this.userIndexKey(browserSession.tenant_id, userId, browserSessionId),
@@ -695,17 +801,26 @@ export class SessionServiceImpl implements SessionService {
         this.storage,
         this.accountSessionKey(sessionId, userId),
       )
+
+      // Dual-write to D1
+      await this.writeToD1(() =>
+        this.d1Adapter!.removeAccountSession(sessionId, userId),
+      )
+
       await Storage.remove(
         this.storage,
         this.userIndexKey(tenantId, userId, sessionId),
       )
     }
 
-    // Remove the browser session
+    // Remove the browser session from KV
     await Storage.remove(
       this.storage,
       this.browserSessionKey(tenantId, sessionId),
     )
+
+    // Dual-write to D1
+    await this.writeToD1(() => this.d1Adapter!.deleteBrowserSession(sessionId))
 
     return true
   }

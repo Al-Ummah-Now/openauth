@@ -114,6 +114,27 @@ export type {
 // Service implementation
 export { SessionServiceImpl } from "./service.js"
 
+// D1 Adapter for dual-write and admin queries
+export {
+  D1SessionAdapter,
+  BROWSER_SESSION_COLUMNS,
+  ACCOUNT_SESSION_COLUMNS,
+  type D1Database,
+  type D1PreparedStatement,
+  type D1Result,
+  type D1ExecResult,
+  type D1SessionAdapterConfig,
+} from "./d1-adapter.js"
+
+// Admin Session Service for administrative operations
+export {
+  AdminSessionService,
+  type AdminSessionServiceConfig,
+  type UserSessionInfo,
+  type RevokeResult,
+  type SessionStats,
+} from "./admin-service.js"
+
 // Cookie utilities
 export {
   encryptSessionCookie,
