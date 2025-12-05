@@ -1,6 +1,9 @@
 import { Glob, $ } from "bun"
 import pkg from "../package.json"
 
+// Generate migrations from SQL files before building
+await import("./generate-migrations.js")
+
 await $`rm -rf dist`
 const files = new Glob("./src/**/*.{ts,tsx}").scan()
 for await (const file of files) {

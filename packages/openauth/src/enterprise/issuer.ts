@@ -112,6 +112,8 @@ import {
   generateAddAccountUrl,
 } from "./session-integration.js"
 
+import { ensureMigrationsOnce } from "../migrations/index.js"
+
 import {
   issuer as createBaseIssuer,
   type OnSuccessResponder,
@@ -522,7 +524,23 @@ export function createMultiTenantIssuer<
   }
 
   // ============================================
-  // 2. APPLY TENANT RESOLVER MIDDLEWARE
+  // 2. AUTO-MIGRATE DATABASE (if enabled)
+  // ============================================
+
+  // Default: auto-migrate if clientDb is provided
+  const shouldAutoMigrate = config.autoMigrate ?? !!config.clientDb
+
+  if (shouldAutoMigrate && config.clientDb) {
+    const db = config.clientDb
+    app.use("*", async (ctx, next) => {
+      // Run migrations once per isolate (cached)
+      await ensureMigrationsOnce(db)
+      await next()
+    })
+  }
+
+  // ============================================
+  // 3. APPLY TENANT RESOLVER MIDDLEWARE
   // ============================================
 
   const tenantResolverConfig: BaseTenantResolverOptions = {
@@ -543,7 +561,7 @@ export function createMultiTenantIssuer<
   app.use("*", createTenantResolver(tenantResolverConfig))
 
   // ============================================
-  // 3. APPLY THEME RESOLUTION MIDDLEWARE
+  // 4. APPLY THEME RESOLUTION MIDDLEWARE
   // ============================================
 
   app.use(
@@ -558,7 +576,7 @@ export function createMultiTenantIssuer<
   app.use("*", createTenantThemeMiddleware())
 
   // ============================================
-  // 4. APPLY SESSION MIDDLEWARE
+  // 5. APPLY SESSION MIDDLEWARE
   // ============================================
 
   app.use(
