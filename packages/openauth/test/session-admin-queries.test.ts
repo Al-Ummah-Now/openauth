@@ -127,7 +127,12 @@ function createMockD1WithData() {
         let results = accountSessions.filter((a) => a.user_id === userId)
 
         // Apply pagination if present
-        const limitIdx = args.findIndex((_, i) => typeof args[i] === "number" && args[i + 1] !== undefined && typeof args[i + 1] === "number")
+        const limitIdx = args.findIndex(
+          (_, i) =>
+            typeof args[i] === "number" &&
+            args[i + 1] !== undefined &&
+            typeof args[i + 1] === "number",
+        )
         if (limitIdx >= 0) {
           const limit = args[limitIdx]
           const offset = args[limitIdx + 1]
@@ -142,9 +147,7 @@ function createMockD1WithData() {
         !query.includes("JOIN")
       ) {
         const tenantId = args[0]
-        let results = browserSessions.filter(
-          (b) => b.tenant_id === tenantId,
-        )
+        let results = browserSessions.filter((b) => b.tenant_id === tenantId)
 
         // Handle activeOnly filtering
         if (query.includes("last_activity >")) {
@@ -164,12 +167,13 @@ function createMockD1WithData() {
         // revokeAllUserSessions find query
         const userId = args[0]
         const tenantId = args[1]
-        const userAccounts = accountSessions.filter(
-          (a) => a.user_id === userId,
+        const userAccounts = accountSessions.filter((a) => a.user_id === userId)
+        const sessionIds = [
+          ...new Set(userAccounts.map((a) => a.browser_session_id)),
+        ].filter((sid) =>
+          browserSessions.some((b) => b.id === sid && b.tenant_id === tenantId),
         )
-        const sessionIds = [...new Set(userAccounts.map(a => a.browser_session_id))]
-          .filter(sid => browserSessions.some(b => b.id === sid && b.tenant_id === tenantId))
-        return { results: sessionIds.map(id => ({ id })) }
+        return { results: sessionIds.map((id) => ({ id })) }
       }
       if (query.includes("JOIN") && query.includes("user_id = ?")) {
         // User sessions with browser info
@@ -178,16 +182,15 @@ function createMockD1WithData() {
         const limit = args[2] || 100
         const offset = args[3] || 0
 
-        const userAccounts = accountSessions.filter(
-          (a) => a.user_id === userId,
-        )
-        let results = userAccounts.map((a) => {
-          const browser = browserSessions.find(
-            (b) =>
-              b.id === a.browser_session_id && b.tenant_id === tenantId,
-          )
-          return browser ? { ...a, ...browser } : null
-        }).filter(Boolean)
+        const userAccounts = accountSessions.filter((a) => a.user_id === userId)
+        let results = userAccounts
+          .map((a) => {
+            const browser = browserSessions.find(
+              (b) => b.id === a.browser_session_id && b.tenant_id === tenantId,
+            )
+            return browser ? { ...a, ...browser } : null
+          })
+          .filter(Boolean)
 
         results = results.slice(offset, offset + limit)
         return { results }
@@ -196,17 +199,21 @@ function createMockD1WithData() {
         // Expired sessions query
         const maxAge = args[0]
         const limit = args[1] || 100
-        let results = browserSessions.filter(
-          (b) => b.last_activity < maxAge,
-        )
+        let results = browserSessions.filter((b) => b.last_activity < maxAge)
         results = results.slice(0, limit)
         return { results }
       }
-      if (query.includes("user_id") && query.includes("SELECT") && query.includes("account_sessions")) {
+      if (
+        query.includes("user_id") &&
+        query.includes("SELECT") &&
+        query.includes("account_sessions")
+      ) {
         // Account user ids for a browser session
         const browserSessionId = args[0]
-        const results = accountSessions.filter(a => a.browser_session_id === browserSessionId)
-        return { results: results.map(a => ({ user_id: a.user_id })) }
+        const results = accountSessions.filter(
+          (a) => a.browser_session_id === browserSessionId,
+        )
+        return { results: results.map((a) => ({ user_id: a.user_id })) }
       }
       return { results: [] }
     },
@@ -215,20 +222,33 @@ function createMockD1WithData() {
         if (query.includes("browser_sessions")) {
           const tenantId = args[0]
           if (tenantId) {
-            return { count: browserSessions.filter(b => b.tenant_id === tenantId).length }
+            return {
+              count: browserSessions.filter((b) => b.tenant_id === tenantId)
+                .length,
+            }
           }
           return { count: browserSessions.length }
         }
         if (query.includes("account_sessions")) {
           const tenantId = args[0]
           if (tenantId) {
-            const tenantBrowserIds = browserSessions.filter(b => b.tenant_id === tenantId).map(b => b.id)
-            return { count: accountSessions.filter(a => tenantBrowserIds.includes(a.browser_session_id)).length }
+            const tenantBrowserIds = browserSessions
+              .filter((b) => b.tenant_id === tenantId)
+              .map((b) => b.id)
+            return {
+              count: accountSessions.filter((a) =>
+                tenantBrowserIds.includes(a.browser_session_id),
+              ).length,
+            }
           }
           return { count: accountSessions.length }
         }
       }
-      if (query.includes("SELECT") && query.includes("FROM browser_sessions") && query.includes("WHERE id = ?")) {
+      if (
+        query.includes("SELECT") &&
+        query.includes("FROM browser_sessions") &&
+        query.includes("WHERE id = ?")
+      ) {
         const sessionId = args[0]
         const session = browserSessions.find((b) => b.id === sessionId)
         return session || null
@@ -409,8 +429,7 @@ describe("AdminSessionService", () => {
       // Should exclude expired browser-3
       expect(
         activeSessions.every(
-          (s: any) =>
-            s.last_activity > Date.now() - 7 * 24 * 60 * 60 * 1000,
+          (s: any) => s.last_activity > Date.now() - 7 * 24 * 60 * 60 * 1000,
         ),
       ).toBe(true)
     })

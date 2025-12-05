@@ -244,7 +244,10 @@ export class D1SessionAdapter {
       WHERE id = ?
     `
 
-    await this.db.prepare(query).bind(...values).run()
+    await this.db
+      .prepare(query)
+      .bind(...values)
+      .run()
   }
 
   /**
@@ -337,7 +340,9 @@ export class D1SessionAdapter {
   /**
    * List all account sessions for a browser session
    */
-  async listAccountSessions(browserSessionId: string): Promise<AccountSession[]> {
+  async listAccountSessions(
+    browserSessionId: string,
+  ): Promise<AccountSession[]> {
     const query = `
       SELECT ${ACCOUNT_SESSION_COLUMNS.join(", ")}
       FROM ${this.accountTable}
@@ -425,7 +430,15 @@ export class D1SessionAdapter {
     tenantId: string
     limit?: number
     offset?: number
-  }): Promise<Array<AccountSession & { user_agent: string; ip_address: string; last_activity: number }>> {
+  }): Promise<
+    Array<
+      AccountSession & {
+        user_agent: string
+        ip_address: string
+        last_activity: number
+      }
+    >
+  > {
     const limit = params.limit || 100
     const offset = params.offset || 0
 
@@ -445,7 +458,13 @@ export class D1SessionAdapter {
     const result = await this.db
       .prepare(query)
       .bind(params.userId, params.tenantId, limit, offset)
-      .all<AccountSessionRow & { user_agent: string; ip_address: string; last_activity: number }>()
+      .all<
+        AccountSessionRow & {
+          user_agent: string
+          ip_address: string
+          last_activity: number
+        }
+      >()
 
     return (result.results || []).map((row) => ({
       ...this.rowToAccountSession(row),
@@ -611,20 +630,36 @@ export class D1SessionAdapter {
       usersQuery = `SELECT COUNT(DISTINCT user_id) as count FROM ${this.accountTable}`
     }
 
-    const [browserResult, accountResult, activeResult, usersResult] = await Promise.all([
-      params.tenantId
-        ? this.db.prepare(browserQuery).bind(params.tenantId).first<{ count: number }>()
-        : this.db.prepare(browserQuery).first<{ count: number }>(),
-      params.tenantId
-        ? this.db.prepare(accountQuery).bind(params.tenantId).first<{ count: number }>()
-        : this.db.prepare(accountQuery).first<{ count: number }>(),
-      params.tenantId
-        ? this.db.prepare(activeQuery).bind(params.tenantId, activeCutoff).first<{ count: number }>()
-        : this.db.prepare(activeQuery).bind(activeCutoff).first<{ count: number }>(),
-      params.tenantId
-        ? this.db.prepare(usersQuery).bind(params.tenantId).first<{ count: number }>()
-        : this.db.prepare(usersQuery).first<{ count: number }>(),
-    ])
+    const [browserResult, accountResult, activeResult, usersResult] =
+      await Promise.all([
+        params.tenantId
+          ? this.db
+              .prepare(browserQuery)
+              .bind(params.tenantId)
+              .first<{ count: number }>()
+          : this.db.prepare(browserQuery).first<{ count: number }>(),
+        params.tenantId
+          ? this.db
+              .prepare(accountQuery)
+              .bind(params.tenantId)
+              .first<{ count: number }>()
+          : this.db.prepare(accountQuery).first<{ count: number }>(),
+        params.tenantId
+          ? this.db
+              .prepare(activeQuery)
+              .bind(params.tenantId, activeCutoff)
+              .first<{ count: number }>()
+          : this.db
+              .prepare(activeQuery)
+              .bind(activeCutoff)
+              .first<{ count: number }>(),
+        params.tenantId
+          ? this.db
+              .prepare(usersQuery)
+              .bind(params.tenantId)
+              .first<{ count: number }>()
+          : this.db.prepare(usersQuery).first<{ count: number }>(),
+      ])
 
     return {
       totalBrowserSessions: browserResult?.count || 0,

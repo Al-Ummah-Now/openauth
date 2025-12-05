@@ -16,7 +16,15 @@
  * @see /packages/openauth/docs/ARCHITECTURE_PLAN.md
  */
 
-import { expect, test, describe, beforeEach, mock, afterEach, setSystemTime } from "bun:test"
+import {
+  expect,
+  test,
+  describe,
+  beforeEach,
+  mock,
+  afterEach,
+  setSystemTime,
+} from "bun:test"
 import { MemoryStorage } from "../src/storage/memory.js"
 import { SessionServiceImpl } from "../src/session/service.js"
 
