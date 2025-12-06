@@ -203,6 +203,7 @@ describe("Session Integration - handlePromptParameter", () => {
   let storage: ReturnType<typeof MemoryStorage>
   let sessionService: SessionServiceImpl
   let browserSession: BrowserSession
+  let activeAccount: AccountSession
   let authorization: EnterpriseAuthorizationState
 
   beforeEach(async () => {
@@ -217,7 +218,7 @@ describe("Session Integration - handlePromptParameter", () => {
     })
 
     // Add an account to the session
-    await sessionService.addAccountToSession({
+    activeAccount = await sessionService.addAccountToSession({
       browserSessionId: browserSession.id,
       userId: "user-123",
       subjectType: "user",
@@ -258,7 +259,7 @@ describe("Session Integration - handlePromptParameter", () => {
     expect(location).toContain("error=login_required")
   })
 
-  test("prompt=none proceeds if session exists", async () => {
+  test("prompt=none returns silentAuth if session exists", async () => {
     const ctx = createMockContext()
 
     const result = await handlePromptParameter(
@@ -267,9 +268,12 @@ describe("Session Integration - handlePromptParameter", () => {
       sessionService,
       browserSession,
       authorization,
+      activeAccount,
     )
 
     expect(result.proceed).toBe(true)
+    expect(result.silentAuth).toBeDefined()
+    expect(result.silentAuth?.user_id).toBe("user-123")
     expect(result.forceReauth).toBeUndefined()
   })
 

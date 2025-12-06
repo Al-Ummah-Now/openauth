@@ -71,7 +71,7 @@ import type {
 import { DEFAULT_SESSION_CONFIG } from "../contracts/types.js"
 import type { Provider } from "../provider/provider.js"
 import type { SubjectPayload, SubjectSchema } from "../subject.js"
-import type { StorageAdapter } from "../storage/storage.js"
+import { Storage, type StorageAdapter } from "../storage/storage.js"
 
 import {
   createTenantResolver,
@@ -694,6 +694,7 @@ export function createMultiTenantIssuer<
       config.sessionService,
       browserSession,
       authorization,
+      activeAccount,
     )
 
     if (!promptResult.proceed) {
@@ -714,6 +715,38 @@ export function createMultiTenantIssuer<
       if (maxAgeResult.forceReauth) {
         promptResult.forceReauth = true
       }
+    }
+
+    // Handle silent auth (prompt=none with authenticated user)
+    // Issue authorization code directly without going through provider flow
+    if (promptResult.silentAuth && !promptResult.forceReauth) {
+      const account = promptResult.silentAuth
+      const code = crypto.randomUUID()
+
+      // Store authorization code (same as base issuer)
+      await Storage.set(
+        config.storage,
+        ["oauth:code", code],
+        {
+          type: account.subject_type,
+          properties: account.subject_properties,
+          subject: account.user_id,
+          redirectURI: authorization.redirect_uri,
+          clientID: authorization.client_id,
+          pkce: authorization.pkce,
+          ttl: {
+            access: config.ttl?.access ?? 60 * 60 * 24 * 30 * 1000, // 30 days
+            refresh: config.ttl?.refresh ?? 60 * 60 * 24 * 365 * 1000, // 1 year
+          },
+        },
+        60 * 10 * 1000, // 10 min TTL for code
+      )
+
+      // Redirect back with code
+      const location = new URL(authorization.redirect_uri)
+      location.searchParams.set("code", code)
+      location.searchParams.set("state", authorization.state || "")
+      return c.redirect(location.toString(), 302)
     }
 
     // Delegate to base issuer for actual authorization

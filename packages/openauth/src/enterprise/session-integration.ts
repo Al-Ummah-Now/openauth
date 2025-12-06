@@ -127,6 +127,7 @@ export async function handlePromptParameter(
   sessionService: SessionService,
   browserSession: BrowserSession | null,
   authorization: EnterpriseAuthorizationState,
+  activeAccount: AccountSession | null = null,
 ): Promise<PromptHandlerResult> {
   // No prompt specified - proceed normally
   if (!prompt) {
@@ -135,7 +136,7 @@ export async function handlePromptParameter(
 
   switch (prompt) {
     case "none":
-      return handlePromptNone(ctx, browserSession, authorization)
+      return handlePromptNone(ctx, browserSession, authorization, activeAccount)
 
     case "login":
       return handlePromptLogin()
@@ -162,15 +163,17 @@ export async function handlePromptParameter(
  * Handle prompt=none (silent authentication).
  *
  * If the user is not authenticated, return an error response.
+ * If authenticated, return silentAuth with the active account to issue code directly.
  * This is used for silent token renewal in SPAs.
  */
 async function handlePromptNone(
   ctx: Context,
   browserSession: BrowserSession | null,
   authorization: EnterpriseAuthorizationState,
+  activeAccount: AccountSession | null,
 ): Promise<PromptHandlerResult> {
   // Check if user has an active session
-  if (!browserSession || !browserSession.active_user_id) {
+  if (!browserSession || !browserSession.active_user_id || !activeAccount) {
     // No session - return login_required error
     const errorResponse = createOIDCErrorRedirect(authorization.redirect_uri, {
       error: "login_required",
@@ -185,8 +188,25 @@ async function handlePromptNone(
     }
   }
 
-  // User is authenticated - proceed with the flow
-  return { proceed: true }
+  // Check if session is expired
+  if (Date.now() > activeAccount.expires_at) {
+    const errorResponse = createOIDCErrorRedirect(authorization.redirect_uri, {
+      error: "login_required",
+      error_description: "Session has expired. Interactive login is required.",
+      state: authorization.state,
+    })
+
+    return {
+      proceed: false,
+      response: ctx.redirect(errorResponse),
+    }
+  }
+
+  // User is authenticated - return silentAuth to issue code directly
+  return {
+    proceed: true,
+    silentAuth: activeAccount,
+  }
 }
 
 /**

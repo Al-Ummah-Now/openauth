@@ -490,6 +490,11 @@ export interface PromptHandlerResult {
    * Force re-authentication (for prompt=login)
    */
   forceReauth?: boolean
+
+  /**
+   * Silent auth - issue code directly for this account (for prompt=none)
+   */
+  silentAuth?: AccountSession
 }
 
 /**
