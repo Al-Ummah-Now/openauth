@@ -1,72 +1,69 @@
 #!/usr/bin/env node
 
 // bin/cli.ts
-import { execSync, spawnSync } from "child_process";
-import { readFileSync, readdirSync, existsSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-var __filename2 = fileURLToPath(import.meta.url);
-var __dirname2 = dirname(__filename2);
-var migrationsDir = join(__dirname2, "..", "src", "migrations");
+import { execSync, spawnSync } from "child_process"
+import { readFileSync, readdirSync, existsSync } from "fs"
+import { dirname, join } from "path"
+import { fileURLToPath } from "url"
+var __filename2 = fileURLToPath(import.meta.url)
+var __dirname2 = dirname(__filename2)
+var migrationsDir = join(__dirname2, "..", "src", "migrations")
 function stripJsonComments(content) {
-  content = content.replace(/\/\/.*$/gm, "");
-  content = content.replace(/\/\*[\s\S]*?\*\//g, "");
-  return content;
+  content = content.replace(/\/\/.*$/gm, "")
+  content = content.replace(/\/\*[\s\S]*?\*\//g, "")
+  return content
 }
 function parseConfigFile(configPath) {
   if (!existsSync(configPath)) {
-    return null;
+    return null
   }
-  const content = readFileSync(configPath, "utf-8");
+  const content = readFileSync(configPath, "utf-8")
   if (configPath.endsWith(".toml")) {
-    const match = content.match(/database_name\s*=\s*"([^"]+)"/);
+    const match = content.match(/database_name\s*=\s*"([^"]+)"/)
     if (match) {
-      return { databaseName: match[1], configFile: configPath };
+      return { databaseName: match[1], configFile: configPath }
     }
   } else if (configPath.endsWith(".jsonc")) {
     try {
-      const stripped = stripJsonComments(content);
-      const config = JSON.parse(stripped);
-      const dbName = extractDbNameFromJson(config);
+      const stripped = stripJsonComments(content)
+      const config = JSON.parse(stripped)
+      const dbName = extractDbNameFromJson(config)
       if (dbName) {
-        return { databaseName: dbName, configFile: configPath };
+        return { databaseName: dbName, configFile: configPath }
       }
     } catch {}
   } else if (configPath.endsWith(".json")) {
     try {
-      const config = JSON.parse(content);
-      const dbName = extractDbNameFromJson(config);
+      const config = JSON.parse(content)
+      const dbName = extractDbNameFromJson(config)
       if (dbName) {
-        return { databaseName: dbName, configFile: configPath };
+        return { databaseName: dbName, configFile: configPath }
       }
     } catch {}
   }
-  return null;
+  return null
 }
 function parseWranglerConfig(customConfig) {
   if (customConfig) {
-    return parseConfigFile(customConfig);
+    return parseConfigFile(customConfig)
   }
-  const cwd = process.cwd();
-  const tomlResult = parseConfigFile(join(cwd, "wrangler.toml"));
-  if (tomlResult)
-    return tomlResult;
-  const jsonResult = parseConfigFile(join(cwd, "wrangler.json"));
-  if (jsonResult)
-    return jsonResult;
-  const jsoncResult = parseConfigFile(join(cwd, "wrangler.jsonc"));
-  if (jsoncResult)
-    return jsoncResult;
-  return null;
+  const cwd = process.cwd()
+  const tomlResult = parseConfigFile(join(cwd, "wrangler.toml"))
+  if (tomlResult) return tomlResult
+  const jsonResult = parseConfigFile(join(cwd, "wrangler.json"))
+  if (jsonResult) return jsonResult
+  const jsoncResult = parseConfigFile(join(cwd, "wrangler.jsonc"))
+  if (jsoncResult) return jsoncResult
+  return null
 }
 function extractDbNameFromJson(config) {
   if (Array.isArray(config.d1_databases) && config.d1_databases.length > 0) {
-    const db = config.d1_databases[0];
+    const db = config.d1_databases[0]
     if (db.database_name) {
-      return db.database_name;
+      return db.database_name
     }
   }
-  return null;
+  return null
 }
 function printHelp() {
   console.log(`
@@ -89,91 +86,97 @@ Examples:
   openauth migrate --config wrangler.staging.toml --local
 
 The migrate command executes OpenAuth SQL migrations against your D1 database.
-`);
+`)
 }
 function migrate(args) {
-  let dbName;
-  let isLocal = false;
-  let configFile;
-  for (let i = 0;i < args.length; i++) {
-    const arg = args[i];
+  let dbName
+  let isLocal = false
+  let configFile
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
     if (arg === "--local") {
-      isLocal = true;
+      isLocal = true
     } else if (arg === "--config" || arg === "-c") {
-      configFile = args[++i];
+      configFile = args[++i]
       if (!configFile) {
-        console.error("Error: --config requires a file path");
-        process.exit(1);
+        console.error("Error: --config requires a file path")
+        process.exit(1)
       }
     } else if (!arg.startsWith("-")) {
-      dbName = arg;
+      dbName = arg
     }
   }
   if (!dbName) {
-    const config = parseWranglerConfig(configFile);
+    const config = parseWranglerConfig(configFile)
     if (config) {
-      dbName = config.databaseName;
-      console.log(`Found database in ${config.configFile}: ${dbName}`);
+      dbName = config.databaseName
+      console.log(`Found database in ${config.configFile}: ${dbName}`)
     } else {
       if (configFile) {
-        console.error(`Error: Could not read database from ${configFile}`);
+        console.error(`Error: Could not read database from ${configFile}`)
       } else {
-        console.error("Error: No database name provided and couldn't find wrangler config");
-        console.error("Supported: wrangler.toml, wrangler.json, wrangler.jsonc");
+        console.error(
+          "Error: No database name provided and couldn't find wrangler config",
+        )
+        console.error("Supported: wrangler.toml, wrangler.json, wrangler.jsonc")
       }
-      console.error("Usage: openauth migrate <database-name>");
-      process.exit(1);
+      console.error("Usage: openauth migrate <database-name>")
+      process.exit(1)
     }
   }
   try {
-    execSync("wrangler --version", { stdio: "ignore" });
+    execSync("wrangler --version", { stdio: "ignore" })
   } catch {
-    console.error("Error: wrangler CLI not found");
-    console.error("Install it with: npm install -g wrangler");
-    process.exit(1);
+    console.error("Error: wrangler CLI not found")
+    console.error("Install it with: npm install -g wrangler")
+    process.exit(1)
   }
-  const sqlFiles = readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();
+  const sqlFiles = readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
   if (sqlFiles.length === 0) {
-    console.error("Error: No SQL migration files found");
-    process.exit(1);
+    console.error("Error: No SQL migration files found")
+    process.exit(1)
   }
-  console.log(`Applying ${sqlFiles.length} OpenAuth migrations to ${dbName}${isLocal ? " (local)" : ""}...`);
+  console.log(
+    `Applying ${sqlFiles.length} OpenAuth migrations to ${dbName}${isLocal ? " (local)" : ""}...`,
+  )
   for (const file of sqlFiles) {
-    const filePath = join(migrationsDir, file);
-    console.log(`  Applying ${file}...`);
-    const wranglerArgs = ["d1", "execute", dbName, "--file", filePath];
+    const filePath = join(migrationsDir, file)
+    console.log(`  Applying ${file}...`)
+    const wranglerArgs = ["d1", "execute", dbName, "--file", filePath]
     if (isLocal) {
-      wranglerArgs.push("--local");
+      wranglerArgs.push("--local")
     }
     if (configFile) {
-      wranglerArgs.push("--config", configFile);
+      wranglerArgs.push("--config", configFile)
     }
     const result = spawnSync("wrangler", wranglerArgs, {
       stdio: "inherit",
-      shell: true
-    });
+      shell: true,
+    })
     if (result.status !== 0) {
-      console.error(`Error applying ${file}`);
-      process.exit(result.status || 1);
+      console.error(`Error applying ${file}`)
+      process.exit(result.status || 1)
     }
   }
-  console.log("Migrations applied successfully!");
+  console.log("Migrations applied successfully!")
 }
-var args = process.argv.slice(2);
-var command = args[0];
+var args = process.argv.slice(2)
+var command = args[0]
 switch (command) {
   case "migrate":
-    migrate(args.slice(1));
-    break;
+    migrate(args.slice(1))
+    break
   case "help":
   case "--help":
   case "-h":
-    printHelp();
-    break;
+    printHelp()
+    break
   default:
     if (command) {
-      console.error(`Unknown command: ${command}`);
+      console.error(`Unknown command: ${command}`)
     }
-    printHelp();
-    process.exit(command ? 1 : 0);
+    printHelp()
+    process.exit(command ? 1 : 0)
 }
