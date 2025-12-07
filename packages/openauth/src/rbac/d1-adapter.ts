@@ -755,4 +755,149 @@ export class RBACAdapter {
       created_at: result.created_at,
     }
   }
+
+  /**
+   * Update a role
+   *
+   * @param roleId - The role ID
+   * @param tenantId - The tenant ID for isolation
+   * @param updates - The fields to update
+   * @returns The updated role
+   * @throws RBACError if role not found or invalid input
+   */
+  async updateRole(
+    roleId: string,
+    tenantId: string,
+    updates: { name?: string; description?: string },
+  ): Promise<Role> {
+    const now = Date.now()
+    const setClauses: string[] = ["updated_at = ?"]
+    const values: (string | number | null)[] = [now]
+
+    if (updates.name !== undefined) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(updates.name)) {
+        throw new RBACError(
+          "invalid_input",
+          "Role name must contain only alphanumeric characters, hyphens, and underscores",
+        )
+      }
+      setClauses.push("name = ?")
+      values.push(updates.name)
+    }
+
+    if (updates.description !== undefined) {
+      setClauses.push("description = ?")
+      values.push(updates.description ?? null)
+    }
+
+    values.push(roleId, tenantId)
+
+    await this.db
+      .prepare(
+        `UPDATE rbac_roles SET ${setClauses.join(", ")} WHERE id = ? AND tenant_id = ?`,
+      )
+      .bind(...values)
+      .run()
+
+    const updated = await this.getRole(roleId, tenantId)
+    if (!updated) {
+      throw new RBACError("role_not_found", "Role not found")
+    }
+
+    return updated
+  }
+
+  /**
+   * Delete a role and all associated assignments
+   *
+   * @param roleId - The role ID
+   * @param tenantId - The tenant ID for isolation
+   * @throws RBACError if role not found or is a system role
+   */
+  async deleteRole(roleId: string, tenantId: string): Promise<void> {
+    const role = await this.getRole(roleId, tenantId)
+    if (!role) {
+      throw new RBACError("role_not_found", "Role not found")
+    }
+
+    if (role.is_system_role) {
+      throw new RBACError(
+        "cannot_delete_system_role",
+        "Cannot delete system role",
+      )
+    }
+
+    // Delete in order: user_roles -> role_permissions -> role
+    await this.db
+      .prepare("DELETE FROM rbac_user_roles WHERE role_id = ? AND tenant_id = ?")
+      .bind(roleId, tenantId)
+      .run()
+
+    await this.db
+      .prepare("DELETE FROM rbac_role_permissions WHERE role_id = ?")
+      .bind(roleId)
+      .run()
+
+    await this.db
+      .prepare("DELETE FROM rbac_roles WHERE id = ? AND tenant_id = ?")
+      .bind(roleId, tenantId)
+      .run()
+  }
+
+  /**
+   * Delete a permission and remove from all roles
+   *
+   * @param permissionId - The permission ID
+   * @param appId - Optional app ID to verify ownership
+   * @throws RBACError if permission not found
+   */
+  async deletePermission(permissionId: string, appId?: string): Promise<void> {
+    const permission = await this.getPermission(permissionId)
+    if (!permission) {
+      throw new RBACError("permission_not_found", "Permission not found")
+    }
+
+    if (appId && permission.app_id !== appId) {
+      throw new RBACError(
+        "permission_not_found",
+        "Permission not found in specified app",
+      )
+    }
+
+    // Remove from all roles first
+    await this.db
+      .prepare("DELETE FROM rbac_role_permissions WHERE permission_id = ?")
+      .bind(permissionId)
+      .run()
+
+    // Delete the permission
+    await this.db
+      .prepare("DELETE FROM rbac_permissions WHERE id = ?")
+      .bind(permissionId)
+      .run()
+  }
+
+  /**
+   * Get all user IDs that have a specific role assigned
+   *
+   * @param roleId - The role ID
+   * @param tenantId - The tenant ID for isolation
+   * @returns Array of user IDs
+   */
+  async getUsersWithRole(roleId: string, tenantId: string): Promise<string[]> {
+    const result = await this.db
+      .prepare(
+        `
+        SELECT DISTINCT user_id
+        FROM rbac_user_roles
+        WHERE role_id = ? AND tenant_id = ?
+        `,
+      )
+      .bind(roleId, tenantId)
+      .all<{ user_id: string }>()
+
+    if (!result.results) return []
+
+    return result.results.map((row) => row.user_id)
+  }
 }

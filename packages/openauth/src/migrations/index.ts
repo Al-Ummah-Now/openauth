@@ -30,6 +30,9 @@
  * - 002_add_tenant_support.sql
  * - 003_session_management.sql
  * - 004_rbac_schema.sql
+ * - 005_user_management.sql
+ * - 006_identity_providers.sql
+ * - 007_oauth_client_management.sql
  *
  * @packageDocumentation
  */

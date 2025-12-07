@@ -532,4 +532,82 @@ export class RBACServiceImpl implements RBACService {
   async listUserRoles(userId: string, tenantId: string): Promise<UserRole[]> {
     return this.adapter.listUserRoles(userId, tenantId)
   }
+
+  // ==========================================
+  // Get Operations
+  // ==========================================
+
+  /**
+   * Get a role by ID
+   *
+   * @param roleId - The role ID
+   * @param tenantId - The tenant ID
+   * @returns The role or null if not found
+   */
+  async getRole(roleId: string, tenantId: string): Promise<Role | null> {
+    return this.adapter.getRole(roleId, tenantId)
+  }
+
+  /**
+   * Get a permission by ID
+   *
+   * @param permissionId - The permission ID
+   * @returns The permission or null if not found
+   */
+  async getPermission(permissionId: string): Promise<Permission | null> {
+    return this.adapter.getPermission(permissionId)
+  }
+
+  // ==========================================
+  // Update Operations
+  // ==========================================
+
+  /**
+   * Update a role
+   *
+   * @param params - Role update parameters
+   * @returns The updated role
+   */
+  async updateRole(params: {
+    roleId: string
+    tenantId: string
+    name?: string
+    description?: string
+  }): Promise<Role> {
+    return this.adapter.updateRole(params.roleId, params.tenantId, {
+      name: params.name,
+      description: params.description,
+    })
+  }
+
+  // ==========================================
+  // Delete Operations
+  // ==========================================
+
+  /**
+   * Delete a role with cascading cleanup
+   *
+   * Invalidates cache for affected users before deletion.
+   *
+   * @param roleId - The role ID
+   * @param tenantId - The tenant ID
+   */
+  async deleteRole(roleId: string, tenantId: string): Promise<void> {
+    // Invalidate cache for affected users before deletion
+    const usersWithRole = await this.adapter.getUsersWithRole(roleId, tenantId)
+    for (const userId of usersWithRole) {
+      await this.invalidateUserCache(userId, tenantId)
+    }
+
+    await this.adapter.deleteRole(roleId, tenantId)
+  }
+
+  /**
+   * Delete a permission with cascading cleanup
+   *
+   * @param permissionId - The permission ID
+   */
+  async deletePermission(permissionId: string): Promise<void> {
+    await this.adapter.deletePermission(permissionId)
+  }
 }

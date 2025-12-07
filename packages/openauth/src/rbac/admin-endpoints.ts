@@ -741,6 +741,224 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
     return c.json({ permissions })
   })
 
+  // ==========================================
+  // Single Role Operations
+  // ==========================================
+
+  /**
+   * GET /roles/:roleId - Get a single role with its permissions
+   *
+   * Response:
+   *   {
+   *     "role": {
+   *       "id": "role-uuid",
+   *       "name": "admin",
+   *       "tenant_id": "tenant-1",
+   *       "description": "Administrator role",
+   *       "is_system_role": false,
+   *       "created_at": 1699999999999,
+   *       "updated_at": 1699999999999
+   *     },
+   *     "permissions": [
+   *       {
+   *         "id": "perm-uuid",
+   *         "name": "posts:read",
+   *         "app_id": "my-app",
+   *         "resource": "posts",
+   *         "action": "read",
+   *         "description": "Read blog posts",
+   *         "created_at": 1699999999999
+   *       }
+   *     ]
+   *   }
+   */
+  router.get("/roles/:roleId", async (c) => {
+    const tenantId = c.get("tenantId")
+    const roleId = c.req.param("roleId")
+
+    if (!roleId) {
+      return c.json(
+        { error: "Bad Request", message: "roleId is required" },
+        400,
+      )
+    }
+
+    const role = await service.getRole(roleId, tenantId)
+    if (!role) {
+      return c.json({ error: "Not Found", message: "Role not found" }, 404)
+    }
+
+    const permissions = await service.listRolePermissions(roleId)
+
+    return c.json({ role, permissions })
+  })
+
+  /**
+   * PATCH /roles/:roleId - Update a role
+   *
+   * Request body:
+   *   {
+   *     "name": "new-name",  // optional
+   *     "description": "New description"  // optional
+   *   }
+   *
+   * Response:
+   *   {
+   *     "id": "role-uuid",
+   *     "name": "new-name",
+   *     "tenant_id": "tenant-1",
+   *     "description": "New description",
+   *     "is_system_role": false,
+   *     "created_at": 1699999999999,
+   *     "updated_at": 1699999999999
+   *   }
+   */
+  router.patch("/roles/:roleId", async (c) => {
+    const tenantId = c.get("tenantId")
+    const roleId = c.req.param("roleId")
+
+    if (!roleId) {
+      return c.json(
+        { error: "Bad Request", message: "roleId is required" },
+        400,
+      )
+    }
+
+    let body: { name?: string; description?: string }
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json({ error: "Bad Request", message: "Invalid JSON body" }, 400)
+    }
+
+    if (body.name === undefined && body.description === undefined) {
+      return c.json(
+        {
+          error: "Bad Request",
+          message: "At least one of name or description must be provided",
+        },
+        400,
+      )
+    }
+
+    if (body.name !== undefined) {
+      if (typeof body.name !== "string" || body.name.length === 0) {
+        return c.json(
+          { error: "Bad Request", message: "name must be a non-empty string" },
+          400,
+        )
+      }
+      if (!/^[a-zA-Z0-9_-]+$/.test(body.name)) {
+        return c.json(
+          {
+            error: "Bad Request",
+            message:
+              "name must contain only alphanumeric characters, hyphens, and underscores",
+          },
+          400,
+        )
+      }
+    }
+
+    try {
+      const role = await service.updateRole({
+        roleId,
+        tenantId,
+        name: body.name,
+        description: body.description,
+      })
+      return c.json(role)
+    } catch (error) {
+      if (error instanceof RBACError) {
+        if (error.code === "role_not_found") {
+          return c.json({ error: "Not Found", message: error.message }, 404)
+        }
+        if (error.code === "invalid_input") {
+          return c.json({ error: "Bad Request", message: error.message }, 400)
+        }
+      }
+      throw error
+    }
+  })
+
+  /**
+   * DELETE /roles/:roleId - Delete a role
+   *
+   * Cascades to delete:
+   *   - All user role assignments
+   *   - All role permission assignments
+   *
+   * Response: 204 No Content
+   *
+   * Errors:
+   *   - 404: Role not found
+   *   - 403: Cannot delete system role
+   */
+  router.delete("/roles/:roleId", async (c) => {
+    const tenantId = c.get("tenantId")
+    const roleId = c.req.param("roleId")
+
+    if (!roleId) {
+      return c.json(
+        { error: "Bad Request", message: "roleId is required" },
+        400,
+      )
+    }
+
+    try {
+      await service.deleteRole(roleId, tenantId)
+      return c.body(null, 204)
+    } catch (error) {
+      if (error instanceof RBACError) {
+        if (error.code === "role_not_found") {
+          return c.json({ error: "Not Found", message: error.message }, 404)
+        }
+        if (error.code === "cannot_delete_system_role") {
+          return c.json({ error: "Forbidden", message: error.message }, 403)
+        }
+      }
+      throw error
+    }
+  })
+
+  // ==========================================
+  // Single Permission Operations
+  // ==========================================
+
+  /**
+   * DELETE /permissions/:permissionId - Delete a permission
+   *
+   * Cascades to delete:
+   *   - All role permission assignments
+   *
+   * Response: 204 No Content
+   *
+   * Errors:
+   *   - 404: Permission not found
+   */
+  router.delete("/permissions/:permissionId", async (c) => {
+    const permissionId = c.req.param("permissionId")
+
+    if (!permissionId) {
+      return c.json(
+        { error: "Bad Request", message: "permissionId is required" },
+        400,
+      )
+    }
+
+    try {
+      await service.deletePermission(permissionId)
+      return c.body(null, 204)
+    } catch (error) {
+      if (error instanceof RBACError) {
+        if (error.code === "permission_not_found") {
+          return c.json({ error: "Not Found", message: error.message }, 404)
+        }
+      }
+      throw error
+    }
+  })
+
   return router
 }
 

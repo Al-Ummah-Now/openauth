@@ -338,6 +338,22 @@ export interface RBACService {
   listPermissions(appId: string): Promise<Permission[]>
   listRolePermissions(roleId: string): Promise<Permission[]>
   listUserRoles(userId: string, tenantId: string): Promise<UserRole[]>
+
+  // Get operations
+  getRole(roleId: string, tenantId: string): Promise<Role | null>
+  getPermission(permissionId: string): Promise<Permission | null>
+
+  // Update operations
+  updateRole(params: {
+    roleId: string
+    tenantId: string
+    name?: string
+    description?: string
+  }): Promise<Role>
+
+  // Delete operations
+  deleteRole(roleId: string, tenantId: string): Promise<void>
+  deletePermission(permissionId: string): Promise<void>
 }
 
 // ============================================
@@ -433,3 +449,5 @@ export type RBACErrorCode =
   | "app_not_found"
   | "role_already_assigned"
   | "permission_denied"
+  | "invalid_input"
+  | "cannot_delete_system_role"

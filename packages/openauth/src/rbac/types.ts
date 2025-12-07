@@ -86,3 +86,31 @@ export interface CachedPermissions {
   permissions: string[]
   cachedAt: number
 }
+
+// ==========================================
+// API Request/Response Types
+// ==========================================
+
+/**
+ * Request body for updating a role
+ */
+export interface UpdateRoleRequest {
+  name?: string
+  description?: string
+}
+
+/**
+ * Response for getting a single role with permissions
+ */
+export interface GetRoleResponse {
+  role: import("../contracts/types.js").Role
+  permissions: import("../contracts/types.js").Permission[]
+}
+
+/**
+ * Standard error response
+ */
+export interface ErrorResponse {
+  error: string
+  message: string
+}

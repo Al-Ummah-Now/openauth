@@ -743,6 +743,228 @@ describe("RBACAdapter", () => {
       expect(sql).toContain("WHERE rp.role_id IN (?, ?, ?)")
     })
   })
+
+  // ==========================================
+  // Update Operations
+  // ==========================================
+
+  describe("updateRole", () => {
+    test("updates role name", async () => {
+      const now = Date.now()
+      const existingRole = {
+        id: "role-1",
+        name: "new-name",
+        tenant_id: "tenant-1",
+        description: "Admin",
+        is_system_role: 0,
+        created_at: now,
+        updated_at: now,
+      }
+
+      mockDb._setResults([existingRole])
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.updateRole("role-1", "tenant-1", {
+        name: "new-name",
+      })
+
+      expect(result.name).toBe("new-name")
+
+      // Check UPDATE query was called
+      const updateCall = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("UPDATE rbac_roles"),
+      )
+      expect(updateCall).toBeDefined()
+    })
+
+    test("updates role description", async () => {
+      const now = Date.now()
+      const existingRole = {
+        id: "role-1",
+        name: "admin",
+        tenant_id: "tenant-1",
+        description: "New description",
+        is_system_role: 0,
+        created_at: now,
+        updated_at: now,
+      }
+
+      mockDb._setResults([existingRole])
+
+      const result = await adapter.updateRole("role-1", "tenant-1", {
+        description: "New description",
+      })
+
+      expect(result.description).toBe("New description")
+    })
+
+    test("throws error for invalid role name format", async () => {
+      await expect(
+        adapter.updateRole("role-1", "tenant-1", {
+          name: "invalid name!",
+        }),
+      ).rejects.toThrow(
+        "Role name must contain only alphanumeric characters, hyphens, and underscores",
+      )
+    })
+
+    test("throws error when role not found", async () => {
+      mockDb._setResults([]) // No role found
+
+      await expect(
+        adapter.updateRole("nonexistent", "tenant-1", {
+          name: "new-name",
+        }),
+      ).rejects.toThrow("Role not found")
+    })
+  })
+
+  describe("deleteRole", () => {
+    test("deletes role and associated data", async () => {
+      const role = {
+        id: "role-1",
+        name: "admin",
+        tenant_id: "tenant-1",
+        description: "Admin",
+        is_system_role: 0,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      }
+
+      mockDb._setResults([role])
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      await adapter.deleteRole("role-1", "tenant-1")
+
+      // Verify deletion queries were called
+      const deleteUserRoles = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("DELETE FROM rbac_user_roles"),
+      )
+      expect(deleteUserRoles).toBeDefined()
+
+      const deleteRolePermissions = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("DELETE FROM rbac_role_permissions"),
+      )
+      expect(deleteRolePermissions).toBeDefined()
+
+      const deleteRole = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("DELETE FROM rbac_roles"),
+      )
+      expect(deleteRole).toBeDefined()
+    })
+
+    test("throws error when role not found", async () => {
+      mockDb._setResults([]) // No role found
+
+      await expect(
+        adapter.deleteRole("nonexistent", "tenant-1"),
+      ).rejects.toThrow("Role not found")
+    })
+
+    test("throws error when trying to delete system role", async () => {
+      const systemRole = {
+        id: "role-1",
+        name: "super-admin",
+        tenant_id: "tenant-1",
+        description: "System admin",
+        is_system_role: 1, // This is a system role
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      }
+
+      mockDb._setResults([systemRole])
+
+      await expect(adapter.deleteRole("role-1", "tenant-1")).rejects.toThrow(
+        "Cannot delete system role",
+      )
+    })
+  })
+
+  describe("deletePermission", () => {
+    test("deletes permission and removes from roles", async () => {
+      const permission = {
+        id: "perm-1",
+        name: "posts:read",
+        app_id: "app-1",
+        description: "Read",
+        resource: "posts",
+        action: "read",
+        created_at: Date.now(),
+      }
+
+      mockDb._setResults([permission])
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      await adapter.deletePermission("perm-1")
+
+      // Verify deletion queries were called
+      const deleteRolePermissions = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("DELETE FROM rbac_role_permissions"),
+      )
+      expect(deleteRolePermissions).toBeDefined()
+
+      const deletePermission = prepareSpy.mock.calls.find((call) =>
+        call[0].includes("DELETE FROM rbac_permissions"),
+      )
+      expect(deletePermission).toBeDefined()
+    })
+
+    test("throws error when permission not found", async () => {
+      mockDb._setResults([]) // No permission found
+
+      await expect(adapter.deletePermission("nonexistent")).rejects.toThrow(
+        "Permission not found",
+      )
+    })
+
+    test("throws error when permission app_id does not match", async () => {
+      const permission = {
+        id: "perm-1",
+        name: "posts:read",
+        app_id: "app-1",
+        description: "Read",
+        resource: "posts",
+        action: "read",
+        created_at: Date.now(),
+      }
+
+      mockDb._setResults([permission])
+
+      await expect(
+        adapter.deletePermission("perm-1", "different-app"),
+      ).rejects.toThrow("Permission not found in specified app")
+    })
+  })
+
+  describe("getUsersWithRole", () => {
+    test("returns list of user IDs with role", async () => {
+      const userRoles = [{ user_id: "user-1" }, { user_id: "user-2" }]
+
+      mockDb._setResults(userRoles)
+
+      const prepareSpy = spyOn(mockDb, "prepare")
+
+      const result = await adapter.getUsersWithRole("role-1", "tenant-1")
+
+      expect(result).toEqual(["user-1", "user-2"])
+
+      const sql = prepareSpy.mock.calls[0][0]
+      expect(sql).toContain("SELECT DISTINCT user_id")
+      expect(sql).toContain("FROM rbac_user_roles")
+      expect(sql).toContain("WHERE role_id = ? AND tenant_id = ?")
+    })
+
+    test("returns empty array when no users have role", async () => {
+      mockDb._setResults([])
+
+      const result = await adapter.getUsersWithRole("role-1", "tenant-1")
+
+      expect(result).toEqual([])
+    })
+  })
 })
 
 // ============================================
@@ -1429,6 +1651,89 @@ describe("RBACServiceImpl", () => {
       await service.listUserRoles("user-1", "tenant-1")
 
       expect(listUserRolesSpy).toHaveBeenCalledWith("user-1", "tenant-1")
+    })
+
+    test("gets role via adapter", async () => {
+      const getRoleSpy = spyOn(adapter, "getRole").mockResolvedValue(
+        createTestRole(),
+      )
+
+      const result = await service.getRole("role-1", "tenant-1")
+
+      expect(getRoleSpy).toHaveBeenCalledWith("role-1", "tenant-1")
+      expect(result).not.toBeNull()
+      expect(result?.name).toBe("admin")
+    })
+
+    test("gets permission via adapter", async () => {
+      const getPermissionSpy = spyOn(
+        adapter,
+        "getPermission",
+      ).mockResolvedValue(createTestPermission())
+
+      const result = await service.getPermission("perm-1")
+
+      expect(getPermissionSpy).toHaveBeenCalledWith("perm-1")
+      expect(result).not.toBeNull()
+      expect(result?.name).toBe("posts:read")
+    })
+
+    test("updates role via adapter", async () => {
+      const updateRoleSpy = spyOn(adapter, "updateRole").mockResolvedValue(
+        createTestRole({ name: "updated-role" }),
+      )
+
+      const result = await service.updateRole({
+        roleId: "role-1",
+        tenantId: "tenant-1",
+        name: "updated-role",
+        description: "Updated description",
+      })
+
+      expect(updateRoleSpy).toHaveBeenCalledWith("role-1", "tenant-1", {
+        name: "updated-role",
+        description: "Updated description",
+      })
+      expect(result.name).toBe("updated-role")
+    })
+
+    test("deletes role and invalidates cache", async () => {
+      const getUsersWithRoleSpy = spyOn(
+        adapter,
+        "getUsersWithRole",
+      ).mockResolvedValue(["user-1", "user-2"])
+      const deleteRoleSpy = spyOn(adapter, "deleteRole").mockResolvedValue(
+        undefined,
+      )
+      const removeSpy = spyOn(storage, "remove")
+
+      // Pre-populate caches
+      await storage.set(
+        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
+        { permissions: ["posts:read"], cachedAt: Date.now() },
+      )
+      await storage.set(
+        ["rbac", "permissions", "tenant-1", "user-2", "app-1"],
+        { permissions: ["posts:write"], cachedAt: Date.now() },
+      )
+
+      await service.deleteRole("role-1", "tenant-1")
+
+      expect(getUsersWithRoleSpy).toHaveBeenCalledWith("role-1", "tenant-1")
+      expect(deleteRoleSpy).toHaveBeenCalledWith("role-1", "tenant-1")
+      // Cache should have been invalidated for users
+      expect(removeSpy).toHaveBeenCalled()
+    })
+
+    test("deletes permission via adapter", async () => {
+      const deletePermissionSpy = spyOn(
+        adapter,
+        "deletePermission",
+      ).mockResolvedValue(undefined)
+
+      await service.deletePermission("perm-1")
+
+      expect(deletePermissionSpy).toHaveBeenCalledWith("perm-1")
     })
   })
 })

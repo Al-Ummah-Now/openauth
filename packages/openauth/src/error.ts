@@ -25,6 +25,8 @@ export class OauthError extends Error {
       | "unauthorized_client"
       | "access_denied"
       | "unsupported_grant_type"
+      | "invalid_scope"
+      | "invalid_client"
       | "server_error"
       | "temporarily_unavailable",
     public description: string,
@@ -116,5 +118,29 @@ export class InvalidAccessTokenError extends Error {
 export class InvalidAuthorizationCodeError extends Error {
   constructor() {
     super("Invalid authorization code")
+  }
+}
+
+/**
+ * The requested scope is not allowed for this client.
+ */
+export class InvalidScopeError extends OauthError {
+  constructor(deniedScopes: string[]) {
+    super(
+      "invalid_scope",
+      `Requested scope(s) not allowed: ${deniedScopes.join(", ")}`
+    )
+  }
+}
+
+/**
+ * The grant type is not supported for this client.
+ */
+export class UnsupportedGrantTypeError extends OauthError {
+  constructor(grantType: string) {
+    super(
+      "unsupported_grant_type",
+      `Grant type "${grantType}" not allowed for this client`
+    )
   }
 }

@@ -207,6 +207,8 @@ import { D1ClientAdapter } from "./client/d1-adapter.js"
 import { ClientAuthenticator } from "./client/authenticator.js"
 import { AuditService, type TokenUsageEvent } from "./services/audit.js"
 import { RevocationService } from "./revocation.js"
+import { validateScopes, parseScopes, generateM2MToken } from "./m2m/index.js"
+import type { M2MConfig } from "./m2m/types.js"
 
 /** @internal */
 export const aws = awsHandle
@@ -503,6 +505,24 @@ export interface IssuerInput<
     headers?: string[]
     maxAge?: number
   }
+  /**
+   * M2M (Machine-to-Machine) authentication configuration (optional).
+   * Enables OAuth 2.0 Client Credentials Grant (RFC 6749 Section 4.4).
+   *
+   * Requires `clientDb` to be configured for client authentication.
+   *
+   * @example
+   * ```ts
+   * issuer({
+   *   clientDb: env.AUTH_DB,
+   *   m2m: {
+   *     ttl: 3600, // 1 hour token lifetime
+   *     includeTenantId: true
+   *   }
+   * })
+   * ```
+   */
+  m2m?: M2MConfig
 }
 
 /**
@@ -1116,8 +1136,106 @@ export function issuer<
 
       if (grantType === "client_credentials") {
         const provider = form.get("provider")
-        if (!provider)
-          return c.json({ error: "missing `provider` form value" }, 400)
+
+        if (!provider) {
+          // ============================================
+          // M2M CLIENT CREDENTIALS FLOW (RFC 6749 Section 4.4)
+          // ============================================
+          // When no provider is specified, this is a pure M2M flow
+          // using client_id/client_secret from the clientDb.
+
+          if (!clientAuthenticator) {
+            return c.json(
+              {
+                error: "unsupported_grant_type",
+                error_description:
+                  "M2M authentication requires clientDb configuration",
+              },
+              400,
+            )
+          }
+
+          // Extract client credentials (Basic auth or POST body)
+          const credentials = extractClientCredentials(c, form)
+          if (!credentials.clientId || !credentials.clientSecret) {
+            return c.json(
+              {
+                error: "invalid_request",
+                error_description: "Missing client credentials",
+              },
+              400,
+            )
+          }
+
+          // Authenticate client
+          const authResult = await clientAuthenticator.authenticateClient(
+            credentials.clientId,
+            credentials.clientSecret,
+          )
+
+          if (!authResult.client) {
+            return c.json(
+              {
+                error: "invalid_client",
+                error_description: "Client authentication failed",
+              },
+              401,
+            )
+          }
+
+          const client = authResult.client
+
+          // Verify client has client_credentials grant type
+          const allowedGrants = client.grant_types || []
+          if (!allowedGrants.includes("client_credentials")) {
+            return c.json(
+              {
+                error: "unauthorized_client",
+                error_description:
+                  "Client not authorized for client_credentials grant",
+              },
+              403,
+            )
+          }
+
+          // Parse and validate scopes
+          const requestedScopes = parseScopes(form.get("scope")?.toString())
+          const allowedScopes = client.scopes || []
+
+          const scopeResult = validateScopes(requestedScopes, allowedScopes)
+          if (!scopeResult.valid) {
+            return c.json(
+              {
+                error: "invalid_scope",
+                error_description: `Scope(s) not allowed: ${scopeResult.denied.join(", ")}`,
+              },
+              400,
+            )
+          }
+
+          // Generate M2M token
+          const { access_token, expires_in } = await generateM2MToken({
+            clientId: credentials.clientId,
+            tenantId: (client as any).tenant_id,
+            scopes: scopeResult.granted,
+            issuer: issuer(c),
+            signingKey: await signingKey(),
+            config: input.m2m,
+          })
+
+          // Return token response (no refresh token per RFC 6749)
+          return c.json({
+            access_token,
+            token_type: "Bearer",
+            expires_in,
+            scope: scopeResult.granted.join(" "),
+          })
+        }
+
+        // ============================================
+        // PROVIDER-BASED CLIENT CREDENTIALS FLOW
+        // ============================================
+        // When a provider is specified, use the provider's client() method.
         const match = input.providers[provider.toString()]
         if (!match)
           return c.json({ error: "invalid `provider` query parameter" }, 400)
