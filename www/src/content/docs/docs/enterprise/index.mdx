@@ -68,3 +68,13 @@ The enterprise issuer wraps the base OpenAuth issuer and adds:
 ```
 Request → Tenant Resolution → Theme → Session → RBAC → Base Issuer → Response
 ```
+
+## Admin APIs
+
+OpenAuth Enterprise includes REST APIs for programmatic management of users, OAuth clients, identity providers, and RBAC. These APIs require [M2M authentication](/docs/enterprise/m2m/) using client credentials.
+
+- [Admin API Overview](/docs/enterprise/admin-api/) - Authentication, pagination, and error handling
+- [Users API](/docs/enterprise/admin-api/users/) - User CRUD and identity linking
+- [Clients API](/docs/enterprise/admin-api/clients/) - OAuth client management with secret rotation
+- [Providers API](/docs/enterprise/admin-api/providers/) - Dynamic identity provider configuration
+- [RBAC API](/docs/enterprise/admin-api/rbac/) - Permissions, roles, and assignments

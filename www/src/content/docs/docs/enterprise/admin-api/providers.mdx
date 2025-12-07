@@ -1,0 +1,926 @@
+---
+title: Dynamic Providers API
+description: Manage identity providers at runtime with per-tenant OAuth/OIDC configurations.
+---
+
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+<div class="tsdoc">
+<Section type="about">
+
+The Dynamic Providers API enables runtime management of identity providers on a per-tenant basis. Instead of hardcoding OAuth configurations, tenants can configure their own identity providers through an API, enabling true multi-tenant SSO.
+
+</Section>
+
+## Overview
+
+Dynamic providers solve common multi-tenant challenges:
+
+- **Per-tenant branding** - Each tenant uses their own OAuth app credentials
+- **Self-service configuration** - Tenants manage their own SSO settings
+- **Runtime updates** - No deployments needed to add or modify providers
+- **Flexible provider support** - 20+ pre-configured provider types plus custom OAuth2
+
+## Security Features
+
+### AES-256-GCM Encryption at Rest
+
+Client secrets are encrypted before storage using:
+
+- **AES-256-GCM** authenticated encryption
+- **Unique 12-byte IV** per encryption operation
+- **128-bit authentication tag** for integrity verification
+- **32-byte encryption key** (provided via configuration)
+
+```ts
+// Encryption key setup
+const encryptionKey = hexToBytes(env.PROVIDER_ENCRYPTION_KEY)
+// Key must be 64 hex characters (32 bytes / 256 bits)
+```
+
+### Secret Masking
+
+When retrieving providers, secrets are never exposed:
+
+- `hasClientSecret: boolean` indicates if a secret is configured
+- `clientSecretMasked: "****xxxx"` shows only last 4 characters
+- Full secret is never returned after initial creation
+
+### Caching
+
+Provider configurations are cached in memory for performance:
+
+- **Default TTL:** 1 minute (60 seconds)
+- **Cache invalidation:** Automatic on create/update/delete
+- **Per-tenant isolation:** Cache entries are scoped to tenant ID
+
+## Required Scopes
+
+| Endpoint | Required Scope |
+|----------|----------------|
+| `GET /api/providers` | `providers:read` |
+| `GET /api/providers/:id` | `providers:read` |
+| `GET /api/providers/types` | `providers:read` |
+| `POST /api/providers` | `providers:write` |
+| `PATCH /api/providers/:id` | `providers:write` |
+| `DELETE /api/providers/:id` | `providers:write` |
+
+## Supported Provider Types
+
+### Social Providers
+
+| Type | Display Name | Default Scopes | PKCE Required |
+|------|-------------|----------------|---------------|
+| `google` | Google | `openid`, `email`, `profile` | No |
+| `github` | GitHub | `user:email` | No |
+| `facebook` | Facebook | `email`, `public_profile` | No |
+| `twitter` | Twitter | `tweet.read`, `users.read` | Yes |
+| `x` | X (Twitter) | `tweet.read`, `users.read` | Yes |
+| `apple` | Apple | `name`, `email` | No |
+| `linkedin` | LinkedIn | `openid`, `profile`, `email` | No |
+| `discord` | Discord | `identify`, `email` | No |
+| `slack` | Slack | `openid`, `email`, `profile` | No |
+| `spotify` | Spotify | `user-read-email`, `user-read-private` | No |
+| `twitch` | Twitch | `user:read:email` | No |
+| `yahoo` | Yahoo | `openid`, `email`, `profile` | No |
+
+### Enterprise Providers
+
+| Type | Display Name | Notes |
+|------|-------------|-------|
+| `microsoft` | Microsoft | Supports Azure AD tenant configuration |
+| `cognito` | AWS Cognito | Requires domain and region |
+| `keycloak` | Keycloak | Requires baseUrl and realm |
+| `jumpcloud` | JumpCloud | Enterprise SSO |
+| `oidc` | OpenID Connect | Generic OIDC with issuer discovery |
+| `custom_oauth2` | Custom OAuth2 | Full endpoint configuration |
+
+### Passwordless
+
+| Type | Display Name | Notes |
+|------|-------------|-------|
+| `password` | Password | Traditional username/password |
+| `code` | One-Time Code | Magic link / OTP authentication |
+
+## Data Models
+
+### IdentityProvider
+
+<Segment>
+<Section type="parameters">
+- <p><code class="key">id</code> <code class="primitive">string</code></p>
+  UUID identifier.
+- <p><code class="key">tenantId</code> <code class="primitive">string</code></p>
+  Owning tenant.
+- <p><code class="key">type</code> <code class="primitive">ProviderType</code></p>
+  Provider type (google, github, etc.).
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+  Unique name within tenant (used in URLs).
+- <p><code class="key">displayName</code> <code class="primitive">string</code></p>
+  Human-readable name for UI.
+- <p><code class="key">clientId</code> <code class="primitive">string | null</code></p>
+  OAuth client ID.
+- <p><code class="key">clientSecret</code> <code class="primitive">string | null</code></p>
+  Encrypted client secret (internal only).
+- <p><code class="key">config</code> <code class="primitive">ProviderConfig</code></p>
+  Provider-specific configuration.
+- <p><code class="key">enabled</code> <code class="primitive">boolean</code></p>
+  Whether provider is active.
+- <p><code class="key">displayOrder</code> <code class="primitive">number</code></p>
+  Sort order for login UI.
+- <p><code class="key">createdAt</code> <code class="primitive">Date</code></p>
+- <p><code class="key">updatedAt</code> <code class="primitive">Date</code></p>
+</Section>
+</Segment>
+
+### ProviderResponse
+
+<Segment>
+API response format with masked secrets.
+
+```ts
+interface ProviderResponse {
+  id: string
+  type: ProviderType
+  name: string
+  displayName: string
+  clientId: string | null
+  hasClientSecret: boolean       // true if secret is configured
+  clientSecretMasked: string | null  // "****abcd" format
+  config: ProviderConfig
+  enabled: boolean
+  displayOrder: number
+  createdAt: string  // ISO 8601
+  updatedAt: string  // ISO 8601
+}
+```
+</Segment>
+
+### ProviderTypeInfo
+
+<Segment>
+Metadata about available provider types.
+
+```ts
+interface ProviderTypeInfo {
+  type: ProviderType
+  category: "social" | "enterprise" | "passwordless" | "password"
+  displayName: string
+  defaultScopes: string[]
+  requiresClientSecret: boolean
+  supportsOidc: boolean
+}
+```
+</Segment>
+
+## Provider Configuration Types
+
+### Base Configuration
+
+All OAuth2 providers support these options:
+
+```ts
+interface BaseProviderConfig {
+  scopes?: string[]                    // OAuth scopes to request
+  query?: Record<string, string>       // Additional auth URL params
+}
+```
+
+### OAuth2 Provider Configuration
+
+```ts
+interface OAuth2ProviderConfig extends BaseProviderConfig {
+  endpoints?: {
+    authorization?: string
+    token?: string
+    jwks?: string
+  }
+  pkce?: boolean  // Use PKCE flow
+}
+```
+
+### Google Configuration
+
+```ts
+interface GoogleProviderConfig extends OAuth2ProviderConfig {
+  hostedDomain?: string           // Restrict to Google Workspace domain
+  accessType?: "online" | "offline"  // For refresh tokens
+  prompt?: "none" | "consent" | "select_account"
+}
+```
+
+### Microsoft / Azure AD Configuration
+
+```ts
+interface MicrosoftProviderConfig extends OAuth2ProviderConfig {
+  tenant?: string  // "common", "organizations", "consumers", or tenant ID
+}
+```
+
+### Cognito Configuration
+
+```ts
+interface CognitoProviderConfig extends OAuth2ProviderConfig {
+  domain?: string   // Cognito User Pool domain
+  region?: string   // AWS region
+}
+```
+
+### Keycloak Configuration
+
+```ts
+interface KeycloakProviderConfig extends OAuth2ProviderConfig {
+  baseUrl?: string  // Keycloak server URL
+  realm?: string    // Realm name
+}
+```
+
+### OIDC Configuration
+
+```ts
+interface OIDCProviderConfig extends BaseProviderConfig {
+  issuer: string              // OIDC issuer URL (required)
+  discoveryEndpoint?: string  // Optional explicit discovery URL
+}
+```
+
+### Custom OAuth2 Configuration
+
+```ts
+interface CustomOAuth2ProviderConfig extends OAuth2ProviderConfig {
+  endpoints: {
+    authorization: string  // Required
+    token: string          // Required
+    userinfo?: string
+    jwks?: string
+  }
+  userIdPath?: string   // JSONPath to user ID in response
+  emailPath?: string    // JSONPath to email
+  namePath?: string     // JSONPath to name
+}
+```
+
+### Password Provider Configuration
+
+```ts
+interface PasswordProviderConfig {
+  minLength?: number           // Default: 8
+  requireUppercase?: boolean   // Default: false
+  requireLowercase?: boolean   // Default: false
+  requireNumbers?: boolean     // Default: false
+  requireSpecial?: boolean     // Default: false
+  codeLength?: number          // Verification code length
+}
+```
+
+## API Endpoints
+
+---
+
+### List Provider Types
+
+<Segment>
+<Section type="signature">
+```http
+GET /api/providers/types
+```
+</Section>
+
+List all available provider types with metadata. No authentication required.
+
+<InlineSection>
+**Returns** `ProviderTypesResponse`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X GET "https://auth.example.com/api/providers/types"
+```
+
+**Response Example:**
+
+```json
+{
+  "types": [
+    {
+      "type": "google",
+      "category": "social",
+      "displayName": "Google",
+      "defaultScopes": ["openid", "email", "profile"],
+      "requiresClientSecret": true,
+      "supportsOidc": true
+    },
+    {
+      "type": "github",
+      "category": "social",
+      "displayName": "GitHub",
+      "defaultScopes": ["user:email"],
+      "requiresClientSecret": true,
+      "supportsOidc": false
+    },
+    {
+      "type": "microsoft",
+      "category": "enterprise",
+      "displayName": "Microsoft",
+      "defaultScopes": ["openid", "email", "profile"],
+      "requiresClientSecret": true,
+      "supportsOidc": true
+    },
+    {
+      "type": "oidc",
+      "category": "enterprise",
+      "displayName": "OpenID Connect",
+      "defaultScopes": ["openid", "email", "profile"],
+      "requiresClientSecret": false,
+      "supportsOidc": true
+    },
+    {
+      "type": "password",
+      "category": "password",
+      "displayName": "Password",
+      "defaultScopes": [],
+      "requiresClientSecret": false,
+      "supportsOidc": false
+    },
+    {
+      "type": "code",
+      "category": "passwordless",
+      "displayName": "One-Time Code",
+      "defaultScopes": [],
+      "requiresClientSecret": false,
+      "supportsOidc": false
+    }
+  ]
+}
+```
+
+---
+
+### List Providers
+
+<Segment>
+<Section type="signature">
+```http
+GET /api/providers
+```
+</Section>
+
+List all identity providers for the current tenant.
+
+<InlineSection>
+**Returns** `ProviderListResponse`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X GET "https://auth.example.com/api/providers" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "X-Tenant-ID: tenant_123"
+```
+
+**Response Example:**
+
+```json
+{
+  "providers": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "google",
+      "name": "google",
+      "displayName": "Sign in with Google",
+      "clientId": "123456789.apps.googleusercontent.com",
+      "hasClientSecret": true,
+      "clientSecretMasked": "****7890",
+      "config": {
+        "scopes": ["openid", "email", "profile"],
+        "hostedDomain": "mycompany.com"
+      },
+      "enabled": true,
+      "displayOrder": 0,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "type": "microsoft",
+      "name": "azure-ad",
+      "displayName": "Corporate SSO",
+      "clientId": "abcd-efgh-ijkl-mnop",
+      "hasClientSecret": true,
+      "clientSecretMasked": "****wxyz",
+      "config": {
+        "scopes": ["openid", "email", "profile"],
+        "tenant": "mycompany.onmicrosoft.com"
+      },
+      "enabled": true,
+      "displayOrder": 1,
+      "createdAt": "2024-01-15T11:00:00.000Z",
+      "updatedAt": "2024-01-15T11:00:00.000Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+---
+
+### Create Provider
+
+<Segment>
+<Section type="signature">
+```http
+POST /api/providers
+```
+</Section>
+
+Create a new identity provider for the tenant.
+
+<Section type="parameters">
+#### Request Body
+- <p><code class="key">type</code> <code class="primitive">ProviderType</code> <span class="required">required</span></p>
+  Provider type (google, github, oidc, etc.).
+- <p><code class="key">name</code> <code class="primitive">string</code> <span class="required">required</span></p>
+  Unique name within tenant. Used in URLs like `/auth/{name}/authorize`.
+- <p><code class="key">displayName</code> <code class="primitive">string</code> <span class="required">required</span></p>
+  Human-readable name for login buttons.
+- <p><code class="key">clientId?</code> <code class="primitive">string</code></p>
+  OAuth client ID.
+- <p><code class="key">clientSecret?</code> <code class="primitive">string</code></p>
+  OAuth client secret (encrypted at rest).
+- <p><code class="key">config?</code> <code class="primitive">ProviderConfig</code></p>
+  Provider-specific configuration.
+- <p><code class="key">enabled?</code> <code class="primitive">boolean</code></p>
+  Whether provider is active. Default: `true`.
+- <p><code class="key">displayOrder?</code> <code class="primitive">number</code></p>
+  Sort order. Default: `0`.
+</Section>
+
+<InlineSection>
+**Returns** `ProviderResponse` with HTTP 201
+</InlineSection>
+</Segment>
+
+**Request Example - Google:**
+
+```bash
+curl -X POST "https://auth.example.com/api/providers" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "type": "google",
+    "name": "google",
+    "displayName": "Sign in with Google",
+    "clientId": "123456789.apps.googleusercontent.com",
+    "clientSecret": "GOCSPX-your-secret-here",
+    "config": {
+      "hostedDomain": "mycompany.com",
+      "prompt": "select_account"
+    }
+  }'
+```
+
+**Request Example - Azure AD:**
+
+```bash
+curl -X POST "https://auth.example.com/api/providers" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "type": "microsoft",
+    "name": "azure-ad",
+    "displayName": "Corporate SSO",
+    "clientId": "abcd-efgh-ijkl-mnop",
+    "clientSecret": "your-azure-secret",
+    "config": {
+      "tenant": "mycompany.onmicrosoft.com"
+    }
+  }'
+```
+
+**Request Example - Generic OIDC:**
+
+```bash
+curl -X POST "https://auth.example.com/api/providers" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "type": "oidc",
+    "name": "company-sso",
+    "displayName": "Company SSO",
+    "clientId": "openauth-client",
+    "clientSecret": "oidc-secret",
+    "config": {
+      "issuer": "https://sso.company.com",
+      "scopes": ["openid", "email", "profile", "groups"]
+    }
+  }'
+```
+
+**Request Example - Custom OAuth2:**
+
+```bash
+curl -X POST "https://auth.example.com/api/providers" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "type": "custom_oauth2",
+    "name": "internal-auth",
+    "displayName": "Internal Auth System",
+    "clientId": "internal-client",
+    "clientSecret": "internal-secret",
+    "config": {
+      "endpoints": {
+        "authorization": "https://auth.internal.com/oauth/authorize",
+        "token": "https://auth.internal.com/oauth/token",
+        "userinfo": "https://auth.internal.com/api/userinfo"
+      },
+      "scopes": ["read", "profile"],
+      "userIdPath": "$.user.id",
+      "emailPath": "$.user.email",
+      "namePath": "$.user.full_name"
+    }
+  }'
+```
+
+**Response Example:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440002",
+  "type": "google",
+  "name": "google",
+  "displayName": "Sign in with Google",
+  "clientId": "123456789.apps.googleusercontent.com",
+  "hasClientSecret": true,
+  "clientSecretMasked": "****here",
+  "config": {
+    "scopes": ["openid", "email", "profile"],
+    "hostedDomain": "mycompany.com",
+    "prompt": "select_account"
+  },
+  "enabled": true,
+  "displayOrder": 0,
+  "createdAt": "2024-01-15T12:00:00.000Z",
+  "updatedAt": "2024-01-15T12:00:00.000Z"
+}
+```
+
+**Validation:**
+- `name` must start with a letter and contain only lowercase letters, numbers, hyphens, and underscores (max 64 characters)
+- `name` must be unique within the tenant
+- `type` must be a valid provider type
+
+---
+
+### Get Provider
+
+<Segment>
+<Section type="signature">
+```http
+GET /api/providers/:id
+```
+</Section>
+
+Retrieve a single provider by ID.
+
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">id</code> <code class="primitive">string</code></p>
+  Provider UUID.
+</Section>
+
+<InlineSection>
+**Returns** `ProviderResponse`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X GET "https://auth.example.com/api/providers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "X-Tenant-ID: tenant_123"
+```
+
+**Response Example:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "google",
+  "name": "google",
+  "displayName": "Sign in with Google",
+  "clientId": "123456789.apps.googleusercontent.com",
+  "hasClientSecret": true,
+  "clientSecretMasked": "****7890",
+  "config": {
+    "scopes": ["openid", "email", "profile"],
+    "hostedDomain": "mycompany.com"
+  },
+  "enabled": true,
+  "displayOrder": 0,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+---
+
+### Update Provider
+
+<Segment>
+<Section type="signature">
+```http
+PATCH /api/providers/:id
+```
+</Section>
+
+Update an existing provider. All fields are optional.
+
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">id</code> <code class="primitive">string</code></p>
+  Provider UUID.
+
+#### Request Body
+- <p><code class="key">displayName?</code> <code class="primitive">string</code></p>
+  Updated display name.
+- <p><code class="key">clientId?</code> <code class="primitive">string</code></p>
+  Updated OAuth client ID.
+- <p><code class="key">clientSecret?</code> <code class="primitive">string</code></p>
+  Updated client secret. Pass empty string or `null` to remove.
+- <p><code class="key">config?</code> <code class="primitive">ProviderConfig</code></p>
+  Configuration updates (merged with existing).
+- <p><code class="key">enabled?</code> <code class="primitive">boolean</code></p>
+  Enable or disable provider.
+- <p><code class="key">displayOrder?</code> <code class="primitive">number</code></p>
+  Update sort order.
+</Section>
+
+<InlineSection>
+**Returns** `ProviderResponse`
+</InlineSection>
+</Segment>
+
+**Request Example - Update Secret:**
+
+```bash
+curl -X PATCH "https://auth.example.com/api/providers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "clientSecret": "new-rotated-secret"
+  }'
+```
+
+**Request Example - Update Config:**
+
+```bash
+curl -X PATCH "https://auth.example.com/api/providers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "displayName": "Google Workspace",
+    "config": {
+      "hostedDomain": "newdomain.com",
+      "prompt": "consent"
+    }
+  }'
+```
+
+**Request Example - Disable Provider:**
+
+```bash
+curl -X PATCH "https://auth.example.com/api/providers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "enabled": false
+  }'
+```
+
+**Response Example:**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "google",
+  "name": "google",
+  "displayName": "Google Workspace",
+  "clientId": "123456789.apps.googleusercontent.com",
+  "hasClientSecret": true,
+  "clientSecretMasked": "****cret",
+  "config": {
+    "scopes": ["openid", "email", "profile"],
+    "hostedDomain": "newdomain.com",
+    "prompt": "consent"
+  },
+  "enabled": true,
+  "displayOrder": 0,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T14:00:00.000Z"
+}
+```
+
+:::note[Config Merging]
+The `config` object is merged with existing configuration, not replaced. To remove a config field, set it to `null` explicitly.
+:::
+
+---
+
+### Delete Provider
+
+<Segment>
+<Section type="signature">
+```http
+DELETE /api/providers/:id
+```
+</Section>
+
+Permanently delete a provider. This action cannot be undone.
+
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">id</code> <code class="primitive">string</code></p>
+  Provider UUID.
+</Section>
+
+<InlineSection>
+**Returns** `{ success: true, deleted: string }`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X DELETE "https://auth.example.com/api/providers/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "X-Tenant-ID: tenant_123"
+```
+
+**Response Example:**
+
+```json
+{
+  "success": true,
+  "deleted": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+## Error Responses
+
+### 400 Bad Request
+
+Returned for validation errors.
+
+```json
+{
+  "error": "Invalid provider type: invalid_type",
+  "validTypes": ["google", "github", "facebook", "..."]
+}
+```
+
+```json
+{
+  "error": "Invalid configuration",
+  "details": ["issuer is required for OIDC providers"]
+}
+```
+
+```json
+{
+  "error": "Provider name must start with a letter and contain only lowercase letters, numbers, hyphens, and underscores (max 64 chars)"
+}
+```
+
+### 404 Not Found
+
+```json
+{
+  "error": "Tenant not found"
+}
+```
+
+```json
+{
+  "error": "Provider not found"
+}
+```
+
+### 409 Conflict
+
+```json
+{
+  "error": "Provider with name \"google\" already exists"
+}
+```
+
+## Provider Setup Guides
+
+### Google
+
+1. Create OAuth credentials in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Add authorized redirect URI: `https://your-auth-domain.com/callback`
+3. Configure provider:
+
+```json
+{
+  "type": "google",
+  "name": "google",
+  "displayName": "Sign in with Google",
+  "clientId": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+  "clientSecret": "YOUR_CLIENT_SECRET",
+  "config": {
+    "hostedDomain": "your-company.com",  // Optional: restrict to domain
+    "prompt": "select_account"
+  }
+}
+```
+
+### Microsoft / Azure AD
+
+1. Register app in [Azure Portal](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
+2. Add redirect URI under Authentication
+3. Create client secret under Certificates & secrets
+4. Configure provider:
+
+```json
+{
+  "type": "microsoft",
+  "name": "azure-ad",
+  "displayName": "Microsoft",
+  "clientId": "YOUR_APPLICATION_ID",
+  "clientSecret": "YOUR_CLIENT_SECRET",
+  "config": {
+    "tenant": "YOUR_TENANT_ID"  // or "common" for multi-tenant
+  }
+}
+```
+
+### Keycloak
+
+1. Create a client in your Keycloak realm
+2. Set access type to confidential
+3. Add redirect URIs
+4. Configure provider:
+
+```json
+{
+  "type": "keycloak",
+  "name": "keycloak",
+  "displayName": "Keycloak SSO",
+  "clientId": "openauth",
+  "clientSecret": "YOUR_CLIENT_SECRET",
+  "config": {
+    "baseUrl": "https://keycloak.example.com",
+    "realm": "your-realm"
+  }
+}
+```
+
+### Generic OIDC
+
+For any OpenID Connect compliant provider:
+
+```json
+{
+  "type": "oidc",
+  "name": "custom-idp",
+  "displayName": "Corporate SSO",
+  "clientId": "YOUR_CLIENT_ID",
+  "clientSecret": "YOUR_CLIENT_SECRET",
+  "config": {
+    "issuer": "https://idp.example.com",
+    "scopes": ["openid", "email", "profile", "groups"]
+  }
+}
+```
+
+## Best Practices
+
+1. **Use unique names** - Provider names appear in URLs; make them descriptive but URL-safe
+2. **Store secrets securely** - Use environment variables, not hardcoded values
+3. **Test in staging** - Always test provider configuration before enabling in production
+4. **Disable before removing** - Set `enabled: false` before deleting to ensure graceful degradation
+5. **Monitor provider health** - Set up alerts for authentication failures by provider
+6. **Regular secret rotation** - Rotate OAuth client secrets periodically
+7. **Use displayOrder** - Control the order of login buttons in your UI
+
+</div>

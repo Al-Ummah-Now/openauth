@@ -1,0 +1,1282 @@
+---
+title: Middleware Reference
+editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/middleware/index.ts
+description: Reference documentation for OpenAuth enterprise middleware including authentication, authorization, tenant isolation, and rate limiting.
+---
+
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+<div class="tsdoc">
+<Section type="about">
+
+OpenAuth provides a comprehensive middleware stack for enterprise applications. The middleware handles bearer token authentication, scope-based authorization, tenant isolation, and rate limiting.
+
+```ts
+import {
+  bearerAuth,
+  requireScope,
+  requireTenantMatch,
+  rateLimit,
+  onAuthError
+} from "@openauthjs/openauth/middleware"
+
+const app = new Hono()
+
+// Apply error handler
+app.onError(onAuthError)
+
+// Protected route with full middleware stack
+app.use("/api/*",
+  rateLimit({ max: 100, window: 60 }),
+  bearerAuth({ getPublicKey, issuer: "https://auth.example.com" }),
+  requireTenantMatch(),
+  requireScope("api:read")
+)
+```
+
+</Section>
+
+## Overview
+
+<Segment>
+
+The middleware stack is designed to be composable. Each middleware handles a specific concern:
+
+| Middleware | Purpose |
+|------------|---------|
+| `bearerAuth` | Extracts and validates JWT bearer tokens |
+| `requireScope` | Enforces scope-based authorization |
+| `requireTenantMatch` | Ensures tenant isolation |
+| `rateLimit` | Protects against abuse with rate limiting |
+| `onAuthError` | Handles authentication/authorization errors |
+
+**Recommended Order:**
+1. Rate limiting (reject early)
+2. Bearer authentication (validate token)
+3. Tenant isolation (enforce boundaries)
+4. Scope authorization (check permissions)
+
+</Segment>
+
+---
+
+## Bearer Authentication
+
+### extractBearerToken
+
+<Segment>
+<Section type="signature">
+```ts
+extractBearerToken(authHeader: string | undefined): string | null
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">authHeader</code> <code class="primitive">string | undefined</code></p>
+The Authorization header value.
+</Section>
+<InlineSection>
+**Returns** <code class="primitive">string | null</code>
+</InlineSection>
+
+Extracts the bearer token from an Authorization header.
+
+```ts
+import { extractBearerToken } from "@openauthjs/openauth/middleware"
+
+const token = extractBearerToken("Bearer eyJhbGciOiJSUzI1NiIs...")
+// Returns: "eyJhbGciOiJSUzI1NiIs..."
+
+const noToken = extractBearerToken(undefined)
+// Returns: null
+
+const invalid = extractBearerToken("Basic dXNlcjpwYXNz")
+// Returns: null (not a Bearer token)
+```
+
+</Segment>
+
+### bearerAuth
+
+<Segment>
+<Section type="signature">
+```ts
+bearerAuth(options: BearerAuthOptions): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">options</code> <code class="type">BearerAuthOptions</code></p>
+Configuration options for bearer authentication.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates middleware that validates JWT bearer tokens from the Authorization header.
+
+```ts
+import { bearerAuth } from "@openauthjs/openauth/middleware"
+import { importSPKI } from "jose"
+
+const app = new Hono()
+
+// Cache the public key
+let cachedKey: CryptoKey
+
+const getPublicKey = async () => {
+  if (!cachedKey) {
+    cachedKey = await importSPKI(PUBLIC_KEY_PEM, "RS256")
+  }
+  return cachedKey
+}
+
+app.use("/api/*", bearerAuth({
+  getPublicKey,
+  issuer: "https://auth.example.com",
+  audience: "my-api",        // Optional
+  requireM2M: false          // Optional, require M2M tokens only
+}))
+```
+
+</Segment>
+
+### BearerAuthOptions
+
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">getPublicKey</code>](#bearerauthoptions-getpublickey) <code class="primitive">() => Promise&lt;CryptoKey&gt;</code></p>
+- <p>[<code class="key">issuer</code>](#bearerauthoptions-issuer) <code class="primitive">string</code></p>
+- <p>[<code class="key">audience?</code>](#bearerauthoptions-audience) <code class="primitive">string</code></p>
+- <p>[<code class="key">requireM2M?</code>](#bearerauthoptions-requirem2m) <code class="primitive">boolean</code></p>
+</Section>
+</Segment>
+
+<NestedTitle id="bearerauthoptions-getpublickey" Tag="h4" parent="BearerAuthOptions.">getPublicKey</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">() => Promise&lt;CryptoKey&gt;</code>
+</InlineSection>
+</Section>
+Function that returns the public key for JWT verification. Cache this for performance.
+</Segment>
+
+<NestedTitle id="bearerauthoptions-issuer" Tag="h4" parent="BearerAuthOptions.">issuer</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Expected issuer (iss claim) in the JWT. Tokens with a different issuer will be rejected.
+</Segment>
+
+<NestedTitle id="bearerauthoptions-audience" Tag="h4" parent="BearerAuthOptions.">audience?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Optional expected audience (aud claim). If specified, tokens without this audience will be rejected.
+</Segment>
+
+<NestedTitle id="bearerauthoptions-requirem2m" Tag="h4" parent="BearerAuthOptions.">requireM2M?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+<InlineSection>**Default** false</InlineSection>
+
+Require M2M (machine-to-machine) tokens only. User tokens will be rejected if this is `true`.
+</Segment>
+
+### Token Validation Process
+
+<Segment>
+
+The `bearerAuth` middleware performs the following validation steps:
+
+1. **Extract Token** - Parses the Authorization header for a Bearer token
+2. **Verify Signature** - Validates the JWT signature using the public key
+3. **Check Issuer** - Ensures the `iss` claim matches the expected issuer
+4. **Check Audience** - If configured, validates the `aud` claim
+5. **Check Expiration** - Ensures the `exp` claim is in the future
+6. **Validate Structure** - Verifies required claims (`sub`, `exp`)
+7. **Set Context** - Populates context variables for downstream middleware
+
+**Context Variables Set:**
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `token` | `TokenPayload` | The decoded token payload |
+| `tenantId` | `string` | Tenant ID from token or "default" |
+| `clientId` | `string` | Client ID (M2M tokens only) |
+| `scopes` | `string[]` | Granted scopes (M2M tokens only) |
+
+</Segment>
+
+---
+
+## Scope Authorization
+
+### hasScope
+
+<Segment>
+<Section type="signature">
+```ts
+hasScope(granted: string[], required: string): boolean
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">granted</code> <code class="primitive">string[]</code></p>
+Array of scopes granted to the client.
+- <p><code class="key">required</code> <code class="primitive">string</code></p>
+The required scope to check.
+</Section>
+<InlineSection>
+**Returns** <code class="primitive">boolean</code>
+</InlineSection>
+
+Check if granted scopes include a required scope, with wildcard matching support.
+
+```ts
+import { hasScope } from "@openauthjs/openauth/middleware"
+
+// Exact match
+hasScope(["users:read", "users:write"], "users:read")
+// Returns: true
+
+// Wildcard match - resource:* matches resource:action
+hasScope(["users:*"], "users:read")
+// Returns: true
+
+hasScope(["users:*"], "users:write")
+// Returns: true
+
+// Admin wildcard - grants all permissions
+hasScope(["admin:*"], "users:read")
+// Returns: true
+
+hasScope(["*"], "anything:here")
+// Returns: true
+
+// No match
+hasScope(["posts:read"], "users:read")
+// Returns: false
+```
+
+:::tip[Wildcard Scopes]
+- `resource:*` matches any action on that resource (e.g., `users:*` matches `users:read`, `users:write`)
+- `admin:*` grants access to all scopes
+- `*` is a super wildcard that grants everything
+:::
+
+</Segment>
+
+### hasAllScopes
+
+<Segment>
+<Section type="signature">
+```ts
+hasAllScopes(granted: string[], required: string[]): boolean
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">granted</code> <code class="primitive">string[]</code></p>
+Array of scopes granted to the client.
+- <p><code class="key">required</code> <code class="primitive">string[]</code></p>
+Array of required scopes (all must be present).
+</Section>
+<InlineSection>
+**Returns** <code class="primitive">boolean</code>
+</InlineSection>
+
+Check if granted scopes include ALL required scopes.
+
+```ts
+import { hasAllScopes } from "@openauthjs/openauth/middleware"
+
+hasAllScopes(
+  ["users:read", "users:write", "posts:read"],
+  ["users:read", "posts:read"]
+)
+// Returns: true
+
+hasAllScopes(
+  ["users:read"],
+  ["users:read", "users:write"]
+)
+// Returns: false (missing users:write)
+
+// Wildcards work here too
+hasAllScopes(
+  ["users:*"],
+  ["users:read", "users:write"]
+)
+// Returns: true
+```
+
+</Segment>
+
+### hasAnyScope
+
+<Segment>
+<Section type="signature">
+```ts
+hasAnyScope(granted: string[], required: string[]): boolean
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">granted</code> <code class="primitive">string[]</code></p>
+Array of scopes granted to the client.
+- <p><code class="key">required</code> <code class="primitive">string[]</code></p>
+Array of required scopes (at least one must be present).
+</Section>
+<InlineSection>
+**Returns** <code class="primitive">boolean</code>
+</InlineSection>
+
+Check if granted scopes include ANY of the required scopes.
+
+```ts
+import { hasAnyScope } from "@openauthjs/openauth/middleware"
+
+hasAnyScope(
+  ["users:read"],
+  ["users:read", "users:write"]
+)
+// Returns: true (has users:read)
+
+hasAnyScope(
+  ["posts:read"],
+  ["users:read", "users:write"]
+)
+// Returns: false (has neither)
+```
+
+</Segment>
+
+### requireScope
+
+<Segment>
+<Section type="signature">
+```ts
+requireScope(...requiredScopes: string[]): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">...requiredScopes</code> <code class="primitive">string[]</code></p>
+One or more required scopes. ALL must be present.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates middleware that requires ALL specified scopes.
+
+```ts
+import { requireScope } from "@openauthjs/openauth/middleware"
+
+// Single scope
+app.get("/users", requireScope("users:read"), handler)
+
+// Multiple scopes - ALL required
+app.delete("/users/:id",
+  requireScope("users:read", "users:delete"),
+  handler
+)
+```
+
+Throws `InsufficientScopeError` if the required scopes are not present.
+
+</Segment>
+
+### requireAnyScope
+
+<Segment>
+<Section type="signature">
+```ts
+requireAnyScope(...requiredScopes: string[]): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">...requiredScopes</code> <code class="primitive">string[]</code></p>
+One or more scopes. At least ONE must be present.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates middleware that requires ANY of the specified scopes.
+
+```ts
+import { requireAnyScope } from "@openauthjs/openauth/middleware"
+
+// Allow either admin or moderator
+app.post("/posts/:id/approve",
+  requireAnyScope("admin:*", "moderator:approve"),
+  handler
+)
+```
+
+</Segment>
+
+### requireScopeIf
+
+<Segment>
+<Section type="signature">
+```ts
+requireScopeIf(
+  condition: (c: Context) => boolean,
+  ...requiredScopes: string[]
+): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">condition</code> <code class="primitive">(c: Context) => boolean</code></p>
+Function that determines whether to enforce the scope check.
+- <p><code class="key">...requiredScopes</code> <code class="primitive">string[]</code></p>
+Required scopes when condition is true.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates middleware that conditionally requires scopes based on the request.
+
+```ts
+import { requireScopeIf } from "@openauthjs/openauth/middleware"
+
+// Require write scope only for mutating methods
+app.use("/resources/*",
+  requireScopeIf(
+    (c) => ["POST", "PUT", "PATCH", "DELETE"].includes(c.req.method),
+    "resources:write"
+  )
+)
+
+// Require admin scope for specific query parameters
+app.get("/users",
+  requireScopeIf(
+    (c) => c.req.query("include_deleted") === "true",
+    "admin:users"
+  ),
+  handler
+)
+```
+
+</Segment>
+
+---
+
+## Tenant Isolation
+
+### requireTenantMatch
+
+<Segment>
+<Section type="signature">
+```ts
+requireTenantMatch(options?: TenantMatchOptions): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">options</code> <code class="type">TenantMatchOptions</code></p>
+Optional configuration.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates middleware that ensures tenant ID matches between the token and request.
+
+```ts
+import { requireTenantMatch } from "@openauthjs/openauth/middleware"
+
+// Basic usage - checks X-Tenant-ID header
+app.use("/api/*", requireTenantMatch())
+
+// Custom header name
+app.use("/api/*", requireTenantMatch({
+  headerName: "X-Organization-ID"
+}))
+
+// Check route parameter
+app.use("/tenants/:tenantId/*", requireTenantMatch({
+  paramName: "tenantId"
+}))
+
+// Allow super admin to bypass
+app.use("/api/*", requireTenantMatch({
+  allowSuperAdmin: true
+}))
+```
+
+</Segment>
+
+### TenantMatchOptions
+
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">headerName?</code>](#tenantmatchoptions-headername) <code class="primitive">string</code></p>
+- <p>[<code class="key">paramName?</code>](#tenantmatchoptions-paramname) <code class="primitive">string</code></p>
+- <p>[<code class="key">allowSuperAdmin?</code>](#tenantmatchoptions-allowsuperadmin) <code class="primitive">boolean</code></p>
+</Section>
+</Segment>
+
+<NestedTitle id="tenantmatchoptions-headername" Tag="h4" parent="TenantMatchOptions.">headerName?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+<InlineSection>**Default** "X-Tenant-ID"</InlineSection>
+
+Header name containing the tenant ID to validate against the token.
+</Segment>
+
+<NestedTitle id="tenantmatchoptions-paramname" Tag="h4" parent="TenantMatchOptions.">paramName?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Route parameter name containing the tenant ID (e.g., `:tenantId` in the route pattern).
+</Segment>
+
+<NestedTitle id="tenantmatchoptions-allowsuperadmin" Tag="h4" parent="TenantMatchOptions.">allowSuperAdmin?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+<InlineSection>**Default** false</InlineSection>
+
+Allow clients with the `admin:super` scope to access any tenant.
+
+```ts
+// Super admin can access any tenant
+app.use("/admin/tenants/:tenantId/*", requireTenantMatch({
+  paramName: "tenantId",
+  allowSuperAdmin: true
+}))
+```
+
+</Segment>
+
+### tenantFromSubdomain
+
+<Segment>
+<Section type="signature">
+```ts
+tenantFromSubdomain(baseDomain: string): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">baseDomain</code> <code class="primitive">string</code></p>
+The base domain (e.g., "example.com").
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates middleware that extracts tenant ID from the subdomain.
+
+```ts
+import { tenantFromSubdomain } from "@openauthjs/openauth/middleware"
+
+// acme.example.com -> tenantId = "acme"
+// www.example.com -> no tenantId set
+app.use("/*", tenantFromSubdomain("example.com"))
+```
+
+:::note
+This middleware sets the `tenantId` context variable but does not validate it against the token. Use `requireTenantMatch` after to enforce isolation.
+:::
+
+</Segment>
+
+### requireBodyTenantMatch
+
+<Segment>
+<Section type="signature">
+```ts
+requireBodyTenantMatch(fieldName?: string): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">fieldName</code> <code class="primitive">string</code></p>
+The field name in the request body. Default: `"tenant_id"`.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates middleware that ensures the tenant ID in the request body matches the token.
+
+```ts
+import { requireBodyTenantMatch } from "@openauthjs/openauth/middleware"
+
+// Validates tenant_id field in JSON body
+app.post("/resources", requireBodyTenantMatch(), handler)
+
+// Custom field name
+app.post("/resources", requireBodyTenantMatch("organizationId"), handler)
+```
+
+**Behavior:**
+- Only checks POST, PUT, PATCH requests with `application/json` content type
+- Clients with `admin:super` scope can set any tenant ID
+- If the field is not present in the body, validation passes
+
+</Segment>
+
+---
+
+## Rate Limiting
+
+### rateLimit
+
+<Segment>
+<Section type="signature">
+```ts
+rateLimit(
+  config: RateLimitConfig,
+  options?: RateLimitOptions
+): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">config</code> <code class="type">RateLimitConfig</code></p>
+Rate limit configuration.
+- <p><code class="key">options</code> <code class="type">RateLimitOptions</code></p>
+Optional advanced options.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Creates rate limiting middleware.
+
+```ts
+import { rateLimit } from "@openauthjs/openauth/middleware"
+
+// 100 requests per 60 seconds
+app.use("/api/*", rateLimit({
+  max: 100,
+  window: 60
+}))
+
+// With custom key prefix
+app.use("/api/*", rateLimit({
+  max: 100,
+  window: 60,
+  keyPrefix: "api:"
+}))
+```
+
+</Segment>
+
+### RateLimitConfig
+
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">max</code>](#ratelimitconfig-max) <code class="primitive">number</code></p>
+- <p>[<code class="key">window</code>](#ratelimitconfig-window) <code class="primitive">number</code></p>
+- <p>[<code class="key">keyPrefix?</code>](#ratelimitconfig-keyprefix) <code class="primitive">string</code></p>
+</Section>
+</Segment>
+
+<NestedTitle id="ratelimitconfig-max" Tag="h4" parent="RateLimitConfig.">max</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+Maximum number of requests allowed within the time window.
+</Segment>
+
+<NestedTitle id="ratelimitconfig-window" Tag="h4" parent="RateLimitConfig.">window</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+Time window in seconds.
+</Segment>
+
+<NestedTitle id="ratelimitconfig-keyprefix" Tag="h4" parent="RateLimitConfig.">keyPrefix?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Optional prefix for rate limit keys in storage.
+</Segment>
+
+### Rate Limit Headers
+
+<Segment>
+
+The rate limit middleware sets the following response headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed in the window |
+| `X-RateLimit-Remaining` | Remaining requests in current window |
+| `X-RateLimit-Reset` | Unix timestamp when the window resets |
+| `Retry-After` | Seconds until retry (only on 429 responses) |
+
+```http title="Example Response Headers"
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1699999999
+```
+
+</Segment>
+
+### memoryStore
+
+<Segment>
+<Section type="signature">
+```ts
+const memoryStore: RateLimitStore
+```
+</Section>
+
+Default in-memory rate limit store. Suitable for single-instance deployments.
+
+```ts
+import { rateLimit, memoryStore } from "@openauthjs/openauth/middleware"
+
+app.use("/api/*", rateLimit(
+  { max: 100, window: 60 },
+  { store: memoryStore }  // This is the default
+))
+```
+
+:::caution[Single Instance Only]
+The memory store does not share state across worker instances. Use `kvStore` for distributed deployments.
+:::
+
+</Segment>
+
+### kvStore
+
+<Segment>
+<Section type="signature">
+```ts
+kvStore(kv: KVNamespace): RateLimitStore
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">kv</code> <code class="type">KVNamespace</code></p>
+Cloudflare KV namespace for storing rate limit data.
+</Section>
+<InlineSection>
+**Returns** <code class="type">RateLimitStore</code>
+</InlineSection>
+
+Create a KV-based rate limit store for Cloudflare Workers.
+
+```ts
+import { rateLimit, kvStore } from "@openauthjs/openauth/middleware"
+
+export default {
+  async fetch(request, env) {
+    const app = new Hono()
+
+    app.use("/api/*", rateLimit(
+      { max: 100, window: 60 },
+      { store: kvStore(env.RATE_LIMIT_KV) }
+    ))
+
+    return app.fetch(request, env)
+  }
+}
+```
+
+:::tip[Production Deployment]
+Use KV store for production Cloudflare Workers deployments to ensure rate limits are shared across all instances.
+:::
+
+</Segment>
+
+### endpointRateLimit
+
+<Segment>
+<Section type="signature">
+```ts
+endpointRateLimit(
+  limits: Record<string, RateLimitConfig>,
+  options?: { store?: RateLimitStore }
+): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">limits</code> <code class="primitive">Record&lt;string, RateLimitConfig&gt;</code></p>
+Map of endpoint patterns to rate limit configurations.
+- <p><code class="key">options</code> <code class="primitive">Object</code></p>
+Optional store configuration.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Apply different rate limits to different endpoints.
+
+```ts
+import { endpointRateLimit } from "@openauthjs/openauth/middleware"
+
+app.use("/api/*", endpointRateLimit({
+  // Specific endpoint limits
+  "POST:/api/login": { max: 5, window: 60 },
+  "POST:/api/register": { max: 3, window: 60 },
+
+  // Path-only matching (any method)
+  "/api/search": { max: 30, window: 60 },
+
+  // Default fallback
+  "*": { max: 100, window: 60 }
+}))
+```
+
+The middleware matches in order:
+1. Exact `METHOD:path` match
+2. Path-only match
+3. Wildcard `*` fallback
+
+</Segment>
+
+---
+
+## Error Handling
+
+### Error Types
+
+<Segment>
+
+All middleware errors extend the base `AuthError` class:
+
+```ts
+import {
+  AuthError,
+  MissingTokenError,
+  InvalidTokenError,
+  InsufficientScopeError,
+  TenantMismatchError,
+  RateLimitExceededError
+} from "@openauthjs/openauth/middleware"
+```
+
+| Error | Code | Status | Description |
+|-------|------|--------|-------------|
+| `MissingTokenError` | `missing_token` | 401 | No Authorization header |
+| `InvalidTokenError` | `invalid_token` | 401 | Token expired, malformed, or invalid signature |
+| `InsufficientScopeError` | `insufficient_scope` | 403 | Token lacks required scopes |
+| `TenantMismatchError` | `tenant_mismatch` | 403 | Tenant ID mismatch |
+| `RateLimitExceededError` | `rate_limit_exceeded` | 429 | Too many requests |
+
+</Segment>
+
+### authErrorHandler
+
+<Segment>
+<Section type="signature">
+```ts
+authErrorHandler(): (error: Error, c: Context) => Response
+```
+</Section>
+<InlineSection>
+**Returns** Error handler function
+</InlineSection>
+
+Creates an error handler for use with middleware error catching.
+
+```ts
+import { authErrorHandler } from "@openauthjs/openauth/middleware"
+
+// For catching errors in specific routes
+app.use("/api/*", async (c, next) => {
+  try {
+    await next()
+  } catch (error) {
+    return authErrorHandler()(error, c)
+  }
+})
+```
+
+</Segment>
+
+### onAuthError
+
+<Segment>
+<Section type="signature">
+```ts
+onAuthError(error: Error, c: Context): Response
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">error</code> <code class="type">Error</code></p>
+The error that was thrown.
+- <p><code class="key">c</code> <code class="type">Context</code></p>
+The Hono context.
+</Section>
+<InlineSection>
+**Returns** <code class="type">Response</code>
+</InlineSection>
+
+Error handler for use with Hono's `app.onError`.
+
+```ts
+import { onAuthError } from "@openauthjs/openauth/middleware"
+
+const app = new Hono()
+app.onError(onAuthError)
+```
+
+**Response Format (RFC 6750 compliant):**
+
+```json title="401 Unauthorized"
+{
+  "error": "invalid_token",
+  "error_description": "Invalid token: token expired"
+}
+```
+
+```json title="403 Forbidden"
+{
+  "error": "insufficient_scope",
+  "error_description": "Required scope(s): users:write. Granted: users:read"
+}
+```
+
+```json title="429 Too Many Requests"
+{
+  "error": "rate_limit_exceeded",
+  "error_description": "Rate limit exceeded. Retry after 30 seconds"
+}
+```
+
+**WWW-Authenticate Headers (RFC 6750):**
+
+For 401 errors, the response includes a `WWW-Authenticate` header:
+
+```http
+WWW-Authenticate: Bearer realm="api", error="invalid_token", error_description="token expired"
+```
+
+For 403 insufficient scope errors:
+
+```http
+WWW-Authenticate: Bearer realm="api", error="insufficient_scope", error_description="Required scope(s): users:write"
+```
+
+</Segment>
+
+---
+
+## Composition
+
+### enterpriseAuth
+
+<Segment>
+<Section type="signature">
+```ts
+enterpriseAuth(options: EnterpriseAuthOptions): MiddlewareHandler[]
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">options</code> <code class="type">EnterpriseAuthOptions</code></p>
+Combined configuration for all middleware.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler[]</code>
+</InlineSection>
+
+Creates a complete middleware stack for enterprise APIs.
+
+```ts
+import { enterpriseAuth } from "@openauthjs/openauth/middleware"
+
+const middlewares = enterpriseAuth({
+  getPublicKey: async () => publicKey,
+  issuer: "https://auth.example.com",
+  scopes: ["api:read"],
+  requireM2M: false,
+  rateLimit: { max: 100, window: 60 },
+  tenantIsolation: true,
+  allowSuperAdmin: true
+})
+
+// Apply to routes
+app.use("/api/*", ...middlewares)
+```
+
+</Segment>
+
+### EnterpriseAuthOptions
+
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">getPublicKey</code>](#enterpriseauthoptions-getpublickey) <code class="primitive">() => Promise&lt;CryptoKey&gt;</code></p>
+- <p>[<code class="key">issuer</code>](#enterpriseauthoptions-issuer) <code class="primitive">string</code></p>
+- <p>[<code class="key">scopes?</code>](#enterpriseauthoptions-scopes) <code class="primitive">string[]</code></p>
+- <p>[<code class="key">requireM2M?</code>](#enterpriseauthoptions-requirem2m) <code class="primitive">boolean</code></p>
+- <p>[<code class="key">rateLimit?</code>](#enterpriseauthoptions-ratelimit) <code class="type">RateLimitConfig</code></p>
+- <p>[<code class="key">tenantIsolation?</code>](#enterpriseauthoptions-tenantisolation) <code class="primitive">boolean</code></p>
+- <p>[<code class="key">allowSuperAdmin?</code>](#enterpriseauthoptions-allowsuperadmin) <code class="primitive">boolean</code></p>
+</Section>
+</Segment>
+
+<NestedTitle id="enterpriseauthoptions-getpublickey" Tag="h4" parent="EnterpriseAuthOptions.">getPublicKey</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">() => Promise&lt;CryptoKey&gt;</code>
+</InlineSection>
+</Section>
+Function to get the public key for JWT verification.
+</Segment>
+
+<NestedTitle id="enterpriseauthoptions-issuer" Tag="h4" parent="EnterpriseAuthOptions.">issuer</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Expected JWT issuer.
+</Segment>
+
+<NestedTitle id="enterpriseauthoptions-scopes" Tag="h4" parent="EnterpriseAuthOptions.">scopes?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string[]</code>
+</InlineSection>
+</Section>
+Required scopes for this route. All must be present.
+</Segment>
+
+<NestedTitle id="enterpriseauthoptions-requirem2m" Tag="h4" parent="EnterpriseAuthOptions.">requireM2M?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+<InlineSection>**Default** false</InlineSection>
+
+Require M2M tokens only.
+</Segment>
+
+<NestedTitle id="enterpriseauthoptions-ratelimit" Tag="h4" parent="EnterpriseAuthOptions.">rateLimit?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="type">RateLimitConfig</code>
+</InlineSection>
+</Section>
+Optional rate limit configuration.
+</Segment>
+
+<NestedTitle id="enterpriseauthoptions-tenantisolation" Tag="h4" parent="EnterpriseAuthOptions.">tenantIsolation?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+<InlineSection>**Default** true</InlineSection>
+
+Enable tenant isolation middleware.
+</Segment>
+
+<NestedTitle id="enterpriseauthoptions-allowsuperadmin" Tag="h4" parent="EnterpriseAuthOptions.">allowSuperAdmin?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+<InlineSection>**Default** false</InlineSection>
+
+Allow super admin to bypass tenant check.
+</Segment>
+
+### applyMiddleware
+
+<Segment>
+<Section type="signature">
+```ts
+applyMiddleware(...middlewares: MiddlewareHandler[]): MiddlewareHandler
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">...middlewares</code> <code class="type">MiddlewareHandler[]</code></p>
+Middleware handlers to compose.
+</Section>
+<InlineSection>
+**Returns** <code class="type">MiddlewareHandler</code>
+</InlineSection>
+
+Compose multiple middleware into a single handler.
+
+```ts
+import {
+  applyMiddleware,
+  bearerAuth,
+  requireScope,
+  requireTenantMatch
+} from "@openauthjs/openauth/middleware"
+
+const authStack = applyMiddleware(
+  bearerAuth({ getPublicKey, issuer }),
+  requireTenantMatch(),
+  requireScope("api:read")
+)
+
+// Use as single middleware
+app.use("/api/*", authStack)
+```
+
+</Segment>
+
+---
+
+## Complete Example
+
+<Segment>
+
+Here's a complete example of a protected API using the full middleware stack:
+
+```ts title="Cloudflare Worker with Full Middleware"
+import { Hono } from "hono"
+import { importSPKI } from "jose"
+import {
+  enterpriseAuth,
+  onAuthError,
+  requireScope,
+  kvStore
+} from "@openauthjs/openauth/middleware"
+
+type Env = {
+  PUBLIC_KEY: string
+  RATE_LIMIT_KV: KVNamespace
+}
+
+const app = new Hono<{ Bindings: Env }>()
+
+// Global error handler
+app.onError(onAuthError)
+
+// Cache public key
+let publicKey: CryptoKey
+
+// Apply enterprise auth to all API routes
+app.use("/api/*", async (c, next) => {
+  if (!publicKey) {
+    publicKey = await importSPKI(c.env.PUBLIC_KEY, "RS256")
+  }
+
+  const middlewares = enterpriseAuth({
+    getPublicKey: async () => publicKey,
+    issuer: "https://auth.example.com",
+    rateLimit: { max: 100, window: 60 },
+    tenantIsolation: true,
+    allowSuperAdmin: true
+  })
+
+  // Apply each middleware in sequence
+  for (const middleware of middlewares) {
+    let shouldContinue = true
+    await middleware(c, async () => { shouldContinue = true })
+    if (!shouldContinue) return
+  }
+
+  await next()
+})
+
+// Public endpoint
+app.get("/health", (c) => c.json({ status: "ok" }))
+
+// Protected endpoints with specific scopes
+app.get("/api/users", requireScope("users:read"), async (c) => {
+  const tenantId = c.get("tenantId")
+  return c.json({ users: [], tenant: tenantId })
+})
+
+app.post("/api/users", requireScope("users:write"), async (c) => {
+  const body = await c.req.json()
+  return c.json({ created: true, user: body })
+})
+
+app.delete("/api/users/:id",
+  requireScope("users:read", "users:delete"),
+  async (c) => {
+    return c.json({ deleted: true, id: c.req.param("id") })
+  }
+)
+
+export default app
+```
+
+```ts title="Token Payload Examples"
+// M2M Token
+{
+  "mode": "m2m",
+  "sub": "client-id",
+  "client_id": "my-service",
+  "tenant_id": "tenant-123",
+  "scope": "users:read users:write",
+  "exp": 1699999999,
+  "iat": 1699996399,
+  "iss": "https://auth.example.com",
+  "jti": "unique-token-id"
+}
+
+// User Token
+{
+  "mode": "user",
+  "sub": "user-123",
+  "tenant_id": "tenant-123",
+  "exp": 1699999999,
+  "iat": 1699996399,
+  "iss": "https://auth.example.com"
+}
+```
+
+</Segment>
+
+</div>

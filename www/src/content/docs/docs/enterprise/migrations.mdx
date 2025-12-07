@@ -82,6 +82,9 @@ The CLI executes these SQL files in order:
 | `002_add_tenant_support.sql` | Tenant management tables |
 | `003_session_management.sql` | Session storage tables |
 | `004_rbac_schema.sql` | RBAC permissions, roles, assignments |
+| `005_user_management.sql` | Users and identity linking tables |
+| `006_identity_providers.sql` | Dynamic provider configurations |
+| `007_oauth_client_management.sql` | Client rotation support |
 
 All migrations use `CREATE TABLE IF NOT EXISTS` for idempotency.
 
@@ -167,6 +170,80 @@ CREATE TABLE rbac_user_roles (
   tenant_id TEXT NOT NULL,
   PRIMARY KEY (user_id, role_id, tenant_id)
 );
+```
+
+### Users
+
+```sql
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  name TEXT,
+  metadata TEXT,              -- JSON object
+  status TEXT DEFAULT 'active',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  last_login_at INTEGER,
+  deleted_at INTEGER,
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+-- Unique email per tenant (only for non-deleted users)
+CREATE UNIQUE INDEX idx_users_tenant_email
+    ON users(tenant_id, email) WHERE deleted_at IS NULL;
+```
+
+### User Identities
+
+```sql
+CREATE TABLE user_identities (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_user_id TEXT NOT NULL,
+  provider_data TEXT,         -- JSON object
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX idx_identities_provider
+    ON user_identities(tenant_id, provider, provider_user_id);
+```
+
+### Identity Providers
+
+```sql
+CREATE TABLE identity_providers (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  type TEXT NOT NULL,         -- google, github, facebook, microsoft, oidc, etc.
+  name TEXT NOT NULL,         -- Unique name within tenant (used in URLs)
+  display_name TEXT NOT NULL, -- Human-readable name for UI
+  client_id TEXT,
+  client_secret_encrypted TEXT, -- AES-256-GCM encrypted
+  client_secret_iv TEXT,        -- Initialization vector (base64)
+  config TEXT DEFAULT '{}',     -- Provider-specific configuration (JSON)
+  enabled INTEGER DEFAULT 1,
+  display_order INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(tenant_id, name),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+```
+
+### OAuth Client Extensions (007)
+
+```sql
+-- Additional columns added to oauth_clients table
+ALTER TABLE oauth_clients ADD COLUMN name TEXT;
+ALTER TABLE oauth_clients ADD COLUMN enabled INTEGER DEFAULT 1;
+ALTER TABLE oauth_clients ADD COLUMN metadata TEXT DEFAULT '{}';
+ALTER TABLE oauth_clients ADD COLUMN rotated_at INTEGER;
+ALTER TABLE oauth_clients ADD COLUMN previous_secret_hash TEXT;
+ALTER TABLE oauth_clients ADD COLUMN previous_secret_expires_at INTEGER;
 ```
 
 ## Troubleshooting

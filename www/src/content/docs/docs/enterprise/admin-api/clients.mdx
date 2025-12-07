@@ -1,0 +1,609 @@
+---
+title: Client Management API
+description: Manage OAuth clients programmatically with secure secret generation and rotation.
+---
+
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+<div class="tsdoc">
+<Section type="about">
+
+The Client Management API provides a complete CRUD interface for managing OAuth clients. It supports secure secret generation, secret rotation with grace periods, and full lifecycle management of client credentials.
+
+</Section>
+
+## Overview
+
+OAuth clients represent applications that authenticate against your OpenAuth server. Each client has:
+
+- A unique client ID with a recognizable prefix
+- A cryptographically secure client secret
+- Configured grant types, scopes, and redirect URIs
+- Metadata for custom application data
+
+## Security Features
+
+### Secret Generation
+
+Client secrets are generated using cryptographically secure random bytes:
+
+- **256-bit entropy** (32 bytes) using `crypto.getRandomValues()`
+- **URL-safe Base64 encoding** for easy transmission
+- Secret is returned **only once** at creation time
+
+```ts
+// Example generated secret format
+"dGhlLXNlY3JldC1rZXktaGVyZS1pcy00Mi1ieXRlcw"
+```
+
+### Secret Hashing
+
+Secrets are never stored in plaintext. They are hashed using:
+
+- **PBKDF2-SHA256** key derivation
+- **100,000 iterations** for brute-force resistance
+- **16-byte random salt** per secret
+- **Constant-time comparison** to prevent timing attacks
+
+Hash format stored in database:
+```
+$pbkdf2-sha256$100000$<salt>$<hash>
+```
+
+### Secret Rotation
+
+Rotate secrets without downtime using the grace period feature:
+
+1. New secret is generated and becomes the primary
+2. Old secret remains valid for the grace period (default: 1 hour)
+3. Both secrets work during the transition
+4. After grace period expires, only new secret works
+
+## Required Scopes
+
+| Endpoint | Required Scope |
+|----------|----------------|
+| `GET /api/clients` | `clients:read` |
+| `GET /api/clients/:id` | `clients:read` |
+| `POST /api/clients` | `clients:write` |
+| `PATCH /api/clients/:id` | `clients:write` |
+| `DELETE /api/clients/:id` | `clients:delete` |
+| `POST /api/clients/:id/rotate` | `clients:write` |
+
+## Data Models
+
+### OAuthClient
+
+<Segment>
+<Section type="parameters">
+- <p><code class="key">id</code> <code class="primitive">string</code></p>
+- <p><code class="key">tenant_id</code> <code class="primitive">string</code></p>
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+- <p><code class="key">grant_types</code> <code class="primitive">string[]</code></p>
+- <p><code class="key">scopes</code> <code class="primitive">string[]</code></p>
+- <p><code class="key">redirect_uris</code> <code class="primitive">string[]</code></p>
+- <p><code class="key">metadata</code> <code class="primitive">Record&lt;string, unknown&gt;</code></p>
+- <p><code class="key">enabled</code> <code class="primitive">boolean</code></p>
+- <p><code class="key">created_at</code> <code class="primitive">number</code></p>
+- <p><code class="key">updated_at</code> <code class="primitive">number</code></p>
+- <p><code class="key">rotated_at?</code> <code class="primitive">number</code></p>
+</Section>
+The complete OAuth client object as stored in the database (secret hash excluded from responses).
+</Segment>
+
+### OAuthClientResponse
+
+<Segment>
+API response format that excludes sensitive fields like secret hashes.
+
+```ts
+interface OAuthClientResponse {
+  id: string
+  tenant_id: string
+  name: string
+  grant_types: string[]
+  scopes: string[]
+  redirect_uris: string[]
+  metadata: Record<string, unknown>
+  enabled: boolean
+  created_at: number
+  updated_at: number
+  rotated_at?: number
+}
+```
+</Segment>
+
+### OAuthClientCreatedResponse
+
+<Segment>
+Returned when creating a client. Extends `OAuthClientResponse` with the plaintext secret.
+
+```ts
+interface OAuthClientCreatedResponse extends OAuthClientResponse {
+  client_secret: string  // Only returned once!
+}
+```
+
+:::caution
+The `client_secret` is only returned at creation time. Store it securely - it cannot be retrieved again.
+:::
+</Segment>
+
+## Validation Rules
+
+### Client Name
+
+- Required, must be a string
+- Maximum 100 characters
+- Allowed characters: alphanumeric, spaces, hyphens, underscores
+- Pattern: `/^[a-zA-Z0-9_\-\s]+$/`
+
+### Grant Types
+
+Allowed values:
+- `client_credentials` - Machine-to-machine authentication
+- `authorization_code` - Standard OAuth2 flow with user interaction
+- `refresh_token` - Token refresh capability
+
+```ts
+// Valid grant_types
+["client_credentials"]
+["authorization_code", "refresh_token"]
+```
+
+### Scopes
+
+- Must be an array of strings
+- Maximum 50 scopes per client
+- Each scope must match: `/^[a-zA-Z0-9_:.\-]+$/`
+
+```ts
+// Valid scopes
+["read:users", "write:posts", "admin.settings"]
+```
+
+### Redirect URIs
+
+- Must be an array of valid URLs
+- Maximum 10 redirect URIs per client
+- HTTPS required (except `localhost` and `127.0.0.1` for development)
+
+```ts
+// Valid redirect URIs
+["https://myapp.com/callback", "http://localhost:3000/callback"]
+
+// Invalid (non-HTTPS for production domain)
+["http://myapp.com/callback"]  // Error!
+```
+
+### Metadata
+
+- Must be a JSON object
+- Maximum 10KB when serialized
+
+## API Endpoints
+
+---
+
+### List Clients
+
+<Segment>
+<Section type="signature">
+```http
+GET /api/clients
+```
+</Section>
+
+List all OAuth clients for the current tenant with pagination support.
+
+<Section type="parameters">
+#### Query Parameters
+- <p><code class="key">cursor?</code> <code class="primitive">string</code></p>
+  Pagination cursor from previous response.
+- <p><code class="key">limit?</code> <code class="primitive">number</code></p>
+  Number of clients to return (default: 20, max: 100).
+- <p><code class="key">enabled?</code> <code class="primitive">boolean</code></p>
+  Filter by enabled status.
+</Section>
+
+<InlineSection>
+**Returns** `PaginatedClientsResponse`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X GET "https://auth.example.com/api/clients?limit=10&enabled=true" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "X-Tenant-ID: tenant_123"
+```
+
+**Response Example:**
+
+```json
+{
+  "clients": [
+    {
+      "id": "client_abc123xyz",
+      "tenant_id": "tenant_123",
+      "name": "My Mobile App",
+      "grant_types": ["authorization_code", "refresh_token"],
+      "scopes": ["openid", "profile", "email"],
+      "redirect_uris": ["myapp://callback"],
+      "metadata": { "platform": "ios" },
+      "enabled": true,
+      "created_at": 1699900000000,
+      "updated_at": 1699900000000
+    }
+  ],
+  "next_cursor": "eyJpZCI6ImNsaWVudF94eXoifQ==",
+  "has_more": true
+}
+```
+
+---
+
+### Create Client
+
+<Segment>
+<Section type="signature">
+```http
+POST /api/clients
+```
+</Section>
+
+Create a new OAuth client. Returns the client secret only once.
+
+<Section type="parameters">
+#### Request Body
+- <p><code class="key">name</code> <code class="primitive">string</code> <span class="required">required</span></p>
+  Human-readable client name.
+- <p><code class="key">grant_types?</code> <code class="primitive">string[]</code></p>
+  Allowed OAuth grant types. Default: `["client_credentials"]`.
+- <p><code class="key">scopes?</code> <code class="primitive">string[]</code></p>
+  Allowed OAuth scopes. Default: `[]`.
+- <p><code class="key">redirect_uris?</code> <code class="primitive">string[]</code></p>
+  Allowed redirect URIs. Default: `[]`.
+- <p><code class="key">metadata?</code> <code class="primitive">object</code></p>
+  Custom metadata. Default: `{}`.
+- <p><code class="key">enabled?</code> <code class="primitive">boolean</code></p>
+  Whether client is active. Default: `true`.
+</Section>
+
+<InlineSection>
+**Returns** `OAuthClientCreatedResponse` with HTTP 201
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X POST "https://auth.example.com/api/clients" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "name": "Production API Service",
+    "grant_types": ["client_credentials"],
+    "scopes": ["api:read", "api:write"],
+    "metadata": {
+      "environment": "production",
+      "team": "backend"
+    }
+  }'
+```
+
+**Response Example:**
+
+```json
+{
+  "id": "client_9f8e7d6c5b4a",
+  "tenant_id": "tenant_123",
+  "name": "Production API Service",
+  "client_secret": "dGhlLXNlY3JldC1rZXktaGVyZS1pcy00Mi1ieXRlcw",
+  "grant_types": ["client_credentials"],
+  "scopes": ["api:read", "api:write"],
+  "redirect_uris": [],
+  "metadata": {
+    "environment": "production",
+    "team": "backend"
+  },
+  "enabled": true,
+  "created_at": 1699900000000,
+  "updated_at": 1699900000000
+}
+```
+
+:::caution[Save the Secret]
+Store `client_secret` immediately in a secure location. It will never be returned again.
+:::
+
+---
+
+### Get Client
+
+<Segment>
+<Section type="signature">
+```http
+GET /api/clients/:clientId
+```
+</Section>
+
+Retrieve a single OAuth client by ID.
+
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">clientId</code> <code class="primitive">string</code></p>
+  The client ID.
+</Section>
+
+<InlineSection>
+**Returns** `OAuthClientResponse`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X GET "https://auth.example.com/api/clients/client_9f8e7d6c5b4a" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "X-Tenant-ID: tenant_123"
+```
+
+**Response Example:**
+
+```json
+{
+  "id": "client_9f8e7d6c5b4a",
+  "tenant_id": "tenant_123",
+  "name": "Production API Service",
+  "grant_types": ["client_credentials"],
+  "scopes": ["api:read", "api:write"],
+  "redirect_uris": [],
+  "metadata": {
+    "environment": "production",
+    "team": "backend"
+  },
+  "enabled": true,
+  "created_at": 1699900000000,
+  "updated_at": 1699900000000
+}
+```
+
+---
+
+### Update Client
+
+<Segment>
+<Section type="signature">
+```http
+PATCH /api/clients/:clientId
+```
+</Section>
+
+Update an existing OAuth client. All fields are optional.
+
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">clientId</code> <code class="primitive">string</code></p>
+  The client ID.
+
+#### Request Body
+- <p><code class="key">name?</code> <code class="primitive">string</code></p>
+  Updated client name.
+- <p><code class="key">grant_types?</code> <code class="primitive">string[]</code></p>
+  Updated grant types.
+- <p><code class="key">scopes?</code> <code class="primitive">string[]</code></p>
+  Updated scopes.
+- <p><code class="key">redirect_uris?</code> <code class="primitive">string[]</code></p>
+  Updated redirect URIs.
+- <p><code class="key">metadata?</code> <code class="primitive">object</code></p>
+  Updated metadata (replaces existing).
+- <p><code class="key">enabled?</code> <code class="primitive">boolean</code></p>
+  Enable or disable the client.
+</Section>
+
+<InlineSection>
+**Returns** `OAuthClientResponse`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X PATCH "https://auth.example.com/api/clients/client_9f8e7d6c5b4a" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "name": "Production API Service v2",
+    "scopes": ["api:read", "api:write", "api:admin"],
+    "enabled": true
+  }'
+```
+
+**Response Example:**
+
+```json
+{
+  "id": "client_9f8e7d6c5b4a",
+  "tenant_id": "tenant_123",
+  "name": "Production API Service v2",
+  "grant_types": ["client_credentials"],
+  "scopes": ["api:read", "api:write", "api:admin"],
+  "redirect_uris": [],
+  "metadata": {
+    "environment": "production",
+    "team": "backend"
+  },
+  "enabled": true,
+  "created_at": 1699900000000,
+  "updated_at": 1699900100000
+}
+```
+
+---
+
+### Delete Client
+
+<Segment>
+<Section type="signature">
+```http
+DELETE /api/clients/:clientId
+```
+</Section>
+
+Permanently delete an OAuth client. This action cannot be undone.
+
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">clientId</code> <code class="primitive">string</code></p>
+  The client ID.
+</Section>
+
+<InlineSection>
+**Returns** HTTP 204 No Content
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X DELETE "https://auth.example.com/api/clients/client_9f8e7d6c5b4a" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "X-Tenant-ID: tenant_123"
+```
+
+**Response:** HTTP 204 (no body)
+
+---
+
+### Rotate Client Secret
+
+<Segment>
+<Section type="signature">
+```http
+POST /api/clients/:clientId/rotate
+```
+</Section>
+
+Generate a new client secret while optionally keeping the old one valid for a grace period.
+
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">clientId</code> <code class="primitive">string</code></p>
+  The client ID.
+
+#### Request Body (optional)
+- <p><code class="key">grace_period_seconds?</code> <code class="primitive">number</code></p>
+  How long the old secret remains valid (default: 3600 = 1 hour).
+</Section>
+
+<InlineSection>
+**Returns** `OAuthClientRotatedResponse`
+</InlineSection>
+</Segment>
+
+**Request Example:**
+
+```bash
+curl -X POST "https://auth.example.com/api/clients/client_9f8e7d6c5b4a/rotate" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: tenant_123" \
+  -d '{
+    "grace_period_seconds": 7200
+  }'
+```
+
+**Response Example:**
+
+```json
+{
+  "id": "client_9f8e7d6c5b4a",
+  "tenant_id": "tenant_123",
+  "name": "Production API Service v2",
+  "client_secret": "bmV3LXNlY3JldC1hZnRlci1yb3RhdGlvbi1oZXJl",
+  "grant_types": ["client_credentials"],
+  "scopes": ["api:read", "api:write", "api:admin"],
+  "redirect_uris": [],
+  "metadata": {
+    "environment": "production",
+    "team": "backend"
+  },
+  "enabled": true,
+  "created_at": 1699900000000,
+  "updated_at": 1699900200000,
+  "rotated_at": 1699900200000,
+  "previous_secret_expires_at": 1699907400000
+}
+```
+
+**Grace Period Workflow:**
+
+1. **Before rotation:** Only current secret works
+2. **After rotation (during grace):** Both old and new secrets work
+3. **After grace period expires:** Only new secret works
+
+```
+Time ────────────────────────────────────────────────────►
+     │                    │                              │
+   Rotate             Grace Period                 Old Secret
+   Secret               Active                      Expires
+     │                    │                              │
+     ▼                    ▼                              ▼
+[Old only]  ──►  [Both work]  ──────────────►  [New only]
+```
+
+## Error Responses
+
+### 400 Bad Request
+
+Returned for validation errors.
+
+```json
+{
+  "error": "Bad Request",
+  "message": "Invalid grant type: password. Allowed: client_credentials, authorization_code, refresh_token"
+}
+```
+
+### 404 Not Found
+
+Returned when client doesn't exist.
+
+```json
+{
+  "error": "Not Found",
+  "message": "Client not found"
+}
+```
+
+### 409 Conflict
+
+Returned when client name already exists within the tenant.
+
+```json
+{
+  "error": "Conflict",
+  "message": "Client with name 'My App' already exists for this tenant"
+}
+```
+
+## Best Practices
+
+1. **Store secrets securely** - Use a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.)
+2. **Rotate secrets regularly** - Set up automated rotation every 90 days
+3. **Use grace periods** - Always specify a grace period during rotation to prevent downtime
+4. **Disable before delete** - Set `enabled: false` before deleting to ensure no active sessions
+5. **Minimize scopes** - Only request scopes the client actually needs
+6. **Use HTTPS redirect URIs** - Never use HTTP in production (localhost exceptions for development only)
+
+</div>

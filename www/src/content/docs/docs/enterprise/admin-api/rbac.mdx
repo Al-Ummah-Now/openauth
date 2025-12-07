@@ -1,0 +1,1079 @@
+---
+title: RBAC REST API
+editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/rbac/admin-endpoints.ts
+description: Reference documentation for the RBAC REST API endpoints for managing roles, permissions, and assignments.
+---
+
+import {
+  Segment,
+  Section,
+  NestedTitle,
+  InlineSection,
+} from "toolbeam-docs-theme/components"
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+<div class="tsdoc">
+<Section type="about">
+
+The RBAC REST API provides HTTP endpoints for managing Role-Based Access Control resources including apps, roles, permissions, and user/role assignments. All endpoints require admin authentication and operate within tenant isolation boundaries.
+
+```ts
+import { Hono } from "hono"
+import { rbacAdminEndpoints } from "@openauthjs/openauth/rbac"
+import { RBACServiceImpl } from "@openauthjs/openauth/rbac"
+import { RBACAdapter } from "@openauthjs/openauth/rbac"
+
+const rbacAdapter = new RBACAdapter(env.DB)
+const rbacService = new RBACServiceImpl(rbacAdapter, storage)
+
+const app = new Hono()
+
+// Mount with admin authentication middleware
+app.use("/admin/rbac/*", adminAuthMiddleware)
+app.route("/admin/rbac", rbacAdminEndpoints(rbacService))
+```
+
+</Section>
+
+## REST API vs Service API
+
+<Segment>
+
+OpenAuth provides two ways to interact with RBAC functionality:
+
+| Approach | Use Case |
+|----------|----------|
+| **REST API** | External integrations, admin dashboards, cross-service communication |
+| **Service API** | Direct programmatic access within your application code |
+
+**Use the REST API when:**
+- Building an admin dashboard or management UI
+- Integrating with external systems that need to manage roles
+- Creating automation scripts or CLI tools
+- Exposing RBAC management to other microservices
+
+**Use the Service API when:**
+- Checking permissions within request handlers
+- Enriching tokens with RBAC claims during authentication
+- Performing high-frequency permission checks (benefits from caching)
+- Building custom middleware that needs RBAC data
+
+```ts title="REST API Example"
+// External request to create a role
+const response = await fetch("/admin/rbac/roles", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer <admin-token>",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ name: "editor", description: "Content editor" })
+})
+```
+
+```ts title="Service API Example"
+// Direct service call within your application
+const hasPermission = await rbacService.checkPermission({
+  userId: "user-123",
+  appId: "my-app",
+  tenantId: "tenant-1",
+  permission: "posts:write"
+})
+```
+
+</Segment>
+
+## Authentication and Authorization
+
+<Segment>
+
+All RBAC REST API endpoints require:
+
+1. **Admin Context** - The request must include valid admin credentials
+2. **Tenant Isolation** - Operations are scoped to the authenticated tenant
+
+The middleware expects these context variables to be set:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `adminId` | `string` | ID of the admin user making the request |
+| `tenantId` | `string` | Tenant ID for scoping operations |
+| `isAdmin` | `boolean` | Must be `true` for access |
+
+</Segment>
+
+### Required Scopes
+
+<Segment>
+
+When using the enterprise middleware stack, these scopes control access:
+
+| Scope | Description |
+|-------|-------------|
+| `rbac:read` | Read roles, permissions, and assignments |
+| `rbac:write` | Create, update, and delete RBAC resources |
+
+```ts
+import { requireScope } from "@openauthjs/openauth/middleware"
+
+// Protect read endpoints
+app.get("/admin/rbac/roles", requireScope("rbac:read"), handler)
+
+// Protect write endpoints
+app.post("/admin/rbac/roles", requireScope("rbac:write"), handler)
+```
+
+</Segment>
+
+---
+
+## Permission Endpoints
+
+### GET /permissions
+
+<Segment>
+<Section type="signature">
+```http
+GET /admin/rbac/permissions?appId={appId}
+```
+</Section>
+<Section type="parameters">
+#### Query Parameters
+- <p><code class="key">appId</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+The app ID to list permissions for.
+</Section>
+
+List all permissions for a specific app.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/permissions?appId=my-app", {
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```json title="Response 200"
+{
+  "permissions": [
+    {
+      "id": "perm-uuid-1",
+      "name": "posts:read",
+      "app_id": "my-app",
+      "resource": "posts",
+      "action": "read",
+      "description": "Read blog posts",
+      "created_at": 1699999999999
+    },
+    {
+      "id": "perm-uuid-2",
+      "name": "posts:write",
+      "app_id": "my-app",
+      "resource": "posts",
+      "action": "write",
+      "description": "Create and edit blog posts",
+      "created_at": 1699999999998
+    }
+  ]
+}
+```
+
+```json title="Response 400 - Missing appId"
+{
+  "error": "Bad Request",
+  "message": "appId query parameter is required"
+}
+```
+
+</Segment>
+
+### POST /permissions
+
+<Segment>
+<Section type="signature">
+```http
+POST /admin/rbac/permissions
+```
+</Section>
+<Section type="parameters">
+#### Request Body
+- <p><code class="key">name</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+Permission name, typically in `resource:action` format.
+- <p><code class="key">appId</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+The app this permission belongs to.
+- <p><code class="key">resource</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+The resource being protected (e.g., "posts", "users").
+- <p><code class="key">action</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+The action on the resource (e.g., "read", "write", "delete").
+- <p><code class="key">description</code> <code class="primitive">string</code></p>
+Optional description of the permission.
+</Section>
+
+Create a new permission.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/permissions", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer <token>",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    name: "posts:delete",
+    appId: "my-app",
+    resource: "posts",
+    action: "delete",
+    description: "Delete blog posts"
+  })
+})
+```
+
+```json title="Response 201"
+{
+  "id": "perm-uuid-3",
+  "name": "posts:delete",
+  "app_id": "my-app",
+  "resource": "posts",
+  "action": "delete",
+  "description": "Delete blog posts",
+  "created_at": 1699999999999
+}
+```
+
+:::note[Permission Name Format]
+Permission names can contain alphanumeric characters, underscores, colons, dots, and hyphens. The `resource:action` format is recommended for clarity.
+:::
+
+</Segment>
+
+### GET /permissions/:id
+
+<Segment>
+<Section type="signature">
+```http
+GET /admin/rbac/permissions/{permissionId}
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">permissionId</code> <code class="primitive">string</code></p>
+The permission ID.
+</Section>
+
+Get a specific permission by ID.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/permissions/perm-uuid-1", {
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```json title="Response 200"
+{
+  "id": "perm-uuid-1",
+  "name": "posts:read",
+  "app_id": "my-app",
+  "resource": "posts",
+  "action": "read",
+  "description": "Read blog posts",
+  "created_at": 1699999999999
+}
+```
+
+</Segment>
+
+### DELETE /permissions/:id
+
+<Segment>
+<Section type="signature">
+```http
+DELETE /admin/rbac/permissions/{permissionId}
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">permissionId</code> <code class="primitive">string</code></p>
+The permission ID to delete.
+</Section>
+
+Delete a permission.
+
+:::caution[Cascade Delete]
+Deleting a permission automatically removes it from all roles that have it assigned. This operation cannot be undone.
+:::
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/permissions/perm-uuid-1", {
+  method: "DELETE",
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```text title="Response 204"
+(No Content)
+```
+
+```json title="Response 404 - Not Found"
+{
+  "error": "Not Found",
+  "message": "Permission not found"
+}
+```
+
+</Segment>
+
+---
+
+## Role Endpoints
+
+### GET /roles
+
+<Segment>
+<Section type="signature">
+```http
+GET /admin/rbac/roles
+```
+</Section>
+
+List all roles for the current tenant. Results are scoped to the tenant ID from the admin context.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles", {
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```json title="Response 200"
+{
+  "roles": [
+    {
+      "id": "role-uuid-1",
+      "name": "admin",
+      "tenant_id": "tenant-1",
+      "description": "Administrator with full access",
+      "is_system_role": true,
+      "created_at": 1699999999999,
+      "updated_at": 1699999999999
+    },
+    {
+      "id": "role-uuid-2",
+      "name": "editor",
+      "tenant_id": "tenant-1",
+      "description": "Content editor",
+      "is_system_role": false,
+      "created_at": 1699999999998,
+      "updated_at": 1699999999998
+    }
+  ]
+}
+```
+
+:::tip[Tenant Scoping]
+Roles are automatically filtered by the authenticated tenant. You cannot see or manage roles from other tenants.
+:::
+
+</Segment>
+
+### POST /roles
+
+<Segment>
+<Section type="signature">
+```http
+POST /admin/rbac/roles
+```
+</Section>
+<Section type="parameters">
+#### Request Body
+- <p><code class="key">name</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+Role name (alphanumeric, hyphens, underscores only).
+- <p><code class="key">description</code> <code class="primitive">string</code></p>
+Optional description of the role.
+- <p><code class="key">isSystemRole</code> <code class="primitive">boolean</code></p>
+Mark as a system role (cannot be deleted). Default: `false`.
+</Section>
+
+Create a new role.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer <token>",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    name: "moderator",
+    description: "Content moderator",
+    isSystemRole: false
+  })
+})
+```
+
+```json title="Response 201"
+{
+  "id": "role-uuid-3",
+  "name": "moderator",
+  "tenant_id": "tenant-1",
+  "description": "Content moderator",
+  "is_system_role": false,
+  "created_at": 1699999999999,
+  "updated_at": 1699999999999
+}
+```
+
+```json title="Response 400 - Invalid Name"
+{
+  "error": "Bad Request",
+  "message": "name must contain only alphanumeric characters, hyphens, and underscores"
+}
+```
+
+</Segment>
+
+### GET /roles/:id
+
+<Segment>
+<Section type="signature">
+```http
+GET /admin/rbac/roles/{roleId}
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">roleId</code> <code class="primitive">string</code></p>
+The role ID.
+</Section>
+
+Get a role with its assigned permissions.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles/role-uuid-1", {
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```json title="Response 200"
+{
+  "role": {
+    "id": "role-uuid-1",
+    "name": "editor",
+    "tenant_id": "tenant-1",
+    "description": "Content editor",
+    "is_system_role": false,
+    "created_at": 1699999999999,
+    "updated_at": 1699999999999
+  },
+  "permissions": [
+    {
+      "id": "perm-uuid-1",
+      "name": "posts:read",
+      "app_id": "my-app",
+      "resource": "posts",
+      "action": "read",
+      "description": "Read blog posts",
+      "created_at": 1699999999999
+    },
+    {
+      "id": "perm-uuid-2",
+      "name": "posts:write",
+      "app_id": "my-app",
+      "resource": "posts",
+      "action": "write",
+      "description": "Create and edit blog posts",
+      "created_at": 1699999999998
+    }
+  ]
+}
+```
+
+```json title="Response 404"
+{
+  "error": "Not Found",
+  "message": "Role not found"
+}
+```
+
+</Segment>
+
+### PATCH /roles/:id
+
+<Segment>
+<Section type="signature">
+```http
+PATCH /admin/rbac/roles/{roleId}
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">roleId</code> <code class="primitive">string</code></p>
+The role ID to update.
+
+#### Request Body
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+New role name.
+- <p><code class="key">description</code> <code class="primitive">string</code></p>
+New description.
+</Section>
+
+Update a role's name or description.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles/role-uuid-1", {
+  method: "PATCH",
+  headers: {
+    "Authorization": "Bearer <token>",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    description: "Updated description for editor role"
+  })
+})
+```
+
+```json title="Response 200"
+{
+  "id": "role-uuid-1",
+  "name": "editor",
+  "tenant_id": "tenant-1",
+  "description": "Updated description for editor role",
+  "is_system_role": false,
+  "created_at": 1699999999999,
+  "updated_at": 1700000000000
+}
+```
+
+```json title="Response 400 - No Fields"
+{
+  "error": "Bad Request",
+  "message": "At least one of name or description must be provided"
+}
+```
+
+</Segment>
+
+### DELETE /roles/:id
+
+<Segment>
+<Section type="signature">
+```http
+DELETE /admin/rbac/roles/{roleId}
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">roleId</code> <code class="primitive">string</code></p>
+The role ID to delete.
+</Section>
+
+Delete a role.
+
+:::caution[Cascade Delete]
+Deleting a role automatically:
+- Removes all user role assignments for this role
+- Removes all permission assignments from this role
+
+This operation cannot be undone.
+:::
+
+:::danger[System Roles]
+System roles (where `is_system_role: true`) cannot be deleted. Attempting to delete a system role returns a 403 Forbidden error.
+:::
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles/role-uuid-1", {
+  method: "DELETE",
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```text title="Response 204"
+(No Content)
+```
+
+```json title="Response 403 - System Role"
+{
+  "error": "Forbidden",
+  "message": "Cannot delete system role"
+}
+```
+
+```json title="Response 404"
+{
+  "error": "Not Found",
+  "message": "Role not found"
+}
+```
+
+</Segment>
+
+---
+
+## Role Assignment Endpoints
+
+### POST /roles/:id/assign
+
+<Segment>
+<Section type="signature">
+```http
+POST /admin/rbac/users/{userId}/roles
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">userId</code> <code class="primitive">string</code></p>
+The user ID to assign the role to.
+
+#### Request Body
+- <p><code class="key">roleId</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+The role ID to assign.
+- <p><code class="key">expiresAt</code> <code class="primitive">number</code></p>
+Optional expiration timestamp (milliseconds since epoch). Must be in the future.
+</Section>
+
+Assign a role to a user.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/users/user-123/roles", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer <token>",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    roleId: "role-uuid-1",
+    expiresAt: 1700000000000  // Optional
+  })
+})
+```
+
+```json title="Response 201"
+{
+  "user_id": "user-123",
+  "role_id": "role-uuid-1",
+  "tenant_id": "tenant-1",
+  "assigned_at": 1699999999999,
+  "expires_at": 1700000000000,
+  "assigned_by": "admin-user"
+}
+```
+
+```json title="Response 409 - Already Assigned"
+{
+  "error": "Conflict",
+  "message": "Role is already assigned to user"
+}
+```
+
+```json title="Response 404 - Role Not Found"
+{
+  "error": "Not Found",
+  "message": "Role not found"
+}
+```
+
+:::tip[Time-Limited Access]
+Use the `expiresAt` field to grant temporary access. Expired assignments are automatically filtered out during permission checks.
+:::
+
+</Segment>
+
+### DELETE /roles/:id/assign/:userId
+
+<Segment>
+<Section type="signature">
+```http
+DELETE /admin/rbac/users/{userId}/roles/{roleId}
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">userId</code> <code class="primitive">string</code></p>
+The user ID.
+- <p><code class="key">roleId</code> <code class="primitive">string</code></p>
+The role ID to remove.
+</Section>
+
+Remove a role from a user.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/users/user-123/roles/role-uuid-1", {
+  method: "DELETE",
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```text title="Response 204"
+(No Content)
+```
+
+</Segment>
+
+### GET /users/:userId/roles
+
+<Segment>
+<Section type="signature">
+```http
+GET /admin/rbac/users/{userId}/roles
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">userId</code> <code class="primitive">string</code></p>
+The user ID.
+</Section>
+
+List all roles assigned to a user.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/users/user-123/roles", {
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```json title="Response 200"
+{
+  "userRoles": [
+    {
+      "user_id": "user-123",
+      "role_id": "role-uuid-1",
+      "tenant_id": "tenant-1",
+      "assigned_at": 1699999999999,
+      "expires_at": null,
+      "assigned_by": "admin-user"
+    },
+    {
+      "user_id": "user-123",
+      "role_id": "role-uuid-2",
+      "tenant_id": "tenant-1",
+      "assigned_at": 1699999999998,
+      "expires_at": 1700000000000,
+      "assigned_by": "admin-user"
+    }
+  ]
+}
+```
+
+</Segment>
+
+---
+
+## Role Permission Endpoints
+
+### POST /roles/:roleId/permissions
+
+<Segment>
+<Section type="signature">
+```http
+POST /admin/rbac/roles/{roleId}/permissions
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">roleId</code> <code class="primitive">string</code></p>
+The role ID.
+
+#### Request Body
+- <p><code class="key">permissionId</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+The permission ID to assign.
+</Section>
+
+Assign a permission to a role.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles/role-uuid-1/permissions", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer <token>",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    permissionId: "perm-uuid-1"
+  })
+})
+```
+
+```json title="Response 201"
+{
+  "role_id": "role-uuid-1",
+  "permission_id": "perm-uuid-1",
+  "granted_at": 1699999999999,
+  "granted_by": "admin-user"
+}
+```
+
+```json title="Response 409 - Already Assigned"
+{
+  "error": "Conflict",
+  "message": "Permission is already assigned to role"
+}
+```
+
+:::note[Cache Invalidation]
+Assigning a permission to a role automatically invalidates the permission cache for all users with that role.
+:::
+
+</Segment>
+
+### DELETE /roles/:roleId/permissions/:permissionId
+
+<Segment>
+<Section type="signature">
+```http
+DELETE /admin/rbac/roles/{roleId}/permissions/{permissionId}
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">roleId</code> <code class="primitive">string</code></p>
+The role ID.
+- <p><code class="key">permissionId</code> <code class="primitive">string</code></p>
+The permission ID to remove.
+</Section>
+
+Remove a permission from a role.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles/role-uuid-1/permissions/perm-uuid-1", {
+  method: "DELETE",
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```text title="Response 204"
+(No Content)
+```
+
+</Segment>
+
+### GET /roles/:roleId/permissions
+
+<Segment>
+<Section type="signature">
+```http
+GET /admin/rbac/roles/{roleId}/permissions
+```
+</Section>
+<Section type="parameters">
+#### Path Parameters
+- <p><code class="key">roleId</code> <code class="primitive">string</code></p>
+The role ID.
+</Section>
+
+List all permissions assigned to a role.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/roles/role-uuid-1/permissions", {
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```json title="Response 200"
+{
+  "permissions": [
+    {
+      "id": "perm-uuid-1",
+      "name": "posts:read",
+      "app_id": "my-app",
+      "resource": "posts",
+      "action": "read",
+      "description": "Read blog posts",
+      "created_at": 1699999999999
+    }
+  ]
+}
+```
+
+</Segment>
+
+---
+
+## App Endpoints
+
+### GET /apps
+
+<Segment>
+<Section type="signature">
+```http
+GET /admin/rbac/apps
+```
+</Section>
+
+List all apps for the current tenant.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/apps", {
+  headers: { "Authorization": "Bearer <token>" }
+})
+```
+
+```json title="Response 200"
+{
+  "apps": [
+    {
+      "id": "my-app",
+      "name": "My Application",
+      "tenant_id": "tenant-1",
+      "description": "Main application",
+      "created_at": 1699999999999
+    }
+  ]
+}
+```
+
+</Segment>
+
+### POST /apps
+
+<Segment>
+<Section type="signature">
+```http
+POST /admin/rbac/apps
+```
+</Section>
+<Section type="parameters">
+#### Request Body
+- <p><code class="key">id</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+Unique app identifier (alphanumeric, hyphens, underscores only).
+- <p><code class="key">name</code> <code class="primitive">string</code> <strong>(required)</strong></p>
+Display name for the app.
+- <p><code class="key">description</code> <code class="primitive">string</code></p>
+Optional description.
+</Section>
+
+Create a new app.
+
+```ts title="Request"
+const response = await fetch("/admin/rbac/apps", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer <token>",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    id: "my-new-app",
+    name: "My New Application",
+    description: "A new application"
+  })
+})
+```
+
+```json title="Response 201"
+{
+  "id": "my-new-app",
+  "name": "My New Application",
+  "tenant_id": "tenant-1",
+  "description": "A new application",
+  "created_at": 1699999999999
+}
+```
+
+```json title="Response 409 - Already Exists"
+{
+  "error": "Conflict",
+  "message": "App with this ID already exists"
+}
+```
+
+</Segment>
+
+---
+
+## Error Responses
+
+<Segment>
+
+All endpoints follow a consistent error response format:
+
+```json
+{
+  "error": "Error Type",
+  "message": "Detailed error message"
+}
+```
+
+| Status Code | Error Type | Description |
+|-------------|------------|-------------|
+| 400 | Bad Request | Invalid input, missing required fields |
+| 401 | Unauthorized | Missing or invalid admin context |
+| 403 | Forbidden | Admin access required or system role protection |
+| 404 | Not Found | Resource not found |
+| 409 | Conflict | Resource already exists or is already assigned |
+
+</Segment>
+
+---
+
+## Complete Example
+
+<Segment>
+
+Here's a complete example of setting up RBAC for an application:
+
+```ts title="Setup RBAC Admin API"
+import { Hono } from "hono"
+import { rbacAdminEndpoints, createAdminMiddleware } from "@openauthjs/openauth/rbac"
+import { RBACServiceImpl, RBACAdapter } from "@openauthjs/openauth/rbac"
+
+// Create the RBAC service
+const rbacAdapter = new RBACAdapter(env.DB)
+const rbacService = new RBACServiceImpl(rbacAdapter, storage)
+
+// Create admin authentication middleware
+const adminAuth = createAdminMiddleware(async (req) => {
+  const token = req.headers.get("Authorization")?.replace("Bearer ", "")
+  if (!token) return null
+
+  const decoded = await verifyToken(token)
+  return {
+    adminId: decoded.sub,
+    tenantId: decoded.tenant_id,
+    isAdmin: decoded.roles?.includes("admin") ?? false
+  }
+})
+
+// Mount the RBAC admin endpoints
+const app = new Hono()
+app.use("/admin/rbac/*", adminAuth)
+app.route("/admin/rbac", rbacAdminEndpoints(rbacService))
+
+export default app
+```
+
+```ts title="Using the API"
+// 1. Create an app
+await fetch("/admin/rbac/apps", {
+  method: "POST",
+  body: JSON.stringify({ id: "blog", name: "Blog Application" })
+})
+
+// 2. Create permissions
+await fetch("/admin/rbac/permissions", {
+  method: "POST",
+  body: JSON.stringify({
+    name: "posts:read",
+    appId: "blog",
+    resource: "posts",
+    action: "read"
+  })
+})
+
+// 3. Create a role
+const roleResponse = await fetch("/admin/rbac/roles", {
+  method: "POST",
+  body: JSON.stringify({ name: "reader", description: "Read-only access" })
+})
+const { id: roleId } = await roleResponse.json()
+
+// 4. Assign permission to role
+await fetch(`/admin/rbac/roles/${roleId}/permissions`, {
+  method: "POST",
+  body: JSON.stringify({ permissionId: "perm-uuid" })
+})
+
+// 5. Assign role to user
+await fetch("/admin/rbac/users/user-123/roles", {
+  method: "POST",
+  body: JSON.stringify({ roleId })
+})
+```
+
+</Segment>
+
+</div>

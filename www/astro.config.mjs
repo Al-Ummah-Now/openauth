@@ -137,6 +137,18 @@ export default defineConfig({
             { label: "Multi-Tenant", slug: "docs/enterprise/multi-tenant" },
             { label: "Sessions", slug: "docs/enterprise/sessions" },
             { label: "RBAC", slug: "docs/enterprise/rbac" },
+            { label: "M2M Auth", slug: "docs/enterprise/m2m" },
+            {
+              label: "Admin APIs",
+              items: [
+                { label: "Overview", slug: "docs/enterprise/admin-api" },
+                { label: "Users", slug: "docs/enterprise/admin-api/users" },
+                { label: "Clients", slug: "docs/enterprise/admin-api/clients" },
+                { label: "Providers", slug: "docs/enterprise/admin-api/providers" },
+                { label: "RBAC", slug: "docs/enterprise/admin-api/rbac" },
+              ],
+            },
+            { label: "Middleware", slug: "docs/enterprise/middleware" },
             { label: "Migrations", slug: "docs/enterprise/migrations" },
           ],
         },

@@ -1,0 +1,552 @@
+---
+title: M2M Authentication
+description: Machine-to-Machine authentication using OAuth 2.0 client credentials grant.
+---
+
+Machine-to-Machine (M2M) authentication enables secure, automated communication between services, APIs, and backend applications without user interaction.
+
+## What is M2M Authentication?
+
+M2M authentication is designed for scenarios where applications or services need to authenticate themselves rather than authenticate on behalf of a user. Common use cases include:
+
+- **Microservices** communicating with each other
+- **Backend services** calling protected APIs
+- **Scheduled jobs** accessing resources programmatically
+- **CI/CD pipelines** deploying or managing infrastructure
+- **Third-party integrations** accessing your platform's APIs
+
+Unlike user authentication flows that require interactive login, M2M uses pre-configured credentials that allow services to obtain access tokens autonomously.
+
+## OAuth 2.0 Client Credentials Grant
+
+OpenAuth implements the industry-standard [OAuth 2.0 Client Credentials Grant](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4) for M2M authentication.
+
+```
++--------+                               +---------------+
+|        |                               |               |
+| Client |----(A) Client Credentials --->| Authorization |
+|        |                               |     Server    |
+|        |<---(B) Access Token ----------|               |
+|        |                               +---------------+
+|        |
+|        |                               +---------------+
+|        |----(C) Access Token --------->|    Resource   |
+|        |<---(D) Protected Resource ----|     Server    |
+|        |                               +---------------+
++--------+
+```
+
+**Flow:**
+1. The client sends its credentials (client_id and client_secret) directly to the token endpoint
+2. The authorization server validates the credentials and returns an access token
+3. The client uses the access token to access protected resources
+
+This flow is simpler than user authentication flows because:
+- No user interaction is required
+- No authorization code exchange is needed
+- No redirect URIs are involved
+
+## When to Use M2M vs User Tokens
+
+| Scenario | Token Type | Why |
+|----------|-----------|-----|
+| User browsing your app | User Token | Actions are tied to a specific user's identity and permissions |
+| Backend service calling an API | M2M Token | Service acts on its own behalf, not for a user |
+| Scheduled data sync job | M2M Token | No user present during execution |
+| User-triggered API call | User Token | Action should be attributed to and limited by user's permissions |
+| Admin dashboard for operators | User Token | Audit trail needs to show which admin performed actions |
+| Service importing data from third-party | M2M Token | Integration runs autonomously |
+
+:::tip
+If you need to know **who** performed an action, use user tokens. If you need to know **what system** performed an action, use M2M tokens.
+:::
+
+## Configuration
+
+Configure M2M authentication when creating your issuer:
+
+```ts title="issuer.ts"
+import { createMultiTenantIssuer } from "@openauthjs/openauth/enterprise"
+
+const { app } = createMultiTenantIssuer({
+  // ... other config
+  m2m: {
+    ttl: 3600, // Token lifetime in seconds (default: 1 hour)
+    defaultScopes: ["api:read"], // Default scopes if none requested
+    includeTenantId: true, // Include tenant_id in token claims
+  },
+})
+```
+
+### M2MConfig Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ttl` | `number` | `3600` | Token lifetime in seconds (1 hour default) |
+| `defaultScopes` | `string[]` | `[]` | Scopes granted when none are requested |
+| `includeTenantId` | `boolean` | `true` | Whether to include `tenant_id` in token claims |
+
+## Token Request
+
+To obtain an M2M token, send a POST request to the `/token` endpoint:
+
+### Request Format
+
+```
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials
+&client_id=YOUR_CLIENT_ID
+&client_secret=YOUR_CLIENT_SECRET
+&scope=users:read users:write
+```
+
+### Request Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `grant_type` | Yes | Must be `client_credentials` |
+| `client_id` | Yes | Your registered client identifier |
+| `client_secret` | Yes | Your client secret |
+| `scope` | No | Space-separated list of requested scopes |
+
+## Token Response
+
+A successful request returns a JSON response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImtleS0xIn0...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "users:read users:write"
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `access_token` | `string` | The JWT access token |
+| `token_type` | `string` | Always `"Bearer"` |
+| `expires_in` | `number` | Token lifetime in seconds |
+| `scope` | `string` | Space-separated list of granted scopes (if different from requested) |
+
+## Token Claims
+
+M2M tokens are JWTs with specific claims that distinguish them from user tokens:
+
+```json
+{
+  "mode": "m2m",
+  "sub": "client_myservice",
+  "client_id": "client_myservice",
+  "tenant_id": "acme",
+  "scope": "users:read users:write",
+  "exp": 1701388800,
+  "iat": 1701385200,
+  "iss": "https://auth.example.com",
+  "jti": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Claim Definitions
+
+| Claim | Type | Description |
+|-------|------|-------------|
+| `mode` | `"m2m"` | Identifies this as an M2M token (not a user token) |
+| `sub` | `string` | Subject identifier (equals `client_id` for M2M) |
+| `client_id` | `string` | The client that requested the token |
+| `tenant_id` | `string?` | Tenant identifier (if multi-tenant mode enabled) |
+| `scope` | `string` | Space-separated list of granted scopes |
+| `exp` | `number` | Expiration time (Unix timestamp) |
+| `iat` | `number` | Issued at time (Unix timestamp) |
+| `iss` | `string` | Issuer URL |
+| `jti` | `string` | Unique token identifier (UUID) for revocation tracking |
+
+:::tip
+Check for `mode: "m2m"` in your API middleware to distinguish M2M tokens from user tokens and apply appropriate authorization logic.
+:::
+
+## Scope Format and Validation
+
+Scopes define what actions a client is permitted to perform. OpenAuth enforces a specific format for scopes.
+
+### Scope Format Rules
+
+Scopes must match the pattern: `^[a-zA-Z0-9_:.\-]+$`
+
+**Valid scope examples:**
+- `read`
+- `users:read`
+- `api:v2:users:write`
+- `billing.invoices`
+- `admin-dashboard`
+
+**Invalid scope examples:**
+- `users read` (contains space)
+- `users/read` (contains slash)
+- `users@admin` (contains @)
+
+### Scope Validation
+
+When requesting a token, scopes are validated against the client's allowed scopes:
+
+```ts
+// If client is allowed: ["users:read", "users:write", "billing:read"]
+
+// Request: scope="users:read billing:read"
+// Result: Granted, all requested scopes are allowed
+
+// Request: scope="users:read admin:delete"
+// Result: Denied, "admin:delete" is not allowed
+
+// Request: (no scope parameter)
+// Result: Granted all allowed scopes
+```
+
+If any requested scope is not in the client's allowed list, the entire request fails with an `invalid_scope` error.
+
+## Wildcard Scopes
+
+OpenAuth supports wildcard scopes for flexible permission patterns. A scope ending with `:*` matches any scope with the same prefix.
+
+```
+Allowed scope: users:*
+
+Matches:
+  - users:read
+  - users:write
+  - users:delete
+  - users:admin:promote
+
+Does NOT match:
+  - billing:read
+  - user:read (different prefix)
+```
+
+### Wildcard Examples
+
+| Allowed Scope | Requested Scope | Result |
+|--------------|-----------------|--------|
+| `api:*` | `api:read` | Granted |
+| `api:*` | `api:users:list` | Granted |
+| `api:*` | `billing:read` | Denied |
+| `users:*` | `users:read` | Granted |
+| `*` | `anything` | Granted (full access) |
+
+:::caution
+Use wildcard scopes carefully. A scope like `*` grants access to everything. Prefer specific scopes like `users:*` or `billing:*` for better security.
+:::
+
+## Code Examples
+
+### Requesting a Token with curl
+
+```bash title="Request M2M Token"
+curl -X POST https://auth.example.com/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=svc_billing" \
+  -d "client_secret=your-secret-here" \
+  -d "scope=users:read billing:write"
+```
+
+```json title="Response"
+{
+  "access_token": "eyJhbGciOiJFUzI1NiIs...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "users:read billing:write"
+}
+```
+
+### Requesting a Token with TypeScript
+
+```ts title="m2m-client.ts"
+interface TokenResponse {
+  access_token: string
+  token_type: "Bearer"
+  expires_in: number
+  scope?: string
+}
+
+async function getM2MToken(options: {
+  issuer: string
+  clientId: string
+  clientSecret: string
+  scopes?: string[]
+}): Promise<TokenResponse> {
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: options.clientId,
+    client_secret: options.clientSecret,
+  })
+
+  if (options.scopes?.length) {
+    body.set("scope", options.scopes.join(" "))
+  }
+
+  const response = await fetch(`${options.issuer}/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: body.toString(),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(`Token request failed: ${error.error_description || error.error}`)
+  }
+
+  return response.json()
+}
+
+// Usage
+const token = await getM2MToken({
+  issuer: "https://auth.example.com",
+  clientId: "svc_billing",
+  clientSecret: process.env.CLIENT_SECRET!,
+  scopes: ["users:read", "billing:write"],
+})
+
+console.log(`Token expires in ${token.expires_in} seconds`)
+```
+
+### Using the Token to Call APIs
+
+```ts title="api-client.ts"
+// Token caching helper
+class M2MTokenManager {
+  private token: string | null = null
+  private expiresAt: number = 0
+
+  constructor(
+    private issuer: string,
+    private clientId: string,
+    private clientSecret: string,
+    private scopes: string[] = [],
+  ) {}
+
+  async getToken(): Promise<string> {
+    // Return cached token if still valid (with 60s buffer)
+    if (this.token && Date.now() < this.expiresAt - 60000) {
+      return this.token
+    }
+
+    // Fetch new token
+    const response = await getM2MToken({
+      issuer: this.issuer,
+      clientId: this.clientId,
+      clientSecret: this.clientSecret,
+      scopes: this.scopes,
+    })
+
+    this.token = response.access_token
+    this.expiresAt = Date.now() + response.expires_in * 1000
+
+    return this.token
+  }
+}
+
+// Initialize token manager
+const tokenManager = new M2MTokenManager(
+  "https://auth.example.com",
+  "svc_billing",
+  process.env.CLIENT_SECRET!,
+  ["users:read", "billing:write"],
+)
+
+// Make authenticated API calls
+async function callAdminAPI(endpoint: string) {
+  const token = await tokenManager.getToken()
+
+  const response = await fetch(`https://api.example.com${endpoint}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`API call failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// Usage
+const users = await callAdminAPI("/admin/users")
+const billing = await callAdminAPI("/admin/billing/invoices")
+```
+
+### Validating M2M Tokens in Your API
+
+```ts title="middleware.ts"
+import { createClient } from "@openauthjs/openauth/client"
+import { jwtVerify } from "jose"
+
+const client = createClient({
+  clientID: "api-server",
+  issuer: "https://auth.example.com",
+})
+
+interface M2MTokenPayload {
+  mode: "m2m"
+  sub: string
+  client_id: string
+  tenant_id?: string
+  scope: string
+  exp: number
+  iat: number
+  iss: string
+  jti: string
+}
+
+async function validateM2MToken(
+  authHeader: string | null,
+): Promise<M2MTokenPayload | null> {
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null
+  }
+
+  const token = authHeader.slice(7)
+
+  try {
+    // Fetch JWKS and verify token
+    const jwksResponse = await fetch(
+      "https://auth.example.com/.well-known/jwks.json",
+    )
+    const jwks = await jwksResponse.json()
+
+    // Verify signature and claims
+    const { payload } = await jwtVerify(token, jwks)
+
+    // Ensure this is an M2M token
+    if (payload.mode !== "m2m") {
+      return null
+    }
+
+    return payload as M2MTokenPayload
+  } catch (error) {
+    console.error("Token validation failed:", error)
+    return null
+  }
+}
+
+// Express middleware example
+function requireM2MAuth(requiredScopes: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const token = await validateM2MToken(req.headers.authorization)
+
+    if (!token) {
+      return res.status(401).json({ error: "unauthorized" })
+    }
+
+    // Check scopes
+    const grantedScopes = token.scope.split(" ")
+    const hasAllScopes = requiredScopes.every((scope) =>
+      grantedScopes.includes(scope),
+    )
+
+    if (!hasAllScopes) {
+      return res.status(403).json({
+        error: "insufficient_scope",
+        required: requiredScopes,
+        granted: grantedScopes,
+      })
+    }
+
+    req.m2mClient = token
+    next()
+  }
+}
+
+// Usage
+app.get("/admin/users", requireM2MAuth(["users:read"]), (req, res) => {
+  console.log(`Request from client: ${req.m2mClient.client_id}`)
+  // ... handle request
+})
+```
+
+## Error Responses
+
+When token requests fail, the server returns an error response:
+
+```json
+{
+  "error": "invalid_client",
+  "error_description": "Client authentication failed"
+}
+```
+
+### Common Error Codes
+
+| Error | HTTP Status | Description |
+|-------|-------------|-------------|
+| `invalid_request` | 400 | Missing required parameter or malformed request |
+| `invalid_client` | 401 | Client authentication failed (wrong credentials) |
+| `invalid_grant` | 400 | Invalid grant type for this client |
+| `invalid_scope` | 400 | Requested scope is not allowed for this client |
+| `unauthorized_client` | 401 | Client is not authorized for client_credentials grant |
+| `server_error` | 500 | Internal server error |
+
+### Error Response Examples
+
+**Invalid client credentials:**
+```json
+{
+  "error": "invalid_client",
+  "error_description": "Client not found: unknown_client"
+}
+```
+
+**Client is disabled:**
+```json
+{
+  "error": "invalid_client",
+  "error_description": "Client is disabled: svc_billing"
+}
+```
+
+**Invalid scope requested:**
+```json
+{
+  "error": "invalid_scope",
+  "error_description": "Invalid scope format: users/read. Must match pattern: ^[a-zA-Z0-9_:.\\-]+$"
+}
+```
+
+**Scope not allowed:**
+```json
+{
+  "error": "invalid_scope",
+  "error_description": "Requested scope 'admin:delete' is not allowed for this client"
+}
+```
+
+## Security Best Practices
+
+1. **Rotate client secrets regularly** - Treat secrets like passwords and rotate them periodically
+
+2. **Use short token lifetimes** - M2M tokens with 1-hour TTL reduce the impact of token theft
+
+3. **Apply least privilege** - Only grant the minimum scopes a service needs
+
+4. **Monitor token usage** - Track which clients are requesting tokens and detect anomalies
+
+5. **Secure secret storage** - Use environment variables or secret managers, never commit secrets to code
+
+6. **Implement token caching** - Cache tokens until near expiration to reduce token endpoint load
+
+7. **Use separate clients per service** - Each microservice should have its own client_id for better audit trails
+
+```ts title="Environment variable example"
+// Good: Load from environment
+const clientSecret = process.env.M2M_CLIENT_SECRET
+
+// Bad: Hardcoded secret
+const clientSecret = "hardcoded-secret-123"
+```
