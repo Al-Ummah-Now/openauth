@@ -159,9 +159,10 @@ function executeSqlCommand(
   const args = buildWranglerArgs(dbName, options)
   args.push("--command", sql)
 
+  // Don't use shell: true to avoid escaping issues with SQL quotes
   const result = spawnSync("wrangler", args, {
     encoding: "utf-8",
-    shell: true,
+    shell: false,
     stdio: ["pipe", "pipe", "pipe"],
   })
 
@@ -184,7 +185,7 @@ function executeSqlFile(
 
   const result = spawnSync("wrangler", args, {
     stdio: "inherit",
-    shell: true,
+    shell: false,
   })
 
   return { success: result.status === 0 }
