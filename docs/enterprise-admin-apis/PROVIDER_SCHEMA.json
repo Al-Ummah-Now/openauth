@@ -113,7 +113,11 @@
         "token": "https://accounts.spotify.com/api/token"
       },
       "defaultScopes": [],
-      "commonScopes": ["user-read-private", "user-read-email", "user-modify-playback-state"],
+      "commonScopes": [
+        "user-read-private",
+        "user-read-email",
+        "user-modify-playback-state"
+      ],
       "notes": "Scopes control API access level."
     },
     "twitch": {
@@ -211,14 +215,25 @@
         "token": "https://{domain}.auth.{region}.amazoncognito.com/oauth2/token"
       },
       "defaultScopes": [],
-      "commonScopes": ["openid", "profile", "email", "aws.cognito.signin.user.admin"],
+      "commonScopes": [
+        "openid",
+        "profile",
+        "email",
+        "aws.cognito.signin.user.admin"
+      ],
       "notes": "Cognito is AWS's managed authentication service. Domain is configured separately from the full URL."
     },
     "oauth2": {
       "name": "Generic OAuth2",
       "type": "oauth2",
       "variants": ["oauth2"],
-      "requiredFields": ["clientID", "clientSecret", "endpoint.authorization", "endpoint.token", "scopes"],
+      "requiredFields": [
+        "clientID",
+        "clientSecret",
+        "endpoint.authorization",
+        "endpoint.token",
+        "scopes"
+      ],
       "optionalFields": ["endpoint.jwks", "query", "pkce"],
       "notes": "Flexible OAuth 2.0 provider for any OAuth 2.0-compliant service."
     },
@@ -231,7 +246,11 @@
       "discovery": true,
       "discoveryEndpoint": "{issuer}/.well-known/openid-configuration",
       "notes": "Uses OIDC Discovery to automatically fetch endpoints. No client secret required.",
-      "autoDiscoveredEndpoints": ["authorization_endpoint", "token_endpoint", "jwks_uri"]
+      "autoDiscoveredEndpoints": [
+        "authorization_endpoint",
+        "token_endpoint",
+        "jwks_uri"
+      ]
     },
     "password": {
       "name": "Password",
@@ -376,11 +395,66 @@
     "temporarily_unavailable": "Service unavailable"
   },
   "validation": {
-    "oauth2Providers": ["google", "github", "microsoft", "apple", "facebook", "discord", "slack", "spotify", "twitch", "x", "yahoo", "linkedin", "jumpcloud", "keycloak", "cognito"],
-    "oidcProviders": ["google", "microsoft", "apple", "facebook", "slack", "keycloak", "cognito"],
+    "oauth2Providers": [
+      "google",
+      "github",
+      "microsoft",
+      "apple",
+      "facebook",
+      "discord",
+      "slack",
+      "spotify",
+      "twitch",
+      "x",
+      "yahoo",
+      "linkedin",
+      "jumpcloud",
+      "keycloak",
+      "cognito"
+    ],
+    "oidcProviders": [
+      "google",
+      "microsoft",
+      "apple",
+      "facebook",
+      "slack",
+      "keycloak",
+      "cognito"
+    ],
     "customProviders": ["password", "code"],
-    "providersRequiringSecret": ["google", "github", "microsoft", "apple", "facebook", "discord", "slack", "spotify", "twitch", "x", "yahoo", "linkedin", "jumpcloud", "keycloak", "cognito"],
+    "providersRequiringSecret": [
+      "google",
+      "github",
+      "microsoft",
+      "apple",
+      "facebook",
+      "discord",
+      "slack",
+      "spotify",
+      "twitch",
+      "x",
+      "yahoo",
+      "linkedin",
+      "jumpcloud",
+      "keycloak",
+      "cognito"
+    ],
     "pkceRequiredProviders": ["x"],
-    "pkceOptionalProviders": ["google", "github", "microsoft", "apple", "facebook", "discord", "slack", "spotify", "twitch", "yahoo", "linkedin", "jumpcloud", "keycloak", "cognito"]
+    "pkceOptionalProviders": [
+      "google",
+      "github",
+      "microsoft",
+      "apple",
+      "facebook",
+      "discord",
+      "slack",
+      "spotify",
+      "twitch",
+      "yahoo",
+      "linkedin",
+      "jumpcloud",
+      "keycloak",
+      "cognito"
+    ]
   }
 }

@@ -5,198 +5,220 @@ Minimal configuration examples for each provider.
 ## OAuth2 Providers (Require: clientID, clientSecret)
 
 ### Google
+
 ```typescript
 GoogleProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### GitHub
+
 ```typescript
 GithubProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### Microsoft
+
 ```typescript
 MicrosoftProvider({
   tenant: "YOUR_TENANT_ID",
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### Apple
+
 ```typescript
 AppleProvider({
   clientID: "YOUR_SERVICE_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### Facebook
+
 ```typescript
 FacebookProvider({
   clientID: "YOUR_APP_ID",
-  clientSecret: "YOUR_APP_SECRET"
+  clientSecret: "YOUR_APP_SECRET",
 })
 ```
 
 ### Discord
+
 ```typescript
 DiscordProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### Slack
+
 ```typescript
 SlackProvider({
   team: "T1234567890",
   clientID: "YOUR_CLIENT_ID",
   clientSecret: "YOUR_CLIENT_SECRET",
-  scopes: ["openid", "email", "profile"]
+  scopes: ["openid", "email", "profile"],
 })
 ```
 
 ### Spotify
+
 ```typescript
 SpotifyProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### Twitch
+
 ```typescript
 TwitchProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### X (Twitter)
+
 ```typescript
 XProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 // Note: PKCE is automatically enabled
 ```
 
 ### Yahoo
+
 ```typescript
 YahooProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### LinkedIn
+
 ```typescript
 LinkedInAdapter({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### JumpCloud
+
 ```typescript
 JumpCloudProvider({
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ## Enterprise Providers
 
 ### Keycloak
+
 ```typescript
 KeycloakProvider({
   baseUrl: "https://your-keycloak-domain.com",
   realm: "your-realm",
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ### Cognito
+
 ```typescript
 CognitoProvider({
   domain: "your-domain",
   region: "us-east-1",
   clientID: "YOUR_CLIENT_ID",
-  clientSecret: "YOUR_CLIENT_SECRET"
+  clientSecret: "YOUR_CLIENT_SECRET",
 })
 ```
 
 ## OIDC Providers (Require: clientID, issuer)
 
 ### Google OIDC
+
 ```typescript
 GoogleOidcProvider({
-  clientID: "YOUR_CLIENT_ID"
+  clientID: "YOUR_CLIENT_ID",
 })
 ```
 
 ### Microsoft OIDC
+
 ```typescript
 MicrosoftOidcProvider({
-  clientID: "YOUR_CLIENT_ID"
+  clientID: "YOUR_CLIENT_ID",
 })
 ```
 
 ### Apple OIDC
+
 ```typescript
 AppleOidcProvider({
-  clientID: "YOUR_CLIENT_ID"
+  clientID: "YOUR_CLIENT_ID",
 })
 ```
 
 ### Facebook OIDC
+
 ```typescript
 FacebookOidcProvider({
-  clientID: "YOUR_CLIENT_ID"
+  clientID: "YOUR_CLIENT_ID",
 })
 ```
 
 ### Generic OIDC
+
 ```typescript
 OidcProvider({
   clientID: "YOUR_CLIENT_ID",
   issuer: "https://auth.example.com",
-  scopes: ["openid", "profile", "email"]
+  scopes: ["openid", "profile", "email"],
 })
 ```
 
 ## Custom Providers
 
 ### Password
+
 ```typescript
 PasswordProvider(
   PasswordUI({
     copy: {
-      error_email_taken: "Email already registered"
+      error_email_taken: "Email already registered",
     },
     sendCode: async (email, code) => {
       await sendEmail(email, `Code: ${code}`)
-    }
-  })
+    },
+  }),
 )
 ```
 
 ### Code (PIN)
+
 ```typescript
 CodeProvider({
   length: 6,
   request: (req, state, form, error) => myUI.render(),
   sendCode: async (claims, code) => {
     await sendEmail(claims.email, `Code: ${code}`)
-  }
+  },
 })
 ```
 
@@ -207,10 +229,12 @@ CodeProvider({
 ### Required by Provider Type
 
 **OAuth2 Providers (All)**
+
 - `clientID`: Application client ID
 - `clientSecret`: Application client secret
 
 **Special Requirements**
+
 - Microsoft: `+ tenant`
 - Slack: `+ team, scopes`
 - Apple: `clientSecret` required (unlike some OAuth2)
@@ -218,6 +242,7 @@ CodeProvider({
 - Cognito: `+ domain, region`
 
 **OIDC Providers**
+
 - `clientID`: Application client ID
 - `issuer`: Authorization server base URL
 - No client secret required
@@ -230,31 +255,35 @@ CodeProvider({
 
 ### Special Flags
 
-| Provider | Special Flag | Value | Purpose |
-|----------|-------------|-------|---------|
-| Apple | responseMode | "form_post" | Required for email/name scopes |
-| X | pkce | true | Automatically enforced |
+| Provider | Special Flag | Value       | Purpose                        |
+| -------- | ------------ | ----------- | ------------------------------ |
+| Apple    | responseMode | "form_post" | Required for email/name scopes |
+| X        | pkce         | true        | Automatically enforced         |
 
 ---
 
 ## Common Scope Patterns
 
 ### Email + Profile
+
 ```typescript
 scopes: ["openid", "profile", "email"]
 ```
 
 ### GitHub User Access
+
 ```typescript
 scopes: ["read:user", "user:email"]
 ```
 
 ### Microsoft Graph
+
 ```typescript
 scopes: ["User.Read", "Calendars.Read"]
 ```
 
 ### Spotify User Data
+
 ```typescript
 scopes: ["user-read-private", "user-read-email"]
 ```
@@ -264,6 +293,7 @@ scopes: ["user-read-private", "user-read-email"]
 ## Error Codes by Provider
 
 All OAuth2 errors follow RFC 6749:
+
 - `invalid_request`
 - `unauthorized_client`
 - `access_denied` (most common)
@@ -285,7 +315,7 @@ import {
   KeycloakProvider,
   CognitoProvider,
   PasswordProvider,
-  CodeProvider
+  CodeProvider,
 } from "@openauthjs/openauth/provider"
 
 export default issuer({
@@ -293,16 +323,16 @@ export default issuer({
     // OAuth2
     google: GoogleProvider({
       clientID: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
     github: GithubProvider({
       clientID: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
     }),
 
     // OIDC
     microsoft: MicrosoftOidcProvider({
-      clientID: process.env.MICROSOFT_CLIENT_ID!
+      clientID: process.env.MICROSOFT_CLIENT_ID!,
     }),
 
     // Enterprise
@@ -310,7 +340,7 @@ export default issuer({
       baseUrl: process.env.KEYCLOAK_URL!,
       realm: process.env.KEYCLOAK_REALM!,
       clientID: process.env.KEYCLOAK_CLIENT_ID!,
-      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!
+      clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
     }),
 
     // Passwordless
@@ -321,9 +351,9 @@ export default issuer({
       },
       request: async (req, state, form, error) => {
         // Render UI
-      }
-    })
-  }
+      },
+    }),
+  },
 })
 ```
 
@@ -374,37 +404,39 @@ OPENAUTH_COGNITO_CLIENT_SECRET=xxx
 
 ## Provider Comparison Matrix
 
-| Provider | OAuth2 | OIDC | Auto-Discovery | PKCE | Requires Secret |
-|----------|--------|------|-----------------|------|-----------------|
-| Google | ✓ | ✓ | - | ✓ | ✓ |
-| GitHub | ✓ | - | - | ✓ | ✓ |
-| Microsoft | ✓ | ✓ | - | ✓ | ✓ |
-| Apple | ✓ | ✓ | - | ✓ | ✓ |
-| Facebook | ✓ | ✓ | - | ✓ | ✓ |
-| Discord | ✓ | - | - | ✓ | ✓ |
-| Slack | ✓ | - | - | ✓ | ✓ |
-| Spotify | ✓ | - | - | ✓ | ✓ |
-| Twitch | ✓ | - | - | ✓ | ✓ |
-| X | ✓ | - | - | ✓* | ✓ |
-| Yahoo | ✓ | - | - | ✓ | ✓ |
-| LinkedIn | ✓ | - | - | ✓ | ✓ |
-| JumpCloud | ✓ | - | - | ✓ | ✓ |
-| Keycloak | ✓ | - | - | ✓ | ✓ |
-| Cognito | ✓ | - | - | ✓ | ✓ |
-| Generic OIDC | - | ✓ | ✓ | - | ✗ |
+| Provider     | OAuth2 | OIDC | Auto-Discovery | PKCE | Requires Secret |
+| ------------ | ------ | ---- | -------------- | ---- | --------------- |
+| Google       | ✓      | ✓    | -              | ✓    | ✓               |
+| GitHub       | ✓      | -    | -              | ✓    | ✓               |
+| Microsoft    | ✓      | ✓    | -              | ✓    | ✓               |
+| Apple        | ✓      | ✓    | -              | ✓    | ✓               |
+| Facebook     | ✓      | ✓    | -              | ✓    | ✓               |
+| Discord      | ✓      | -    | -              | ✓    | ✓               |
+| Slack        | ✓      | -    | -              | ✓    | ✓               |
+| Spotify      | ✓      | -    | -              | ✓    | ✓               |
+| Twitch       | ✓      | -    | -              | ✓    | ✓               |
+| X            | ✓      | -    | -              | ✓\*  | ✓               |
+| Yahoo        | ✓      | -    | -              | ✓    | ✓               |
+| LinkedIn     | ✓      | -    | -              | ✓    | ✓               |
+| JumpCloud    | ✓      | -    | -              | ✓    | ✓               |
+| Keycloak     | ✓      | -    | -              | ✓    | ✓               |
+| Cognito      | ✓      | -    | -              | ✓    | ✓               |
+| Generic OIDC | -      | ✓    | ✓              | -    | ✗               |
 
-*X requires PKCE (enforced)
+\*X requires PKCE (enforced)
 
 ---
 
 ## Key Implementation Details
 
 ### State Validation
+
 - State token is automatically generated as UUID
 - Stored server-side with 10-minute TTL
 - Validated on callback (automatic CSRF protection)
 
 ### Token Flow
+
 1. User redirected to provider's authorization endpoint
 2. User grants permission
 3. Provider redirects back with authorization code
@@ -412,13 +444,16 @@ OPENAUTH_COGNITO_CLIENT_SECRET=xxx
 5. (Optional) ID token validated if JWKS endpoint provided
 
 ### PKCE Flow (if enabled)
+
 1. Code challenge generated from code verifier (SHA-256)
 2. Challenge sent to authorization endpoint
 3. On callback, code verifier used to prove legitimacy
 4. Prevents authorization code interception
 
 ### Refresh Tokens
+
 If provider returns `refresh_token`:
+
 - Stored in tokenset
 - Can be used to get new access tokens without user interaction
 - Expiration managed separately from access token
@@ -428,6 +463,7 @@ If provider returns `refresh_token`:
 ## Configuration Schema
 
 **Minimal**
+
 ```json
 {
   "type": "oauth2|oidc|custom",
@@ -437,6 +473,7 @@ If provider returns `refresh_token`:
 ```
 
 **Full**
+
 ```json
 {
   "type": "oauth2|oidc|custom",

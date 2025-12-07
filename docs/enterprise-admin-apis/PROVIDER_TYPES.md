@@ -5,6 +5,7 @@ Complete TypeScript type definitions and interfaces for provider configuration.
 ## Base Types
 
 ### Provider Type
+
 ```typescript
 type ProviderType =
   | "google"
@@ -29,6 +30,7 @@ type ProviderType =
 ```
 
 ### Provider Base Configuration
+
 ```typescript
 interface ProviderBase {
   type: string
@@ -61,6 +63,7 @@ interface CustomProviderBase extends ProviderBase {
 ## OAuth2 Provider Configurations
 
 ### Google
+
 ```typescript
 interface GoogleConfig {
   clientID: string
@@ -72,6 +75,7 @@ interface GoogleConfig {
 ```
 
 ### GitHub
+
 ```typescript
 interface GithubConfig {
   clientID: string
@@ -83,6 +87,7 @@ interface GithubConfig {
 ```
 
 ### Microsoft
+
 ```typescript
 interface MicrosoftConfig {
   clientID: string
@@ -95,6 +100,7 @@ interface MicrosoftConfig {
 ```
 
 ### Apple
+
 ```typescript
 interface AppleConfig {
   clientID: string
@@ -107,6 +113,7 @@ interface AppleConfig {
 ```
 
 ### Facebook
+
 ```typescript
 interface FacebookConfig {
   clientID: string
@@ -118,6 +125,7 @@ interface FacebookConfig {
 ```
 
 ### Discord
+
 ```typescript
 interface DiscordConfig {
   clientID: string
@@ -129,6 +137,7 @@ interface DiscordConfig {
 ```
 
 ### Slack
+
 ```typescript
 interface SlackConfig {
   clientID: string
@@ -141,6 +150,7 @@ interface SlackConfig {
 ```
 
 ### Spotify
+
 ```typescript
 interface SpotifyConfig {
   clientID: string
@@ -152,6 +162,7 @@ interface SpotifyConfig {
 ```
 
 ### Twitch
+
 ```typescript
 interface TwitchConfig {
   clientID: string
@@ -163,6 +174,7 @@ interface TwitchConfig {
 ```
 
 ### X (Twitter)
+
 ```typescript
 interface XConfig {
   clientID: string
@@ -174,6 +186,7 @@ interface XConfig {
 ```
 
 ### Yahoo
+
 ```typescript
 interface YahooConfig {
   clientID: string
@@ -185,6 +198,7 @@ interface YahooConfig {
 ```
 
 ### LinkedIn
+
 ```typescript
 interface LinkedInConfig {
   clientID: string
@@ -196,6 +210,7 @@ interface LinkedInConfig {
 ```
 
 ### JumpCloud
+
 ```typescript
 interface JumpCloudConfig {
   clientID: string
@@ -207,6 +222,7 @@ interface JumpCloudConfig {
 ```
 
 ### Keycloak
+
 ```typescript
 interface KeycloakConfig {
   clientID: string
@@ -220,6 +236,7 @@ interface KeycloakConfig {
 ```
 
 ### Cognito
+
 ```typescript
 interface CognitoConfig {
   clientID: string
@@ -235,6 +252,7 @@ interface CognitoConfig {
 ## OIDC Provider Configurations
 
 ### Google OIDC
+
 ```typescript
 interface GoogleOidcConfig {
   clientID: string
@@ -244,6 +262,7 @@ interface GoogleOidcConfig {
 ```
 
 ### Microsoft OIDC
+
 ```typescript
 interface MicrosoftOidcConfig {
   clientID: string
@@ -253,6 +272,7 @@ interface MicrosoftOidcConfig {
 ```
 
 ### Apple OIDC
+
 ```typescript
 interface AppleOidcConfig {
   clientID: string
@@ -262,6 +282,7 @@ interface AppleOidcConfig {
 ```
 
 ### Facebook OIDC
+
 ```typescript
 interface FacebookOidcConfig {
   clientID: string
@@ -271,6 +292,7 @@ interface FacebookOidcConfig {
 ```
 
 ### Generic OIDC
+
 ```typescript
 interface OidcConfig {
   clientID: string
@@ -283,6 +305,7 @@ interface OidcConfig {
 ## Generic Providers
 
 ### Generic OAuth2
+
 ```typescript
 interface Oauth2Config {
   clientID: string
@@ -302,38 +325,41 @@ interface Oauth2Config {
 ## Token Response Types
 
 ### OAuth2 Token Response
+
 ```typescript
 interface Oauth2Token {
-  access: string              // access_token from provider
-  refresh: string             // refresh_token from provider
-  expiry: number              // expires_in in seconds
-  id?: Record<string, any>    // Decoded ID token (if JWKS provided)
-  raw: Record<string, any>    // Raw token response
+  access: string // access_token from provider
+  refresh: string // refresh_token from provider
+  expiry: number // expires_in in seconds
+  id?: Record<string, any> // Decoded ID token (if JWKS provided)
+  raw: Record<string, any> // Raw token response
 }
 ```
 
 ### Token Response Data
+
 ```typescript
 interface TokenResponseData {
   access_token: string
-  token_type: string          // Usually "Bearer"
+  token_type: string // Usually "Bearer"
   expires_in?: number
   refresh_token?: string
-  id_token?: string           // JWT token
+  id_token?: string // JWT token
   scope?: string
   [key: string]: any
 }
 ```
 
 ### ID Token Payload
+
 ```typescript
 interface IdTokenPayload {
-  iss: string                 // Issuer
-  sub: string                 // Subject (user ID)
-  aud: string | string[]      // Audience (must match clientID)
-  exp: number                 // Expiration time (unix timestamp)
-  iat: number                 // Issued at (unix timestamp)
-  nonce?: string              // For OIDC, must match request nonce
+  iss: string // Issuer
+  sub: string // Subject (user ID)
+  aud: string | string[] // Audience (must match clientID)
+  exp: number // Expiration time (unix timestamp)
+  iat: number // Issued at (unix timestamp)
+  nonce?: string // For OIDC, must match request nonce
   email?: string
   email_verified?: boolean
   name?: string
@@ -345,6 +371,7 @@ interface IdTokenPayload {
 ## Callback/Handler Types
 
 ### OAuth2 Success Response
+
 ```typescript
 interface OAuth2SuccessResponse<Properties> {
   clientID: string
@@ -359,14 +386,16 @@ type GoogleSuccess = OAuth2SuccessResponse<{
 ```
 
 ### OIDC Success Response
+
 ```typescript
 interface OidcSuccessResponse {
-  id: JWTPayload              // Decoded ID token claims
+  id: JWTPayload // Decoded ID token claims
   clientID: string
 }
 ```
 
 ### Password Provider Success Response
+
 ```typescript
 interface PasswordSuccessResponse {
   email: string
@@ -374,6 +403,7 @@ interface PasswordSuccessResponse {
 ```
 
 ### Code Provider Success Response
+
 ```typescript
 interface CodeSuccessResponse<Claims = Record<string, string>> {
   claims: Claims
@@ -383,6 +413,7 @@ interface CodeSuccessResponse<Claims = Record<string, string>> {
 ## Error Types
 
 ### OAuth Error
+
 ```typescript
 interface OAuthError {
   error: string
@@ -393,6 +424,7 @@ interface OAuthError {
 ```
 
 ### Password Provider Errors
+
 ```typescript
 type PasswordLoginError =
   | { type: "invalid_password" }
@@ -415,6 +447,7 @@ type PasswordChangeError =
 ```
 
 ### Code Provider Errors
+
 ```typescript
 type CodeProviderError =
   | { type: "invalid_code" }
@@ -424,24 +457,27 @@ type CodeProviderError =
 ## State Types
 
 ### OAuth2 Provider State
+
 ```typescript
 interface Oauth2ProviderState {
-  state: string               // CSRF protection token
-  redirect: string            // Callback URL
-  codeVerifier?: string       // For PKCE flow
+  state: string // CSRF protection token
+  redirect: string // Callback URL
+  codeVerifier?: string // For PKCE flow
 }
 ```
 
 ### OIDC Provider State
+
 ```typescript
 interface OidcProviderState {
-  state: string               // CSRF protection token
-  nonce: string               // For ID token validation
-  redirect: string            // Callback URL
+  state: string // CSRF protection token
+  nonce: string // For ID token validation
+  redirect: string // Callback URL
 }
 ```
 
 ### Password Provider States
+
 ```typescript
 type PasswordRegisterState =
   | { type: "start" }
@@ -468,6 +504,7 @@ type PasswordChangeState =
 ```
 
 ### Code Provider States
+
 ```typescript
 type CodeProviderState =
   | { type: "start" }
@@ -482,26 +519,27 @@ type CodeProviderState =
 ## Custom Provider Callbacks
 
 ### Password Provider Callbacks
+
 ```typescript
 interface PasswordConfig {
   login: (
     req: Request,
     form?: FormData,
-    error?: PasswordLoginError
+    error?: PasswordLoginError,
   ) => Promise<Response>
 
   register: (
     req: Request,
     state: PasswordRegisterState,
     form?: FormData,
-    error?: PasswordRegisterError
+    error?: PasswordRegisterError,
   ) => Promise<Response>
 
   change: (
     req: Request,
     state: PasswordChangeState,
     form?: FormData,
-    error?: PasswordChangeError
+    error?: PasswordChangeError,
   ) => Promise<Response>
 
   sendCode: (email: string, code: string) => Promise<void>
@@ -516,19 +554,17 @@ interface PasswordConfig {
 ```
 
 ### Code Provider Callbacks
+
 ```typescript
 interface CodeProviderConfig<Claims = Record<string, string>> {
   request: (
     req: Request,
     state: CodeProviderState,
     form?: FormData,
-    error?: CodeProviderError
+    error?: CodeProviderError,
   ) => Promise<Response>
 
-  sendCode: (
-    claims: Claims,
-    code: string
-  ) => Promise<void | CodeProviderError>
+  sendCode: (claims: Claims, code: string) => Promise<void | CodeProviderError>
 
   length?: number
 }
@@ -537,42 +573,64 @@ interface CodeProviderConfig<Claims = Record<string, string>> {
 ## Provider Factory Types
 
 ### Provider Factory Functions
+
 ```typescript
 // OAuth2 Providers
 function GoogleProvider(config: GoogleConfig): Provider<OAuth2SuccessResponse>
 function GithubProvider(config: GithubConfig): Provider<OAuth2SuccessResponse>
-function MicrosoftProvider(config: MicrosoftConfig): Provider<OAuth2SuccessResponse>
+function MicrosoftProvider(
+  config: MicrosoftConfig,
+): Provider<OAuth2SuccessResponse>
 function AppleProvider(config: AppleConfig): Provider<OAuth2SuccessResponse>
-function FacebookProvider(config: FacebookConfig): Provider<OAuth2SuccessResponse>
+function FacebookProvider(
+  config: FacebookConfig,
+): Provider<OAuth2SuccessResponse>
 function DiscordProvider(config: DiscordConfig): Provider<OAuth2SuccessResponse>
 function SlackProvider(config: SlackConfig): Provider<OAuth2SuccessResponse>
 function SpotifyProvider(config: SpotifyConfig): Provider<OAuth2SuccessResponse>
 function TwitchProvider(config: TwitchConfig): Provider<OAuth2SuccessResponse>
 function XProvider(config: XConfig): Provider<OAuth2SuccessResponse>
 function YahooProvider(config: YahooConfig): Provider<OAuth2SuccessResponse>
-function LinkedInAdapter(config: LinkedInConfig): Provider<OAuth2SuccessResponse>
-function JumpCloudProvider(config: JumpCloudConfig): Provider<OAuth2SuccessResponse>
-function KeycloakProvider(config: KeycloakConfig): Provider<OAuth2SuccessResponse>
+function LinkedInAdapter(
+  config: LinkedInConfig,
+): Provider<OAuth2SuccessResponse>
+function JumpCloudProvider(
+  config: JumpCloudConfig,
+): Provider<OAuth2SuccessResponse>
+function KeycloakProvider(
+  config: KeycloakConfig,
+): Provider<OAuth2SuccessResponse>
 function CognitoProvider(config: CognitoConfig): Provider<OAuth2SuccessResponse>
 function Oauth2Provider(config: Oauth2Config): Provider<OAuth2SuccessResponse>
 
 // OIDC Providers
-function GoogleOidcProvider(config: GoogleOidcConfig): Provider<OidcSuccessResponse>
-function MicrosoftOidcProvider(config: MicrosoftOidcConfig): Provider<OidcSuccessResponse>
-function AppleOidcProvider(config: AppleOidcConfig): Provider<OidcSuccessResponse>
-function FacebookOidcProvider(config: FacebookOidcConfig): Provider<OidcSuccessResponse>
+function GoogleOidcProvider(
+  config: GoogleOidcConfig,
+): Provider<OidcSuccessResponse>
+function MicrosoftOidcProvider(
+  config: MicrosoftOidcConfig,
+): Provider<OidcSuccessResponse>
+function AppleOidcProvider(
+  config: AppleOidcConfig,
+): Provider<OidcSuccessResponse>
+function FacebookOidcProvider(
+  config: FacebookOidcConfig,
+): Provider<OidcSuccessResponse>
 function OidcProvider(config: OidcConfig): Provider<OidcSuccessResponse>
 
 // Custom Providers
-function PasswordProvider(config: PasswordConfig): Provider<PasswordSuccessResponse>
+function PasswordProvider(
+  config: PasswordConfig,
+): Provider<PasswordSuccessResponse>
 function CodeProvider<Claims extends Record<string, string>>(
-  config: CodeProviderConfig<Claims>
+  config: CodeProviderConfig<Claims>,
 ): Provider<CodeSuccessResponse<Claims>>
 ```
 
 ## Configuration Union Types
 
 ### All Supported Configurations
+
 ```typescript
 type ProviderConfig =
   | GoogleConfig
@@ -601,6 +659,7 @@ type ProviderConfig =
 ```
 
 ### Success Response Union Types
+
 ```typescript
 type ProviderSuccessResponse =
   | OAuth2SuccessResponse
@@ -612,6 +671,7 @@ type ProviderSuccessResponse =
 ## Utility Types
 
 ### Token Set Helper
+
 ```typescript
 interface TokenSet {
   accessToken: string
@@ -623,6 +683,7 @@ interface TokenSet {
 ```
 
 ### Provider Metadata
+
 ```typescript
 interface ProviderMetadata {
   id: string
@@ -642,6 +703,7 @@ interface ProviderMetadata {
 ```
 
 ### Configuration Validation Result
+
 ```typescript
 interface ValidationResult {
   valid: boolean
@@ -659,25 +721,26 @@ interface ValidationError {
 ## Examples
 
 ### Using Types in Configuration
+
 ```typescript
 import {
   GoogleConfig,
   MicrosoftConfig,
   OidcConfig,
   PasswordConfig,
-  CodeProviderConfig
+  CodeProviderConfig,
 } from "@openauthjs/openauth/provider"
 
 const googleConfig: GoogleConfig = {
   clientID: "...",
   clientSecret: "...",
-  scopes: ["openid", "profile", "email"]
+  scopes: ["openid", "profile", "email"],
 }
 
 const oidcConfig: OidcConfig = {
   clientID: "...",
   issuer: "https://auth.example.com",
-  scopes: ["openid", "profile"]
+  scopes: ["openid", "profile"],
 }
 
 const passwordConfig: PasswordConfig = {
@@ -692,7 +755,7 @@ const passwordConfig: PasswordConfig = {
   },
   sendCode: async (email, code) => {
     // Send email
-  }
+  },
 }
 
 const codeConfig: CodeProviderConfig<{ email: string }> = {
@@ -701,11 +764,12 @@ const codeConfig: CodeProviderConfig<{ email: string }> = {
   },
   sendCode: async (claims, code) => {
     // Send code to claims.email
-  }
+  },
 }
 ```
 
 ### Type-Safe Provider Integration
+
 ```typescript
 import { issuer } from "@openauthjs/openauth"
 import {
@@ -715,33 +779,33 @@ import {
   PasswordProvider,
   type GoogleConfig,
   type MicrosoftConfig,
-  type OidcConfig
+  type OidcConfig,
 } from "@openauthjs/openauth/provider"
 
 const config = {
   google: {
     clientID: process.env.GOOGLE_CLIENT_ID!,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET!
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
   } satisfies GoogleConfig,
 
   microsoft: {
     clientID: process.env.MICROSOFT_CLIENT_ID!,
     clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-    tenant: process.env.MICROSOFT_TENANT!
+    tenant: process.env.MICROSOFT_TENANT!,
   } satisfies MicrosoftConfig,
 
   oidc: {
     clientID: process.env.OIDC_CLIENT_ID!,
-    issuer: process.env.OIDC_ISSUER!
-  } satisfies OidcConfig
+    issuer: process.env.OIDC_ISSUER!,
+  } satisfies OidcConfig,
 }
 
 export default issuer({
   providers: {
     google: GoogleProvider(config.google),
     microsoft: MicrosoftProvider(config.microsoft),
-    oidc: OidcProvider(config.oidc)
-  }
+    oidc: OidcProvider(config.oidc),
+  },
 })
 ```
 

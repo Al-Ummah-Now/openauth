@@ -50,7 +50,7 @@ export interface M2MTokenResponse {
 export interface M2MTokenClaims {
   mode: "m2m"
   iss: string
-  sub: string           // client_id
+  sub: string // client_id
   client_id: string
   tenant_id?: string
   scope: string
@@ -60,8 +60,8 @@ export interface M2MTokenClaims {
 }
 
 export interface M2MConfig {
-  accessTokenTTL?: number    // Default: 3600 (1 hour)
-  rateLimit?: number         // Default: 30 req/min
+  accessTokenTTL?: number // Default: 3600 (1 hour)
+  rateLimit?: number // Default: 30 req/min
   defaultScopes?: string[]
 }
 ```
@@ -85,45 +85,58 @@ export async function handleM2MTokenRequest(
   // 1. Authenticate client against oauth_clients table
   const { client, isPublicClient } = await authenticator.authenticateClient(
     clientId,
-    clientSecret
+    clientSecret,
   )
 
   if (!client) {
-    return c.json({
-      error: "invalid_client",
-      error_description: "Client authentication failed"
-    }, 401)
+    return c.json(
+      {
+        error: "invalid_client",
+        error_description: "Client authentication failed",
+      },
+      401,
+    )
   }
 
   // 2. Reject public clients (RFC 6749 requirement)
   if (isPublicClient) {
-    return c.json({
-      error: "unauthorized_client",
-      error_description: "Public clients cannot use client_credentials grant"
-    }, 400)
+    return c.json(
+      {
+        error: "unauthorized_client",
+        error_description: "Public clients cannot use client_credentials grant",
+      },
+      400,
+    )
   }
 
   // 3. Validate grant type allowed
   const grantTypes = JSON.parse(client.grant_types || "[]")
   if (!grantTypes.includes("client_credentials")) {
-    return c.json({
-      error: "unauthorized_client",
-      error_description: "Client not authorized for client_credentials grant"
-    }, 400)
+    return c.json(
+      {
+        error: "unauthorized_client",
+        error_description: "Client not authorized for client_credentials grant",
+      },
+      400,
+    )
   }
 
   // 4. Validate and filter scopes
   const allowedScopes = JSON.parse(client.scopes || "[]")
   const requestedScopes = requestedScope?.split(" ").filter(Boolean) || []
-  const grantedScopes = requestedScopes.length > 0
-    ? requestedScopes.filter(s => allowedScopes.includes(s))
-    : config.defaultScopes || allowedScopes
+  const grantedScopes =
+    requestedScopes.length > 0
+      ? requestedScopes.filter((s) => allowedScopes.includes(s))
+      : config.defaultScopes || allowedScopes
 
   if (requestedScopes.length > 0 && grantedScopes.length === 0) {
-    return c.json({
-      error: "invalid_scope",
-      error_description: "Requested scopes not allowed for this client"
-    }, 400)
+    return c.json(
+      {
+        error: "invalid_scope",
+        error_description: "Requested scopes not allowed for this client",
+      },
+      400,
+    )
   }
 
   // 5. Generate M2M access token
@@ -177,14 +190,17 @@ if (grantType === "client_credentials") {
     const allowed = await checkRateLimit(
       credentials.clientId!,
       "m2m_token",
-      30,  // requests
-      60   // per minute
+      30, // requests
+      60, // per minute
     )
     if (!allowed) {
-      return c.json({
-        error: "slow_down",
-        error_description: "Rate limit exceeded"
-      }, 429)
+      return c.json(
+        {
+          error: "slow_down",
+          error_description: "Rate limit exceeded",
+        },
+        429,
+      )
     }
 
     return handleM2MTokenRequest(
@@ -383,18 +399,31 @@ export interface UserService {
   createUser(params: CreateUserParams): Promise<User>
   getUser(userId: string, tenantId: string): Promise<User | null>
   getUserByEmail(email: string, tenantId: string): Promise<User | null>
-  getUserWithIdentities(userId: string, tenantId: string): Promise<UserWithIdentities | null>
-  updateUser(userId: string, tenantId: string, updates: UpdateUserParams): Promise<User>
+  getUserWithIdentities(
+    userId: string,
+    tenantId: string,
+  ): Promise<UserWithIdentities | null>
+  updateUser(
+    userId: string,
+    tenantId: string,
+    updates: UpdateUserParams,
+  ): Promise<User>
   deleteUser(userId: string, tenantId: string): Promise<void>
   listUsers(params: ListUsersParams): Promise<{ users: User[]; total: number }>
 
   // Identity operations
   linkIdentity(params: LinkIdentityParams): Promise<UserIdentity>
   unlinkIdentity(identityId: string, userId: string): Promise<void>
-  getIdentityByProvider(tenantId: string, provider: string, providerUserId: string): Promise<UserIdentity | null>
+  getIdentityByProvider(
+    tenantId: string,
+    provider: string,
+    providerUserId: string,
+  ): Promise<UserIdentity | null>
 
   // Provider login integration
-  findOrCreateUserByIdentity(params: FindOrCreateParams): Promise<FindOrCreateResult>
+  findOrCreateUserByIdentity(
+    params: FindOrCreateParams,
+  ): Promise<FindOrCreateResult>
 
   // Admin operations
   suspendUser(userId: string, tenantId: string): Promise<void>
@@ -517,14 +546,15 @@ Add auto-create user on provider login:
 // In enterprise/issuer.ts success callback
 
 if (config.userService) {
-  const { user, identity, created } = await config.userService.findOrCreateUserByIdentity({
-    tenantId: tenant.id,
-    provider: value.provider,
-    providerUserId: value.userID || value.properties?.sub,
-    email: value.properties?.email || value.email,
-    name: value.properties?.name,
-    providerData: value.properties,
-  })
+  const { user, identity, created } =
+    await config.userService.findOrCreateUserByIdentity({
+      tenantId: tenant.id,
+      provider: value.provider,
+      providerUserId: value.userID || value.properties?.sub,
+      email: value.properties?.email || value.email,
+      name: value.properties?.name,
+      providerData: value.properties,
+    })
 
   // Add canonical user ID to token properties
   enrichedProperties.userId = user.id
@@ -546,12 +576,12 @@ Complete the RBAC REST API by adding missing endpoints.
 
 ### Missing Endpoints to Add
 
-| Endpoint | Method | Status |
-|----------|--------|--------|
-| `/api/roles/:id` | GET | **Add** |
-| `/api/roles/:id` | PATCH | **Add** |
-| `/api/roles/:id` | DELETE | **Add** |
-| `/api/apps/:id` | DELETE | **Add** |
+| Endpoint               | Method | Status  |
+| ---------------------- | ------ | ------- |
+| `/api/roles/:id`       | GET    | **Add** |
+| `/api/roles/:id`       | PATCH  | **Add** |
+| `/api/roles/:id`       | DELETE | **Add** |
+| `/api/apps/:id`        | DELETE | **Add** |
 | `/api/permissions/:id` | DELETE | **Add** |
 
 ### Service Interface Additions (contracts/types.ts)
@@ -806,7 +836,8 @@ export const PROVIDER_ENDPOINTS: Record<string, ProviderEndpoints> = {
     token: "https://github.com/login/oauth/access_token",
   },
   microsoft: {
-    authorization: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize",
+    authorization:
+      "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
   },
   apple: {
@@ -878,7 +909,9 @@ export interface EncryptedValue {
   tag: string
 }
 
-export function createEncryptionService(masterKey: Uint8Array): EncryptionService {
+export function createEncryptionService(
+  masterKey: Uint8Array,
+): EncryptionService {
   if (masterKey.length !== 32) {
     throw new Error("Master key must be 256 bits (32 bytes)")
   }
@@ -889,11 +922,17 @@ export function createEncryptionService(masterKey: Uint8Array): EncryptionServic
       const encoder = new TextEncoder()
 
       const key = await crypto.subtle.importKey(
-        "raw", masterKey, { name: "AES-GCM" }, false, ["encrypt"]
+        "raw",
+        masterKey,
+        { name: "AES-GCM" },
+        false,
+        ["encrypt"],
       )
 
       const encrypted = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv }, key, encoder.encode(plaintext)
+        { name: "AES-GCM", iv },
+        key,
+        encoder.encode(plaintext),
       )
 
       const arr = new Uint8Array(encrypted)
@@ -905,20 +944,28 @@ export function createEncryptionService(masterKey: Uint8Array): EncryptionServic
     },
 
     async decrypt(encrypted: EncryptedValue): Promise<string> {
-      const iv = Uint8Array.from(atob(encrypted.iv), c => c.charCodeAt(0))
-      const ciphertext = Uint8Array.from(atob(encrypted.ciphertext), c => c.charCodeAt(0))
-      const tag = Uint8Array.from(atob(encrypted.tag), c => c.charCodeAt(0))
+      const iv = Uint8Array.from(atob(encrypted.iv), (c) => c.charCodeAt(0))
+      const ciphertext = Uint8Array.from(atob(encrypted.ciphertext), (c) =>
+        c.charCodeAt(0),
+      )
+      const tag = Uint8Array.from(atob(encrypted.tag), (c) => c.charCodeAt(0))
 
       const combined = new Uint8Array(ciphertext.length + tag.length)
       combined.set(ciphertext)
       combined.set(tag, ciphertext.length)
 
       const key = await crypto.subtle.importKey(
-        "raw", masterKey, { name: "AES-GCM" }, false, ["decrypt"]
+        "raw",
+        masterKey,
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"],
       )
 
       const decrypted = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv }, key, combined
+        { name: "AES-GCM", iv },
+        key,
+        combined,
       )
 
       return new TextDecoder().decode(decrypted)
@@ -986,9 +1033,11 @@ export function createProviderFromConfig(input: ProviderConfig): Provider {
 ### Dynamic Loader with Caching (identity-provider/loader.ts)
 
 ```typescript
-export function createDynamicProviderLoader(config: LoaderConfig): DynamicProviderLoader {
+export function createDynamicProviderLoader(
+  config: LoaderConfig,
+): DynamicProviderLoader {
   const cache = new Map<string, CacheEntry>()
-  const TTL = config.cacheTTL || 60_000  // 1 minute
+  const TTL = config.cacheTTL || 60_000 // 1 minute
 
   return {
     async getProviders(tenantId: string): Promise<Map<string, Provider>> {
@@ -1010,17 +1059,21 @@ export function createDynamicProviderLoader(config: LoaderConfig): DynamicProvid
       }
 
       // Dynamic providers from DB
-      const dbProviders = await config.service.listProvidersWithSecrets(tenantId)
+      const dbProviders =
+        await config.service.listProvidersWithSecrets(tenantId)
       for (const p of dbProviders) {
         if (!p.enabled) continue
         try {
-          providers.set(p.name, createProviderFromConfig({
-            type: p.type,
-            name: p.name,
-            client_id: p.client_id,
-            client_secret: p.client_secret_decrypted,
-            config: JSON.parse(p.config),
-          }))
+          providers.set(
+            p.name,
+            createProviderFromConfig({
+              type: p.type,
+              name: p.name,
+              client_id: p.client_id,
+              client_secret: p.client_secret_decrypted,
+              config: JSON.parse(p.config),
+            }),
+          )
         } catch (err) {
           console.error(`Failed to load provider ${p.name}:`, err)
         }
@@ -1040,7 +1093,9 @@ export function createDynamicProviderLoader(config: LoaderConfig): DynamicProvid
 ### API Routes (identity-provider/api.ts)
 
 ```typescript
-export function createIdentityProviderRoutes(service: IdentityProviderService): Hono {
+export function createIdentityProviderRoutes(
+  service: IdentityProviderService,
+): Hono {
   const app = new Hono()
 
   // GET /api/providers
@@ -1149,7 +1204,7 @@ export const ADMIN_SCOPES = {
   "sessions:revoke": "Revoke sessions",
 
   // Admin (superscope)
-  "admin": "Full admin access",
+  admin: "Full admin access",
 } as const
 ```
 
@@ -1160,7 +1215,7 @@ import type { Context, Next } from "hono"
 
 export function requireScopes(...requiredScopes: string[]) {
   return async (c: Context, next: Next) => {
-    const tokenScopes = c.get("scopes") as string[] || []
+    const tokenScopes = (c.get("scopes") as string[]) || []
 
     // Check for admin superscope
     if (tokenScopes.includes("admin")) {
@@ -1169,12 +1224,15 @@ export function requireScopes(...requiredScopes: string[]) {
     }
 
     // Check specific scopes
-    const hasAll = requiredScopes.every(s => tokenScopes.includes(s))
+    const hasAll = requiredScopes.every((s) => tokenScopes.includes(s))
     if (!hasAll) {
-      return c.json({
-        error: "insufficient_scope",
-        error_description: `Required scopes: ${requiredScopes.join(", ")}`,
-      }, 403)
+      return c.json(
+        {
+          error: "insufficient_scope",
+          error_description: `Required scopes: ${requiredScopes.join(", ")}`,
+        },
+        403,
+      )
     }
 
     await next()
@@ -1288,11 +1346,13 @@ export function createAuditService(db: D1Database): AuditService {
   return {
     async log(event: AuditEvent): Promise<void> {
       await db
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO audit_log
           (id, tenant_id, actor_type, actor_id, action, resource_type, resource_id, details, ip_address, user_agent, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
+        `,
+        )
         .bind(
           crypto.randomUUID(),
           event.tenantId,
@@ -1345,7 +1405,8 @@ export function auditMiddleware(auditService: AuditService) {
       action,
       resourceType,
       resourceId,
-      ipAddress: c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For"),
+      ipAddress:
+        c.req.header("CF-Connecting-IP") || c.req.header("X-Forwarded-For"),
       userAgent: c.req.header("User-Agent"),
     })
   }
@@ -1353,11 +1414,16 @@ export function auditMiddleware(auditService: AuditService) {
 
 function methodToAction(method: string): string {
   switch (method) {
-    case "POST": return "create"
-    case "PUT": return "update"
-    case "PATCH": return "update"
-    case "DELETE": return "delete"
-    default: return method.toLowerCase()
+    case "POST":
+      return "create"
+    case "PUT":
+      return "update"
+    case "PATCH":
+      return "update"
+    case "DELETE":
+      return "delete"
+    default:
+      return method.toLowerCase()
   }
 }
 ```
@@ -1366,13 +1432,13 @@ function methodToAction(method: string): string {
 
 ## Summary
 
-| Phase | Deliverables | Files | Tests |
-|-------|--------------|-------|-------|
-| 1 | M2M token endpoint | 3 new | 5 tests |
-| 2 | User CRUD + auto-create | 5 new, 1 migration | 10 tests |
-| 3 | Complete RBAC APIs | 2 modified | 5 tests |
-| 4 | Dynamic providers | 8 new, 1 migration | 10 tests |
-| 5 | Scope authorization | 2 new | 5 tests |
-| 6 | Encryption + Audit | 3 new, 1 migration | 5 tests |
+| Phase | Deliverables            | Files              | Tests    |
+| ----- | ----------------------- | ------------------ | -------- |
+| 1     | M2M token endpoint      | 3 new              | 5 tests  |
+| 2     | User CRUD + auto-create | 5 new, 1 migration | 10 tests |
+| 3     | Complete RBAC APIs      | 2 modified         | 5 tests  |
+| 4     | Dynamic providers       | 8 new, 1 migration | 10 tests |
+| 5     | Scope authorization     | 2 new              | 5 tests  |
+| 6     | Encryption + Audit      | 3 new, 1 migration | 5 tests  |
 
 **Total: ~15 days of implementation**

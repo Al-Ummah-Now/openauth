@@ -13,12 +13,12 @@ Enterprise Admin APIs provide machine-to-machine (M2M) authentication and RESTfu
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
+| Document                                                                     | Description                                      |
+| ---------------------------------------------------------------------------- | ------------------------------------------------ |
 | [PROVIDER_CONFIGURATION_REFERENCE.md](./PROVIDER_CONFIGURATION_REFERENCE.md) | Complete reference for all 18 identity providers |
-| [PROVIDER_SCHEMA.json](./PROVIDER_SCHEMA.json) | Machine-readable schema for UI/validation |
-| [PROVIDER_TYPES.md](./PROVIDER_TYPES.md) | TypeScript interfaces |
-| [PROVIDER_QUICK_REFERENCE.md](./PROVIDER_QUICK_REFERENCE.md) | Copy-paste examples |
+| [PROVIDER_SCHEMA.json](./PROVIDER_SCHEMA.json)                               | Machine-readable schema for UI/validation        |
+| [PROVIDER_TYPES.md](./PROVIDER_TYPES.md)                                     | TypeScript interfaces                            |
+| [PROVIDER_QUICK_REFERENCE.md](./PROVIDER_QUICK_REFERENCE.md)                 | Copy-paste examples                              |
 
 ## Feature Summary
 
@@ -37,6 +37,7 @@ grant_type=client_credentials
 ```
 
 **Token Claims:**
+
 ```json
 {
   "mode": "m2m",
@@ -150,20 +151,20 @@ CREATE TABLE identity_providers (
 
 ## Scopes
 
-| Scope | Description |
-|-------|-------------|
-| `users:read` | List/get users |
-| `users:write` | Create/update users |
-| `users:delete` | Delete/suspend users |
-| `roles:read` | List/get roles |
-| `roles:write` | Create/update roles |
-| `roles:delete` | Delete roles |
-| `permissions:read` | List permissions |
-| `permissions:write` | Create/delete permissions |
-| `providers:read` | List providers |
-| `providers:write` | Create/update/delete providers |
-| `clients:read` | List OAuth clients |
-| `clients:write` | Create/update/delete clients |
+| Scope               | Description                    |
+| ------------------- | ------------------------------ |
+| `users:read`        | List/get users                 |
+| `users:write`       | Create/update users            |
+| `users:delete`      | Delete/suspend users           |
+| `roles:read`        | List/get roles                 |
+| `roles:write`       | Create/update roles            |
+| `roles:delete`      | Delete roles                   |
+| `permissions:read`  | List permissions               |
+| `permissions:write` | Create/delete permissions      |
+| `providers:read`    | List providers                 |
+| `providers:write`   | Create/update/delete providers |
+| `clients:read`      | List OAuth clients             |
+| `clients:write`     | Create/update/delete clients   |
 
 ## File Structure
 
@@ -196,14 +197,14 @@ packages/openauth/src/
 
 ## Implementation Phases
 
-| Phase | Features | Effort |
-|-------|----------|--------|
-| 1 | M2M token endpoint | 2 days |
-| 2 | User table + CRUD APIs | 3 days |
-| 3 | Complete RBAC REST APIs | 2 days |
-| 4 | Dynamic Providers | 5 days |
-| 5 | Scope-based auth middleware | 1 day |
-| 6 | Secret encryption + audit | 2 days |
+| Phase | Features                    | Effort |
+| ----- | --------------------------- | ------ |
+| 1     | M2M token endpoint          | 2 days |
+| 2     | User table + CRUD APIs      | 3 days |
+| 3     | Complete RBAC REST APIs     | 2 days |
+| 4     | Dynamic Providers           | 5 days |
+| 5     | Scope-based auth middleware | 1 day  |
+| 6     | Secret encryption + audit   | 2 days |
 
 ## Security
 

@@ -5,13 +5,16 @@ Complete documentation set for OpenAuth provider configuration, including refere
 ## Documents Included
 
 ### 1. **PROVIDER_CONFIGURATION_REFERENCE.md** (Primary Reference)
+
 Comprehensive documentation for all 18 providers covering:
+
 - Google, GitHub, Microsoft, Apple, Facebook, Discord, Slack, Spotify, Twitch, X, Yahoo, LinkedIn, JumpCloud
 - Keycloak, Cognito (Enterprise)
 - Generic OAuth2 and OIDC providers
 - Password and Code (PIN) custom providers
 
 **For each provider:**
+
 - Provider type and variants (OAuth2 | OIDC | Custom)
 - Complete endpoint URLs (authorization, token, jwks)
 - Required and optional configuration fields
@@ -20,6 +23,7 @@ Comprehensive documentation for all 18 providers covering:
 - Complete working examples
 
 **Special sections:**
+
 - Common OAuth2 parameters reference
 - OIDC-specific configuration
 - Error handling and codes
@@ -32,7 +36,9 @@ Comprehensive documentation for all 18 providers covering:
 ---
 
 ### 2. **PROVIDER_QUICK_REFERENCE.md** (Developer Quick Start)
+
 Minimal configuration examples for immediate implementation:
+
 - Single-line configuration for each provider
 - Copy-paste examples for all 18 providers
 - Common scope patterns
@@ -46,7 +52,9 @@ Minimal configuration examples for immediate implementation:
 ---
 
 ### 3. **PROVIDER_SCHEMA.json** (Machine-Readable Schema)
+
 Structured JSON schema for programmatic consumption:
+
 - All 18 providers with metadata
 - Required and optional fields per provider
 - Endpoint information (manual and templated)
@@ -57,6 +65,7 @@ Structured JSON schema for programmatic consumption:
 - Validation rules by category
 
 **Use this for:**
+
 - Dynamic form generation (Admin UI)
 - Configuration validation
 - API schema generation
@@ -66,7 +75,9 @@ Structured JSON schema for programmatic consumption:
 ---
 
 ### 4. **PROVIDER_TYPES.md** (TypeScript Types)
+
 Complete TypeScript interface definitions:
+
 - Individual provider config interfaces
 - Union types for all configurations
 - Token response types
@@ -77,6 +88,7 @@ Complete TypeScript interface definitions:
 - Type-safe examples with `satisfies` keyword
 
 **For each provider type:**
+
 - Config interface with field types
 - Success response interface
 - Error union types
@@ -88,6 +100,7 @@ Complete TypeScript interface definitions:
 ---
 
 ### 5. **PROVIDER_DOCUMENTATION_INDEX.md** (This File)
+
 Navigation guide for the complete documentation set with usage recommendations.
 
 ---
@@ -95,18 +108,21 @@ Navigation guide for the complete documentation set with usage recommendations.
 ## Quick Navigation by Use Case
 
 ### I need to add a new provider to my app
+
 1. Open **PROVIDER_QUICK_REFERENCE.md**
 2. Find your provider in the list
 3. Copy the configuration example
 4. Set your environment variables
 
 ### I'm building an Admin UI for dynamic provider configuration
+
 1. Use **PROVIDER_SCHEMA.json** as your source of truth
 2. Parse required/optional fields per provider
 3. Implement field validation using `validation` rules
 4. Map field types to UI components
 
 ### I need complete configuration details for documentation
+
 1. Start with **PROVIDER_CONFIGURATION_REFERENCE.md**
 2. Each provider has detailed sections with:
    - Endpoint URLs
@@ -116,12 +132,14 @@ Navigation guide for the complete documentation set with usage recommendations.
    - Working examples
 
 ### I'm developing with TypeScript
+
 1. Reference **PROVIDER_TYPES.md** for interfaces
 2. Use interfaces for type checking
 3. Use `satisfies` keyword for compile-time validation
 4. Check callback handler signatures for custom providers
 
 ### I'm troubleshooting a configuration issue
+
 1. Check **PROVIDER_QUICK_REFERENCE.md** troubleshooting section
 2. Verify fields against **PROVIDER_CONFIGURATION_REFERENCE.md**
 3. Check **PROVIDER_SCHEMA.json** validation rules
@@ -132,9 +150,11 @@ Navigation guide for the complete documentation set with usage recommendations.
 ## Provider Categories
 
 ### OAuth2 Providers (16)
+
 Require: `clientID`, `clientSecret`
 
 **Public Platforms:**
+
 - Google (also OIDC)
 - GitHub
 - Apple (also OIDC)
@@ -148,18 +168,22 @@ Require: `clientID`, `clientSecret`
 - LinkedIn
 
 **Enterprise:**
+
 - Microsoft (also OIDC)
 - JumpCloud
 - Keycloak
 - Cognito
 
 **Generic:**
+
 - Custom OAuth2
 
 ### OIDC Providers (6)
+
 Require: `clientID`, `issuer`
 
 **Pre-configured:**
+
 - Google
 - Microsoft
 - Apple
@@ -167,9 +191,11 @@ Require: `clientID`, `issuer`
 - Slack (variants)
 
 **Generic:**
+
 - Custom OIDC
 
 ### Custom Providers (2)
+
 No credentials required (use callbacks instead)
 
 - **Password**: Email/password with PIN verification
@@ -180,6 +206,7 @@ No credentials required (use callbacks instead)
 ## Field Reference by Provider
 
 ### Most Common Required Fields
+
 ```
 All OAuth2:
   - clientID
@@ -198,6 +225,7 @@ Special additions:
 ```
 
 ### Optional Common Fields
+
 ```
 All OAuth2/OIDC:
   - scopes (array)
@@ -213,11 +241,13 @@ Special:
 ## Scope Reference
 
 **Standard OIDC Scopes:**
+
 - `openid` - OpenID Connect authentication
 - `profile` - User profile information
 - `email` - User email address
 
 **Provider-Specific:**
+
 - GitHub: `read:user`, `user:email`, `repo`
 - Microsoft: `User.Read`, `Calendars.Read`
 - Slack: Limited to `openid`, `email`, `profile`
@@ -231,15 +261,19 @@ See PROVIDER_CONFIGURATION_REFERENCE.md for complete scope lists per provider.
 ## Endpoint Patterns
 
 ### Static Endpoints
+
 Most providers have fixed endpoint URLs (Google, GitHub, Apple, etc.)
 
 ### Template Endpoints
+
 Some use variables:
+
 - **Microsoft**: `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/...`
 - **Keycloak**: `{baseUrl}/realms/{realm}/protocol/openid-connect/...`
 - **Cognito**: `https://{domain}.auth.{region}.amazoncognito.com/...`
 
 ### Auto-Discovery (OIDC only)
+
 Generic OIDC uses: `{issuer}/.well-known/openid-configuration`
 
 ---
@@ -264,26 +298,26 @@ For public API documentation, recommend this structure:
 1. Provider Overview
    - Type (OAuth2 | OIDC | Custom)
    - Supported variants
-   
+
 2. Configuration Section
    - Required fields table
    - Optional fields table
    - Endpoint URLs
-   
+
 3. Scopes
    - Default scopes
    - Common scopes
    - Link to provider's scope documentation
-   
+
 4. Examples
    - Minimal configuration
    - Full configuration with scopes
    - Error handling
-   
+
 5. Special Requirements
    - Any provider-specific needs
    - Known limitations
-   
+
 6. Troubleshooting
    - Common errors
    - How to get credentials
@@ -313,11 +347,12 @@ For public API documentation, recommend this structure:
 Using PROVIDER_SCHEMA.json:
 
 ### Generate TypeScript interfaces
+
 ```typescript
 const providers = schema.providers
 Object.entries(providers).forEach(([key, provider]) => {
   console.log(`interface ${capitalize(key)}Config {`)
-  provider.requiredFields.forEach(field => {
+  provider.requiredFields.forEach((field) => {
     console.log(`  ${field}: string`)
   })
   console.log(`}`)
@@ -325,29 +360,34 @@ Object.entries(providers).forEach(([key, provider]) => {
 ```
 
 ### Generate form fields
+
 ```typescript
-provider.requiredFields.forEach(field => {
+provider.requiredFields.forEach((field) => {
   const fieldDef = schema.fieldTypes[field]
   createFormField({
     name: field,
     type: fieldDef.type,
     required: true,
     sensitive: fieldDef.sensitive,
-    validation: fieldDef.validation
+    validation: fieldDef.validation,
   })
 })
 ```
 
 ### Generate validation rules
+
 ```typescript
 const validationRules = {
   [provider.type]: {
     required: provider.requiredFields,
-    types: provider.requiredFields.reduce((acc, field) => ({
-      ...acc,
-      [field]: schema.fieldTypes[field].type
-    }), {})
-  }
+    types: provider.requiredFields.reduce(
+      (acc, field) => ({
+        ...acc,
+        [field]: schema.fieldTypes[field].type,
+      }),
+      {},
+    ),
+  },
 }
 ```
 
@@ -356,6 +396,7 @@ const validationRules = {
 ## Version History
 
 **v1.0 (2024)**
+
 - Initial comprehensive documentation
 - 18 providers documented
 - JSON schema with machine-readable format
@@ -368,6 +409,7 @@ const validationRules = {
 ## How These Documents Were Generated
 
 All documents extracted from OpenAuth provider source code:
+
 - `/packages/openauth/src/provider/google.ts`
 - `/packages/openauth/src/provider/github.ts`
 - ... (all 18 provider implementations)
@@ -383,6 +425,7 @@ Source of truth: Latest implementation files in OpenAuth repository.
 ## Document Usage Rights
 
 These reference documents are generated from OpenAuth source code and should be:
+
 - ✓ Included in API documentation
 - ✓ Used in admin UI implementations
 - ✓ Shared with developers

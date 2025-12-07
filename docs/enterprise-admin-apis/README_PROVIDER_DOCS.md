@@ -9,9 +9,11 @@ This documentation package contains complete, searchable references for configur
 ## Files Generated
 
 ### 1. PROVIDER_CONFIGURATION_REFERENCE.md (1,206 lines)
+
 **Comprehensive reference guide - THE DEFINITIVE SOURCE**
 
 Complete documentation for every provider with:
+
 - Full configuration details for all 18 providers
 - Endpoint URLs (authorization, token, jwks)
 - Required fields (clientID, clientSecret, tenant, domain, etc.)
@@ -24,6 +26,7 @@ Complete documentation for every provider with:
 - Security considerations
 
 **Providers Documented:**
+
 - Google (OAuth2 + OIDC)
 - GitHub (OAuth2)
 - Microsoft (OAuth2 + OIDC)
@@ -49,9 +52,11 @@ Complete documentation for every provider with:
 ---
 
 ### 2. PROVIDER_QUICK_REFERENCE.md (463 lines)
+
 **Developer quick start guide - GET STARTED IN 30 SECONDS**
 
 Minimal configuration examples:
+
 - One copy-paste example per provider (19 total)
 - Common scope patterns
 - Error codes
@@ -65,9 +70,11 @@ Minimal configuration examples:
 ---
 
 ### 3. PROVIDER_SCHEMA.json (386 lines)
+
 **Machine-readable schema - FOR TOOL INTEGRATION**
 
 Structured JSON schema for programmatic consumption:
+
 - All 18 providers with complete metadata
 - Required and optional fields per provider
 - Field type definitions (string, number, boolean, etc.)
@@ -80,6 +87,7 @@ Structured JSON schema for programmatic consumption:
 - Capability matrix (OAuth2, OIDC, auto-discovery, PKCE support)
 
 **Use for:**
+
 - Admin UI dynamic form generation
 - Configuration validation
 - API schema generation
@@ -90,9 +98,11 @@ Structured JSON schema for programmatic consumption:
 ---
 
 ### 4. PROVIDER_TYPES.md (752 lines)
+
 **TypeScript type definitions - FOR TYPE-SAFE DEVELOPMENT**
 
 Complete TypeScript interfaces and types:
+
 - Individual config interfaces for each provider
 - Union types for all configurations
 - Token response types
@@ -108,9 +118,11 @@ Complete TypeScript interfaces and types:
 ---
 
 ### 5. PROVIDER_DOCUMENTATION_INDEX.md (408 lines)
+
 **Navigation guide - START HERE**
 
 Complete index and navigation guide:
+
 - Quick navigation by use case
 - Provider categories and grouping
 - Field references
@@ -128,23 +140,27 @@ Complete index and navigation guide:
 ## Quick Start
 
 ### For Developers Adding a Provider
+
 1. Open **PROVIDER_QUICK_REFERENCE.md**
 2. Find your provider
 3. Copy the configuration
 4. Done!
 
 ### For Building Admin UI
+
 1. Load **PROVIDER_SCHEMA.json**
 2. Iterate over providers
 3. Generate forms based on required/optional fields
 4. Implement validation from `fieldTypes`
 
 ### For Writing API Docs
+
 1. Reference **PROVIDER_CONFIGURATION_REFERENCE.md** for each provider
 2. Use tables and examples directly
 3. Cross-reference with PROVIDER_DOCUMENTATION_INDEX.md for patterns
 
 ### For TypeScript Projects
+
 1. Import types from **PROVIDER_TYPES.md**
 2. Use `satisfies` keyword for validation
 3. Reference callback signatures for custom providers
@@ -153,14 +169,14 @@ Complete index and navigation guide:
 
 ## Document Statistics
 
-| Document | Lines | Size | Purpose |
-|----------|-------|------|---------|
-| PROVIDER_CONFIGURATION_REFERENCE.md | 1,206 | 35KB | Comprehensive reference |
-| PROVIDER_TYPES.md | 752 | 16KB | TypeScript types |
-| PROVIDER_SCHEMA.json | 386 | 15KB | Machine-readable schema |
-| PROVIDER_QUICK_REFERENCE.md | 463 | 9.3KB | Quick start guide |
-| PROVIDER_DOCUMENTATION_INDEX.md | 408 | 11KB | Navigation index |
-| **TOTAL** | **3,215** | **86.3KB** | Complete suite |
+| Document                            | Lines     | Size       | Purpose                 |
+| ----------------------------------- | --------- | ---------- | ----------------------- |
+| PROVIDER_CONFIGURATION_REFERENCE.md | 1,206     | 35KB       | Comprehensive reference |
+| PROVIDER_TYPES.md                   | 752       | 16KB       | TypeScript types        |
+| PROVIDER_SCHEMA.json                | 386       | 15KB       | Machine-readable schema |
+| PROVIDER_QUICK_REFERENCE.md         | 463       | 9.3KB      | Quick start guide       |
+| PROVIDER_DOCUMENTATION_INDEX.md     | 408       | 11KB       | Navigation index        |
+| **TOTAL**                           | **3,215** | **86.3KB** | Complete suite          |
 
 ---
 
@@ -169,18 +185,22 @@ Complete index and navigation guide:
 ### Total Providers: 19 (18 + 1 generic)
 
 **OAuth2 Providers (16):**
+
 - Google, GitHub, Microsoft, Apple, Facebook, Discord, Slack, Spotify, Twitch, X, Yahoo, LinkedIn, JumpCloud, Keycloak, Cognito, Generic OAuth2
 
 **OIDC Variants (6):**
+
 - Google, Microsoft, Apple, Facebook, Slack, Generic OIDC
 
 **Custom Providers (2):**
+
 - Password (email/password with PIN)
 - Code (passwordless PIN)
 
 ### Coverage by Provider
 
 Each provider is documented with:
+
 - Provider type and classification
 - Configuration requirements
 - Endpoint URLs
@@ -195,6 +215,7 @@ Each provider is documented with:
 ## Key Features
 
 ### Comprehensive
+
 - Every provider type covered
 - All configuration options documented
 - Every scope referenced
@@ -202,6 +223,7 @@ Each provider is documented with:
 - Security best practices included
 
 ### Organized
+
 - Clear categorization by provider type
 - Quick navigation by use case
 - Indexed for easy searching
@@ -209,6 +231,7 @@ Each provider is documented with:
 - Hierarchical structure
 
 ### Practical
+
 - Copy-paste examples for every provider
 - Real-world configuration templates
 - Troubleshooting checklists
@@ -216,6 +239,7 @@ Each provider is documented with:
 - Field validation rules
 
 ### Machine-Readable
+
 - JSON schema for tools
 - TypeScript types for development
 - Structured field definitions
@@ -227,14 +251,18 @@ Each provider is documented with:
 ## Use Cases
 
 ### 1. Adding a New Provider to Your App
+
 **Process:**
+
 1. Find provider in PROVIDER_QUICK_REFERENCE.md
 2. Copy example code
 3. Replace with your credentials
 4. Done in <1 minute
 
 ### 2. Building Dynamic Provider Admin UI
+
 **Process:**
+
 1. Load PROVIDER_SCHEMA.json
 2. Parse provider metadata
 3. Generate form fields from required/optional fields
@@ -242,21 +270,27 @@ Each provider is documented with:
 5. Create form UI dynamically
 
 ### 3. Writing API Documentation
+
 **Process:**
+
 1. Reference PROVIDER_CONFIGURATION_REFERENCE.md
 2. Extract provider details
 3. Create API docs with consistent structure
 4. Include examples and troubleshooting
 
 ### 4. TypeScript Type-Safe Configuration
+
 **Process:**
+
 1. Import interfaces from PROVIDER_TYPES.md
 2. Use in configuration objects
 3. Use `satisfies` keyword for validation
 4. Get IDE autocomplete and type checking
 
 ### 5. Implementing Provider Validation
+
 **Process:**
+
 1. Parse PROVIDER_SCHEMA.json
 2. Use validation rules from fieldTypes
 3. Implement per-provider validation
@@ -267,39 +301,42 @@ Each provider is documented with:
 ## Integration Examples
 
 ### Admin UI Form Generation
+
 ```javascript
-const schema = require('./PROVIDER_SCHEMA.json')
+const schema = require("./PROVIDER_SCHEMA.json")
 const provider = schema.providers.google
 
 // Generate form fields
-provider.requiredFields.forEach(field => {
+provider.requiredFields.forEach((field) => {
   const fieldDef = schema.fieldTypes[field]
   createFormField({
     name: field,
     type: fieldDef.type,
     required: true,
-    sensitive: fieldDef.sensitive
+    sensitive: fieldDef.sensitive,
   })
 })
 ```
 
 ### Configuration Validation
+
 ```javascript
 function validateConfig(providerType, config) {
   const provider = schema.providers[providerType]
   const errors = []
-  
-  provider.requiredFields.forEach(field => {
+
+  provider.requiredFields.forEach((field) => {
     if (!config[field]) {
       errors.push(`${field} is required`)
     }
   })
-  
+
   return { valid: errors.length === 0, errors }
 }
 ```
 
 ### API Documentation Generation
+
 ```javascript
 const providers = schema.providers
 const docs = Object.entries(providers).map(([key, provider]) => ({
@@ -307,10 +344,10 @@ const docs = Object.entries(providers).map(([key, provider]) => ({
   type: provider.type,
   fields: {
     required: provider.requiredFields,
-    optional: provider.optionalFields
+    optional: provider.optionalFields,
   },
   endpoints: provider.endpoints,
-  commonScopes: schema.commonScopes
+  commonScopes: schema.commonScopes,
 }))
 ```
 
@@ -319,6 +356,7 @@ const docs = Object.entries(providers).map(([key, provider]) => ({
 ## Maintenance Notes
 
 ### When to Update These Documents
+
 - When adding a new provider
 - When changing provider configurations
 - When updating scopes
@@ -326,10 +364,12 @@ const docs = Object.entries(providers).map(([key, provider]) => ({
 - When adding new features
 
 ### Where Source Code Is
+
 - `/packages/openauth/src/provider/` - All provider implementations
 - Each file is the source of truth for that provider
 
 ### Keeping Documentation In Sync
+
 - Compare against source implementations
 - Run validation tools against schema
 - Test examples before release
@@ -341,6 +381,7 @@ const docs = Object.entries(providers).map(([key, provider]) => ({
 ## Security Considerations
 
 ### Documented Best Practices
+
 - Client secret management
 - Environment variable usage
 - HTTPS enforcement
@@ -351,6 +392,7 @@ const docs = Object.entries(providers).map(([key, provider]) => ({
 - State validation
 
 ### Implementation Checklist
+
 See PROVIDER_QUICK_REFERENCE.md troubleshooting section for complete checklist
 
 ---
@@ -358,6 +400,7 @@ See PROVIDER_QUICK_REFERENCE.md troubleshooting section for complete checklist
 ## Support and Resources
 
 ### Documentation Hierarchy
+
 1. **Start Here**: PROVIDER_DOCUMENTATION_INDEX.md (navigation)
 2. **Quick Setup**: PROVIDER_QUICK_REFERENCE.md (examples)
 3. **Full Reference**: PROVIDER_CONFIGURATION_REFERENCE.md (details)
@@ -365,6 +408,7 @@ See PROVIDER_QUICK_REFERENCE.md troubleshooting section for complete checklist
 5. **Automation**: PROVIDER_SCHEMA.json (tools/UI)
 
 ### Finding Information
+
 - **"I need to configure X"** → PROVIDER_QUICK_REFERENCE.md
 - **"What are all the options?"** → PROVIDER_CONFIGURATION_REFERENCE.md
 - **"How do I build a UI?"** → PROVIDER_SCHEMA.json
@@ -387,6 +431,7 @@ See PROVIDER_QUICK_REFERENCE.md troubleshooting section for complete checklist
 ## File Locations
 
 All files are in the OpenAuth root directory:
+
 - `/home/meywd/openauth/PROVIDER_CONFIGURATION_REFERENCE.md`
 - `/home/meywd/openauth/PROVIDER_QUICK_REFERENCE.md`
 - `/home/meywd/openauth/PROVIDER_SCHEMA.json`
