@@ -20,7 +20,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 // Single migration file
-const migrationFile = join(__dirname, "..", "src", "migrations", "001_schema.sql")
+const migrationFile = join(
+  __dirname,
+  "..",
+  "src",
+  "migrations",
+  "001_schema.sql",
+)
 
 /**
  * Strip JSON comments for JSONC support
