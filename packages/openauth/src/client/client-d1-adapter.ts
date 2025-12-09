@@ -36,11 +36,7 @@ import {
   CircuitBreakerError,
   type CircuitBreakerConfig,
 } from "./circuit-breaker.js"
-import {
-  withRetry,
-  D1NotFoundError,
-  type RetryConfig,
-} from "./d1-errors.js"
+import { withRetry, D1NotFoundError, type RetryConfig } from "./d1-errors.js"
 
 const DEFAULT_GRACE_PERIOD = 60 * 60 // 1 hour
 
@@ -106,7 +102,9 @@ export class ClientD1Adapter {
         async () => {
           // Check for name conflict
           const existing = await this.db
-            .prepare("SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ?")
+            .prepare(
+              "SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ?",
+            )
             .bind(tenantId, request.name)
             .first()
 
@@ -170,7 +168,9 @@ export class ClientD1Adapter {
       )
       .catch((error) => {
         if (error instanceof CircuitBreakerError) {
-          console.error(`ClientD1Adapter: Circuit breaker open for getClient(${clientId})`)
+          console.error(
+            `ClientD1Adapter: Circuit breaker open for getClient(${clientId})`,
+          )
           return null
         }
         throw error
@@ -217,7 +217,9 @@ export class ClientD1Adapter {
       )
       .catch((error) => {
         if (error instanceof CircuitBreakerError) {
-          console.error(`ClientD1Adapter: Circuit breaker open for getClientById(${clientId})`)
+          console.error(
+            `ClientD1Adapter: Circuit breaker open for getClientById(${clientId})`,
+          )
           return null
         }
         throw error

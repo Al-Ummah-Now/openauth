@@ -14,7 +14,19 @@ function createMockD1() {
         run: mock(async () => {
           // Handle INSERT
           if (sql.includes("INSERT INTO oauth_clients")) {
-            const [id, tenantId, name, secretHash, grantTypes, scopes, redirectUris, metadata, enabled, createdAt, updatedAt] = params
+            const [
+              id,
+              tenantId,
+              name,
+              secretHash,
+              grantTypes,
+              scopes,
+              redirectUris,
+              metadata,
+              enabled,
+              createdAt,
+              updatedAt,
+            ] = params
             mockClients.set(id, {
               id,
               tenant_id: tenantId,
@@ -31,7 +43,10 @@ function createMockD1() {
             return { success: true, meta: { changes: 1 } }
           }
           // Handle UPDATE for rotate secret
-          if (sql.includes("UPDATE oauth_clients SET") && sql.includes("previous_secret_hash")) {
+          if (
+            sql.includes("UPDATE oauth_clients SET") &&
+            sql.includes("previous_secret_hash")
+          ) {
             const clientId = params[params.length - 2]
             const tenantId = params[params.length - 1]
             const client = mockClients.get(clientId)
@@ -57,15 +72,21 @@ function createMockD1() {
               if (sql.includes("name = ?")) {
                 const nameIdx = sql.indexOf("name = ?")
                 const setClauseStart = sql.indexOf("SET ") + 4
-                const setClausePart = sql.substring(setClauseStart, sql.indexOf(" WHERE"))
+                const setClausePart = sql.substring(
+                  setClauseStart,
+                  sql.indexOf(" WHERE"),
+                )
                 const clauses = setClausePart.split(", ")
                 clauses.forEach((clause, idx) => {
                   if (clause.includes("name")) client.name = params[idx]
-                  if (clause.includes("updated_at")) client.updated_at = params[idx]
+                  if (clause.includes("updated_at"))
+                    client.updated_at = params[idx]
                   if (clause.includes("enabled")) client.enabled = params[idx]
-                  if (clause.includes("grant_types")) client.grant_types = params[idx]
+                  if (clause.includes("grant_types"))
+                    client.grant_types = params[idx]
                   if (clause.includes("scopes")) client.scopes = params[idx]
-                  if (clause.includes("redirect_uris")) client.redirect_uris = params[idx]
+                  if (clause.includes("redirect_uris"))
+                    client.redirect_uris = params[idx]
                   if (clause.includes("metadata")) client.metadata = params[idx]
                 })
               }
@@ -87,7 +108,11 @@ function createMockD1() {
             return mockClients.get(clientId) || null
           }
           // Handle SELECT by id and tenant (for getClient)
-          if (sql.includes("SELECT * FROM oauth_clients WHERE id = ? AND tenant_id = ?")) {
+          if (
+            sql.includes(
+              "SELECT * FROM oauth_clients WHERE id = ? AND tenant_id = ?",
+            )
+          ) {
             const [clientId, tenantId] = params
             const client = mockClients.get(clientId)
             if (client && client.tenant_id === tenantId) {
@@ -96,7 +121,11 @@ function createMockD1() {
             return null
           }
           // Handle name conflict check
-          if (sql.includes("SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ?")) {
+          if (
+            sql.includes(
+              "SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ?",
+            )
+          ) {
             const [tenantId, name] = params
             for (const [, client] of mockClients) {
               if (client.tenant_id === tenantId && client.name === name) {
@@ -106,10 +135,18 @@ function createMockD1() {
             return null
           }
           // Handle name conflict check for update (with id != ?)
-          if (sql.includes("SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ? AND id != ?")) {
+          if (
+            sql.includes(
+              "SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ? AND id != ?",
+            )
+          ) {
             const [tenantId, name, excludeId] = params
             for (const [, client] of mockClients) {
-              if (client.tenant_id === tenantId && client.name === name && client.id !== excludeId) {
+              if (
+                client.tenant_id === tenantId &&
+                client.name === name &&
+                client.id !== excludeId
+              ) {
                 return { id: client.id }
               }
             }
@@ -121,7 +158,7 @@ function createMockD1() {
           if (sql.includes("SELECT * FROM oauth_clients WHERE tenant_id = ?")) {
             const tenantId = params[0]
             const results = Array.from(mockClients.values()).filter(
-              (c) => c.tenant_id === tenantId
+              (c) => c.tenant_id === tenantId,
             )
             return { results }
           }
@@ -163,7 +200,7 @@ describe("ClientD1Adapter", () => {
       await adapter.createClient("tenant-1", { name: "My App" })
 
       await expect(
-        adapter.createClient("tenant-1", { name: "My App" })
+        adapter.createClient("tenant-1", { name: "My App" }),
       ).rejects.toThrow(ClientNameConflictError)
     })
 
@@ -177,7 +214,7 @@ describe("ClientD1Adapter", () => {
 
     test("validates client name", async () => {
       await expect(
-        adapter.createClient("tenant-1", { name: "" })
+        adapter.createClient("tenant-1", { name: "" }),
       ).rejects.toThrow()
     })
 
@@ -186,14 +223,16 @@ describe("ClientD1Adapter", () => {
         adapter.createClient("tenant-1", {
           name: "Test",
           grant_types: ["invalid_grant" as any],
-        })
+        }),
       ).rejects.toThrow()
     })
   })
 
   describe("getClient", () => {
     test("returns client by id and tenant", async () => {
-      const created = await adapter.createClient("tenant-1", { name: "Test App" })
+      const created = await adapter.createClient("tenant-1", {
+        name: "Test App",
+      })
       const client = await adapter.getClient(created.client.id, "tenant-1")
 
       expect(client).not.toBeNull()
@@ -206,7 +245,9 @@ describe("ClientD1Adapter", () => {
     })
 
     test("returns null for wrong tenant", async () => {
-      const created = await adapter.createClient("tenant-1", { name: "Test App" })
+      const created = await adapter.createClient("tenant-1", {
+        name: "Test App",
+      })
       const client = await adapter.getClient(created.client.id, "tenant-2")
 
       expect(client).toBeNull()
@@ -215,7 +256,9 @@ describe("ClientD1Adapter", () => {
 
   describe("getClientById", () => {
     test("returns client by id only (cross-tenant)", async () => {
-      const created = await adapter.createClient("tenant-1", { name: "Test App" })
+      const created = await adapter.createClient("tenant-1", {
+        name: "Test App",
+      })
       const client = await adapter.getClientById(created.client.id)
 
       expect(client).not.toBeNull()
@@ -230,17 +273,23 @@ describe("ClientD1Adapter", () => {
 
   describe("updateClient", () => {
     test("updates client name", async () => {
-      const created = await adapter.createClient("tenant-1", { name: "Old Name" })
-      const updated = await adapter.updateClient(created.client.id, "tenant-1", {
-        name: "New Name",
+      const created = await adapter.createClient("tenant-1", {
+        name: "Old Name",
       })
+      const updated = await adapter.updateClient(
+        created.client.id,
+        "tenant-1",
+        {
+          name: "New Name",
+        },
+      )
 
       expect(updated.name).toBe("New Name")
     })
 
     test("throws ClientNotFoundError for non-existent client", async () => {
       await expect(
-        adapter.updateClient("non-existent", "tenant-1", { name: "New" })
+        adapter.updateClient("non-existent", "tenant-1", { name: "New" }),
       ).rejects.toThrow(ClientNotFoundError)
     })
 
@@ -249,7 +298,9 @@ describe("ClientD1Adapter", () => {
       const created = await adapter.createClient("tenant-1", { name: "My App" })
 
       await expect(
-        adapter.updateClient(created.client.id, "tenant-1", { name: "Existing App" })
+        adapter.updateClient(created.client.id, "tenant-1", {
+          name: "Existing App",
+        }),
       ).rejects.toThrow(ClientNameConflictError)
     })
   })
@@ -265,7 +316,7 @@ describe("ClientD1Adapter", () => {
 
     test("throws ClientNotFoundError for non-existent client", async () => {
       await expect(
-        adapter.deleteClient("non-existent", "tenant-1")
+        adapter.deleteClient("non-existent", "tenant-1"),
       ).rejects.toThrow(ClientNotFoundError)
     })
   })
@@ -301,7 +352,7 @@ describe("ClientD1Adapter", () => {
 
     test("throws ClientNotFoundError for non-existent client", async () => {
       await expect(
-        adapter.rotateSecret("non-existent", "tenant-1")
+        adapter.rotateSecret("non-existent", "tenant-1"),
       ).rejects.toThrow(ClientNotFoundError)
     })
   })
@@ -309,7 +360,10 @@ describe("ClientD1Adapter", () => {
   describe("verifyCredentials", () => {
     test("returns client for valid credentials", async () => {
       const created = await adapter.createClient("tenant-1", { name: "Test" })
-      const client = await adapter.verifyCredentials(created.client.id, created.secret)
+      const client = await adapter.verifyCredentials(
+        created.client.id,
+        created.secret,
+      )
 
       expect(client).not.toBeNull()
       expect(client!.id).toBe(created.client.id)
@@ -317,13 +371,19 @@ describe("ClientD1Adapter", () => {
 
     test("returns null for invalid secret", async () => {
       const created = await adapter.createClient("tenant-1", { name: "Test" })
-      const client = await adapter.verifyCredentials(created.client.id, "wrong-secret")
+      const client = await adapter.verifyCredentials(
+        created.client.id,
+        "wrong-secret",
+      )
 
       expect(client).toBeNull()
     })
 
     test("returns null for non-existent client", async () => {
-      const client = await adapter.verifyCredentials("non-existent", "any-secret")
+      const client = await adapter.verifyCredentials(
+        "non-existent",
+        "any-secret",
+      )
       expect(client).toBeNull()
     })
   })

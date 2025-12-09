@@ -136,7 +136,7 @@ describe("withRetry", () => {
         }
         return "success"
       },
-      { maxAttempts: 3, initialDelayMs: 1 }
+      { maxAttempts: 3, initialDelayMs: 1 },
     )
 
     expect(result).toBe("success")
@@ -152,8 +152,8 @@ describe("withRetry", () => {
           attempts++
           throw new Error("UNIQUE constraint failed")
         },
-        { maxAttempts: 3 }
-      )
+        { maxAttempts: 3 },
+      ),
     ).rejects.toThrow(D1PermanentError)
 
     expect(attempts).toBe(1)
@@ -168,8 +168,8 @@ describe("withRetry", () => {
           attempts++
           throw new Error("Resource not found")
         },
-        { maxAttempts: 3 }
-      )
+        { maxAttempts: 3 },
+      ),
     ).rejects.toThrow(D1NotFoundError)
 
     expect(attempts).toBe(1)
@@ -184,8 +184,8 @@ describe("withRetry", () => {
           attempts++
           throw new Error("Network timeout")
         },
-        { maxAttempts: 3, initialDelayMs: 1 }
-      )
+        { maxAttempts: 3, initialDelayMs: 1 },
+      ),
     ).rejects.toThrow(D1TransientError)
 
     expect(attempts).toBe(3)
@@ -195,7 +195,7 @@ describe("withRetry", () => {
     await expect(
       withRetry("test", async () => {
         throw new ClientNotFoundError("client-123")
-      })
+      }),
     ).rejects.toThrow(ClientNotFoundError)
   })
 
@@ -203,33 +203,31 @@ describe("withRetry", () => {
     await expect(
       withRetry("test", async () => {
         throw new ClientNameConflictError("My App")
-      })
+      }),
     ).rejects.toThrow(ClientNameConflictError)
   })
 })
 
 describe("checkD1Result", () => {
   test("passes for successful result", () => {
-    expect(() =>
-      checkD1Result({ success: true }, "insert")
-    ).not.toThrow()
+    expect(() => checkD1Result({ success: true }, "insert")).not.toThrow()
   })
 
   test("throws for failed result", () => {
-    expect(() =>
-      checkD1Result({ success: false }, "insert")
-    ).toThrow(D1PermanentError)
+    expect(() => checkD1Result({ success: false }, "insert")).toThrow(
+      D1PermanentError,
+    )
   })
 
   test("throws not found when expecting changes but none made", () => {
     expect(() =>
-      checkD1Result({ success: true, meta: { changes: 0 } }, "update", true)
+      checkD1Result({ success: true, meta: { changes: 0 } }, "update", true),
     ).toThrow(D1NotFoundError)
   })
 
   test("passes when expecting changes and changes made", () => {
     expect(() =>
-      checkD1Result({ success: true, meta: { changes: 1 } }, "update", true)
+      checkD1Result({ success: true, meta: { changes: 1 } }, "update", true),
     ).not.toThrow()
   })
 })

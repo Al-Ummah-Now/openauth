@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeEach } from "bun:test"
-import { CircuitBreaker, CircuitState, CircuitBreakerError } from "./circuit-breaker.js"
+import {
+  CircuitBreaker,
+  CircuitState,
+  CircuitBreakerError,
+} from "./circuit-breaker.js"
 
 describe("CircuitBreaker", () => {
   let breaker: CircuitBreaker
@@ -48,7 +52,7 @@ describe("CircuitBreaker", () => {
       await expect(
         breaker.execute(async () => {
           throw new Error("test error")
-        })
+        }),
       ).rejects.toThrow("test error")
     })
 
@@ -89,7 +93,7 @@ describe("CircuitBreaker", () => {
       }
 
       await expect(
-        breaker.execute(async () => "should not run")
+        breaker.execute(async () => "should not run"),
       ).rejects.toThrow(CircuitBreakerError)
     })
 

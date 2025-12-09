@@ -71,7 +71,11 @@ const createMockD1 = () => {
             return mockClients.get(clientId) || null
           }
           // Handle SELECT for name conflict check
-          if (sql.includes("SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ?")) {
+          if (
+            sql.includes(
+              "SELECT id FROM oauth_clients WHERE tenant_id = ? AND name = ?",
+            )
+          ) {
             const [tenantId, name] = params
             for (const [, client] of mockClients) {
               if (client.tenant_id === tenantId && client.name === name) {

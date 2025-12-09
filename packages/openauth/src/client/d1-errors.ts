@@ -167,8 +167,10 @@ function isDomainError(error: unknown): boolean {
     "ValidationError",
   ]
 
-  return domainErrorNames.includes(error.name) ||
-         domainErrorNames.includes(error.constructor.name)
+  return (
+    domainErrorNames.includes(error.name) ||
+    domainErrorNames.includes(error.constructor.name)
+  )
 }
 
 /**
