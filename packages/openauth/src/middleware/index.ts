@@ -23,7 +23,12 @@ export {
 } from "./errors.js"
 
 // Bearer Auth
-export { bearerAuth, extractBearerToken } from "./bearer-auth.js"
+export {
+  bearerAuth,
+  extractBearerToken,
+  clearJWKSCache,
+  type BearerAuthOptions,
+} from "./bearer-auth.js"
 
 // Scope Authorization
 export {
