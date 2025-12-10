@@ -231,7 +231,9 @@ function resolveDbName(parsed: ParsedArgs): string {
 
   const config = parseWranglerConfig(parsed.configFile)
   if (config) {
-    console.log(`Found database in ${config.configFile}: ${config.databaseName}`)
+    console.log(
+      `Found database in ${config.configFile}: ${config.databaseName}`,
+    )
     return config.databaseName
   }
 
@@ -281,7 +283,11 @@ function migrate(args: string[]) {
     isRemote: parsed.isRemote,
     configFile: parsed.configFile,
   }
-  const target = parsed.isLocal ? " (local)" : parsed.isRemote ? " (remote)" : ""
+  const target = parsed.isLocal
+    ? " (local)"
+    : parsed.isRemote
+      ? " (remote)"
+      : ""
 
   // Apply schema
   console.log(`Applying OpenAuth schema to ${dbName}${target}...`)
@@ -344,7 +350,11 @@ function seed(args: string[]) {
     isRemote: parsed.isRemote,
     configFile: parsed.configFile,
   }
-  const target = parsed.isLocal ? " (local)" : parsed.isRemote ? " (remote)" : ""
+  const target = parsed.isLocal
+    ? " (local)"
+    : parsed.isRemote
+      ? " (remote)"
+      : ""
 
   console.log(`Applying seed data to ${dbName}${target}...`)
   const result = executeSqlFile(dbName, seedFile, options)
