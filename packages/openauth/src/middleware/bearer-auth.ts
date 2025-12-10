@@ -111,10 +111,7 @@ const jwksCache = new Map<
 /**
  * Create or get cached JWKS resolver for a URL
  */
-function getRemoteJWKSResolver(
-  url: string,
-  cacheTtl: number,
-): JWTVerifyGetKey {
+function getRemoteJWKSResolver(url: string, cacheTtl: number): JWTVerifyGetKey {
   const cached = jwksCache.get(url)
   const now = Date.now()
 

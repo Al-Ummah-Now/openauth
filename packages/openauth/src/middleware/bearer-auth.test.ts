@@ -188,7 +188,9 @@ describe("bearerAuth middleware", () => {
           issuer,
         }),
       )
-      app.get("/test", (c) => c.json({ success: true, tenantId: c.get("tenantId") }))
+      app.get("/test", (c) =>
+        c.json({ success: true, tenantId: c.get("tenantId") }),
+      )
 
       const token = await createToken(keyPair1.privateKey, "key-1")
       const res = await app.request("/test", {
@@ -579,7 +581,9 @@ describe("bearerAuth middleware", () => {
           jwks,
           issuer,
         })
-      }).toThrow("bearerAuth accepts only one of: getPublicKey, jwksUrl, or jwks")
+      }).toThrow(
+        "bearerAuth accepts only one of: getPublicKey, jwksUrl, or jwks",
+      )
     })
   })
 
