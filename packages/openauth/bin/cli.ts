@@ -170,19 +170,19 @@ Options:
   --local              Apply to local D1 database (for development)
   --remote             Apply to remote D1 database (production)
   --config, -c <file>  Use a specific wrangler config file
-  --seed               Also apply seed data after schema (migrate only)
+  --no-seed            Skip seed data (migrate only applies schema)
 
 Examples:
   openauth migrate                       # Auto-detect from wrangler config
-  openauth migrate --local               # Local database
-  openauth migrate --remote              # Remote database (production)
-  openauth migrate --seed --local        # Schema + seed data (local)
+  openauth migrate --local               # Local database (schema + seed)
+  openauth migrate --remote              # Remote database (schema + seed)
+  openauth migrate --no-seed --local     # Schema only, no seed data
   openauth migrate my-auth-db --remote   # Specify database, remote
   openauth seed --local                  # Apply only seed data
   openauth migrate -c wrangler.qa.json --remote
 
-The migrate command applies the OpenAuth database schema to your D1 database.
-The seed command applies default data (clients, roles, permissions).
+The migrate command applies schema AND seed data by default.
+Seed data includes default clients, roles, and permissions.
 Both commands are idempotent - safe to run multiple times.
 `)
 }
@@ -199,7 +199,7 @@ function parseArgs(args: string[]): ParsedArgs {
   const result: ParsedArgs = {
     isLocal: false,
     isRemote: false,
-    withSeed: false,
+    withSeed: true, // Seed by default
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -208,8 +208,10 @@ function parseArgs(args: string[]): ParsedArgs {
       result.isLocal = true
     } else if (arg === "--remote") {
       result.isRemote = true
+    } else if (arg === "--no-seed") {
+      result.withSeed = false
     } else if (arg === "--seed") {
-      result.withSeed = true
+      result.withSeed = true // Keep for backwards compatibility
     } else if (arg === "--config" || arg === "-c") {
       result.configFile = args[++i]
       if (!result.configFile) {
