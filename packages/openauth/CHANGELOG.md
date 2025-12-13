@@ -1,4 +1,95 @@
-# @openauthjs/openauth
+# @al-ummah-now/openauth
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.0.7] - 2024-12-13
+
+### Changed
+- Merged RBAC apps into OAuth clients - removed separate `rbac_apps` table
+- Permission routes now nested under clients for RESTful design:
+  - `POST /clients/:clientId/permissions`
+  - `GET /clients/:clientId/permissions`
+  - `DELETE /clients/:clientId/permissions/:permissionId`
+- Renamed `app_id` to `client_id` throughout RBAC system
+
+### Added
+- GitHub Release creation with auto-generated release notes on publish
+- Release notes categorization by commit type (features, fixes, docs)
+
+## [1.0.6] - 2024-12-13
+
+### Fixed
+- Run seed data by default during migrate command
+- Generate client IDs as UUIDs instead of prefixed random strings
+- Use selected account from `account_hint`/`login_hint` for silent auth
+- Add `prompt=none` to account picker links for silent auth
+
+## [1.0.5] - 2024-12-12
+
+### Added
+- JWKS support to bearerAuth middleware for remote key fetching
+- Key caching with configurable TTL for JWKS endpoints
+
+### Fixed
+- TypeScript errors in bearerAuth middleware
+
+## [1.0.4] - 2024-12-11
+
+### Added
+- CLI tool for database migrations (`npx openauth migrate`)
+- Support for custom migration directories
+- Seed data execution option
+
+## [1.0.3] - 2024-12-10
+
+### Added
+- Enterprise middleware composition (`enterpriseAuth`)
+- Client authentication middleware
+- Endpoint-specific rate limiting
+
+### Changed
+- Improved rate limiting with sliding window algorithm
+
+## [1.0.2] - 2024-12-09
+
+### Added
+- User management service with D1 adapter
+- User API routes for CRUD operations
+- User identity linking support
+
+## [1.0.1] - 2024-12-08
+
+### Added
+- Dynamic provider system for runtime IdP configuration
+- Provider encryption service for secure secret storage
+- TTL cache for provider configurations
+
+## [1.0.0] - 2024-12-07
+
+### Added
+- Initial release with enterprise features
+- Multi-tenant issuer with configurable tenant resolution
+- RBAC system with roles, permissions, and token enrichment
+- M2M authentication with scope validation
+- OAuth client management with secret hashing
+- Rate limiting middleware
+- Bearer authentication with JWT validation
+- D1 database adapters for all services
+- Comprehensive test suite
+
+### Based On
+- Forked from [@openauthjs/openauth](https://github.com/openauthjs/openauth) v0.4.3
+
+---
+
+# Upstream Changelog (@openauthjs/openauth)
+
+The following is the changelog from the upstream OpenAuth project.
 
 ## 0.4.3
 
@@ -81,9 +172,6 @@
 - 9712422: fix: add charset meta tag to ui/base.tsx
 - 92e7170: Adds support for refresh token reuse interval and reuse detection
 
-  Also fixes an issue with token invalidation, where removing keys while scanning
-  may cause some refresh tokens to be skipped (depending on storage provider.)
-
 ## 0.3.2
 
 ### Patch Changes
@@ -102,68 +190,21 @@
 
 - b2af22a: renamed authorizer -> issuer and adapter -> provider
 
-  this should be a superficial change, but it's a breaking change
-
-  previously you imported adapters like this:
-
-  ```js
-  import { PasswordAdapter } from "@openauth/openauth/adapter/password"
-  ```
-
-  update it to this:
-
-  ```js
-  import { PasswordProvider } from "@openauth/openauth/provider/password"
-  ```
-
-  for the authorizer, you import it like this:
-
-  ```js
-  import { authorizer } from "@openauth/openauth"
-  ```
-
-  update it to this:
-
-  ```js
-  import { issuer } from "@openauth/openauth"
-  ```
-
-  also subjects should be imported deeply like this:
-
-  ```js
-  import { createSubjects } from "@openauth/openauth"
-  ```
-
-  update it to this:
-
-  ```js
-  import { createSubjects } from "@openauth/openauth/subject"
-  ```
-
 ## 0.2.7
 
 ### Patch Changes
 
 - 3004802: refactor: export `AuthorizationState` for better reusability
-- 2975608: switching signing key algorithm to es256. generate seperate keys for symmetrical encryption. old keys will automatically be marked expired and not used
-- c92604b: Adds support for a custom DynamoDB endpoint which enables use of a amazon/dynamodb-local container.
-
-  Usabe example:
-
-  ```ts
-    storage: DynamoStorage({
-      table: 'openauth-users',
-      endpoint: 'http://localhost:8000',
-    }),
-  ```
+- 2975608: switching signing key algorithm to es256
+- c92604b: Adds support for a custom DynamoDB endpoint
 
 ## 0.2.6
 
 ### Patch Changes
 
 - ca0df5d: ui: support phone mode for code ui
-- d8d1580: Add slack adapter to the list of available adapters.
-- ce44ed6: fix for password adapter not redirecting to the right place after change password flow
+- d8d1580: Add slack adapter
+- ce44ed6: fix for password adapter redirect after change password
 - 4940bef: fix: add `node:` prefix for built-in modules
 
 ## 0.2.5
@@ -195,22 +236,13 @@
 
 ### Patch Changes
 
-- 83125f1: Remove predefined scopes from Spotify adapter to allow user-defined scopes
+- 83125f1: Remove predefined scopes from Spotify adapter
 
 ## 0.2.0
 
 ### Minor Changes
 
-- 8c3f050: BREAKING CHANGE: `client.exchange` and `client.authorize` signatures have changed.
-
-  `client.exchange` will now return an `{ err, tokens }` object. check `if (result.err)` for errors.
-  `client.authorize` now accepts `pkce: true` as an option. it is now async and returns a promise with `{ challenge, url}`. the `challenge` contains the `state` and `verifier` if using `pkce`
-
-  all exchanges have been updated to reflect this if you would like to reference
-
-### Patch Changes
-
-- 0f93def: refactor: update storage adapters to use Date for expiry
+- 8c3f050: BREAKING CHANGE: `client.exchange` and `client.authorize` signatures changed
 
 ## 0.1.2
 
@@ -230,11 +262,7 @@
 
 ### Minor Changes
 
-- 3c8cdf8: BREAKING CHANGE:
-
-  The api for `client` has changed. It no longer throws errors and instead returns an `err` field that you must check or ignore.
-
-  All the examples have been updated to reflect this change.
+- 3c8cdf8: BREAKING CHANGE: client API no longer throws errors
 
 ## 0.0.26
 
@@ -266,7 +294,7 @@
 
 ### Patch Changes
 
-- d3391f4: do not import createClient from root - it causes some bundlers to include too much code
+- d3391f4: do not import createClient from root
 
 ## 0.0.21
 
@@ -299,8 +327,6 @@
 
 - f43e320: test
 - c10dfdd: test
-- c10dfdd: test
-- c10dfdd: test
 - 2d81677: test changeset
 
 ## 0.0.16
@@ -308,3 +334,13 @@
 ### Patch Changes
 
 - 515635f: rename package
+
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.7...HEAD
+[1.0.7]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.6...v1.0.7
+[1.0.6]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.5...v1.0.6
+[1.0.5]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.4...v1.0.5
+[1.0.4]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.3...v1.0.4
+[1.0.3]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/Al-Ummah-Now/openauth/releases/tag/v1.0.0
