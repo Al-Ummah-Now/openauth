@@ -156,7 +156,6 @@ describe("RBACAdapter", () => {
   // Create Operations
   // ==========================================
 
-
   describe("createRole", () => {
     test("creates role with generated UUID", async () => {
       const prepareSpy = spyOn(mockDb, "prepare")
@@ -395,8 +394,6 @@ describe("RBACAdapter", () => {
     })
   })
 
-
-
   describe("listRoles", () => {
     test("lists roles for tenant", async () => {
       const roles = [
@@ -508,7 +505,6 @@ describe("RBACAdapter", () => {
       expect(sql).toContain("WHERE user_id = ? AND tenant_id = ?")
     })
   })
-
 
   describe("getRole", () => {
     test("gets role by id with tenant isolation", async () => {
@@ -1383,7 +1379,6 @@ describe("RBACServiceImpl", () => {
   // ==========================================
 
   describe("admin operations", () => {
-
     test("creates role via adapter", async () => {
       const createRoleSpy = spyOn(adapter, "createRole").mockResolvedValue(
         createTestRole(),
@@ -1424,7 +1419,6 @@ describe("RBACServiceImpl", () => {
         description: undefined,
       })
     })
-
 
     test("lists roles via adapter", async () => {
       const listRolesSpy = spyOn(adapter, "listRoles").mockResolvedValue([

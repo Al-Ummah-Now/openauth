@@ -745,7 +745,10 @@ export class RBACAdapter {
    * @param clientId - Optional app ID to verify ownership
    * @throws RBACError if permission not found
    */
-  async deletePermission(permissionId: string, clientId?: string): Promise<void> {
+  async deletePermission(
+    permissionId: string,
+    clientId?: string,
+  ): Promise<void> {
     const permission = await this.getPermission(permissionId)
     if (!permission) {
       throw new RBACError("permission_not_found", "Permission not found")

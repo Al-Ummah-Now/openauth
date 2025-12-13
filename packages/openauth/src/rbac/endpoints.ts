@@ -105,7 +105,8 @@ export function rbacEndpoints(service: RBACService): Hono<RBACContext> {
       return c.json(
         {
           error: "Bad Request",
-          message: "clientId is required (via query parameter or token audience)",
+          message:
+            "clientId is required (via query parameter or token audience)",
         },
         400,
       )
@@ -195,7 +196,8 @@ export function rbacEndpoints(service: RBACService): Hono<RBACContext> {
       return c.json(
         {
           error: "Bad Request",
-          message: "clientId is required (via query parameter or token audience)",
+          message:
+            "clientId is required (via query parameter or token audience)",
         },
         400,
       )
@@ -238,7 +240,8 @@ export function rbacEndpoints(service: RBACService): Hono<RBACContext> {
       return c.json(
         {
           error: "Bad Request",
-          message: "clientId is required (via query parameter or token audience)",
+          message:
+            "clientId is required (via query parameter or token audience)",
         },
         400,
       )
