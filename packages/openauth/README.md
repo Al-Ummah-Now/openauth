@@ -54,7 +54,7 @@ const app = issuer({
         sendCode: async (email, code) => {
           console.log(`Code for ${email}: ${code}`)
         },
-      })
+      }),
     ),
   },
   subjects,
@@ -140,7 +140,7 @@ import {
   bearerAuth,
   requireScope,
   rateLimit,
-  enterpriseAuth
+  enterpriseAuth,
 } from "@al-ummah-now/openauth/middleware"
 
 // Bearer token validation
@@ -150,23 +150,32 @@ app.use("/api/*", bearerAuth({ issuer: "https://auth.example.com" }))
 app.use("/api/admin/*", requireScope("admin:write"))
 
 // Rate limiting
-app.use("/api/*", rateLimit({
-  requests: 100,
-  window: 60000,
-  storage
-}))
+app.use(
+  "/api/*",
+  rateLimit({
+    requests: 100,
+    window: 60000,
+    storage,
+  }),
+)
 
 // Combined enterprise auth
-app.use("/api/*", enterpriseAuth({
-  issuer: "https://auth.example.com",
-  rateLimit: { requests: 100, window: 60000, storage },
-}))
+app.use(
+  "/api/*",
+  enterpriseAuth({
+    issuer: "https://auth.example.com",
+    rateLimit: { requests: 100, window: 60000, storage },
+  }),
+)
 ```
 
 ## User Management
 
 ```typescript
-import { createUserService, createD1UserAdapter } from "@al-ummah-now/openauth/user"
+import {
+  createUserService,
+  createD1UserAdapter,
+} from "@al-ummah-now/openauth/user"
 
 const userAdapter = createD1UserAdapter(env.DB)
 const userService = createUserService(userAdapter, storage)

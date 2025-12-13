@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.7] - 2024-12-13
 
 ### Changed
+
 - Merged RBAC apps into OAuth clients - removed separate `rbac_apps` table
 - Permission routes now nested under clients for RESTful design:
   - `POST /clients/:clientId/permissions`
@@ -18,12 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed `app_id` to `client_id` throughout RBAC system
 
 ### Added
+
 - GitHub Release creation with auto-generated release notes on publish
 - Release notes categorization by commit type (features, fixes, docs)
 
 ## [1.0.6] - 2024-12-13
 
 ### Fixed
+
 - Run seed data by default during migrate command
 - Generate client IDs as UUIDs instead of prefixed random strings
 - Use selected account from `account_hint`/`login_hint` for silent auth
@@ -32,15 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.5] - 2024-12-12
 
 ### Added
+
 - JWKS support to bearerAuth middleware for remote key fetching
 - Key caching with configurable TTL for JWKS endpoints
 
 ### Fixed
+
 - TypeScript errors in bearerAuth middleware
 
 ## [1.0.4] - 2024-12-11
 
 ### Added
+
 - CLI tool for database migrations (`npx openauth migrate`)
 - Support for custom migration directories
 - Seed data execution option
@@ -48,16 +54,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.3] - 2024-12-10
 
 ### Added
+
 - Enterprise middleware composition (`enterpriseAuth`)
 - Client authentication middleware
 - Endpoint-specific rate limiting
 
 ### Changed
+
 - Improved rate limiting with sliding window algorithm
 
 ## [1.0.2] - 2024-12-09
 
 ### Added
+
 - User management service with D1 adapter
 - User API routes for CRUD operations
 - User identity linking support
@@ -65,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.1] - 2024-12-08
 
 ### Added
+
 - Dynamic provider system for runtime IdP configuration
 - Provider encryption service for secure secret storage
 - TTL cache for provider configurations
@@ -72,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2024-12-07
 
 ### Added
+
 - Initial release with enterprise features
 - Multi-tenant issuer with configurable tenant resolution
 - RBAC system with roles, permissions, and token enrichment
@@ -83,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test suite
 
 ### Based On
+
 - Forked from [@openauthjs/openauth](https://github.com/openauthjs/openauth) v0.4.3
 
 ---
