@@ -18,7 +18,7 @@ import type {
   RBACConfig,
   RBACService,
 } from "../contracts/types.js"
-import { DEFAULT_RBAC_CONFIG } from "../contracts/types.js"
+import { DEFAULT_RBAC_CONFIG, RBACError } from "../contracts/types.js"
 import type { RBACAdapter } from "./d1-adapter.js"
 import type { CachedPermissions } from "./types.js"
 
@@ -374,6 +374,10 @@ export class RBACServiceImpl implements RBACService {
    *
    * Invalidates the user's permission cache.
    *
+   * Security checks:
+   * - Prevents self-assignment (assigning roles to yourself)
+   * - Prevents privilege escalation (assigning system roles you don't have)
+   *
    * @param params - Role assignment parameters
    * @returns The created user role assignment
    */
@@ -384,6 +388,39 @@ export class RBACServiceImpl implements RBACService {
     assignedBy: string
     expiresAt?: number
   }): Promise<UserRole> {
+    // Security check: Prevent self-assignment
+    if (params.userId === params.assignedBy) {
+      throw new RBACError(
+        "self_assignment_denied",
+        "Cannot assign roles to yourself",
+      )
+    }
+
+    // Security check: Privilege escalation prevention for system roles
+    const roleToAssign = await this.adapter.getRole(
+      params.roleId,
+      params.tenantId,
+    )
+    if (!roleToAssign) {
+      throw new RBACError("role_not_found", "Role not found")
+    }
+
+    if (roleToAssign.is_system_role) {
+      // For system roles, verify the assigner has the role they're trying to assign
+      const assignerRoles = await this.adapter.getUserRoles(
+        params.assignedBy,
+        params.tenantId,
+      )
+      const assignerHasRole = assignerRoles.some((r) => r.id === params.roleId)
+
+      if (!assignerHasRole) {
+        throw new RBACError(
+          "privilege_escalation_denied",
+          "Cannot assign a system role you do not have",
+        )
+      }
+    }
+
     const result = await this.adapter.assignRoleToUser({
       user_id: params.userId,
       role_id: params.roleId,
