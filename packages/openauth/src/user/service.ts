@@ -50,6 +50,10 @@ export interface UserService {
     identityId: string,
   ): Promise<void>
   updateLastLogin(tenantId: string, userId: string): Promise<void>
+  /** Force user to reset password on next login */
+  forcePasswordReset(tenantId: string, userId: string): Promise<User>
+  /** Clear the password reset required flag */
+  clearPasswordResetRequired(tenantId: string, userId: string): Promise<User>
 }
 
 export interface UserServiceConfig {
@@ -92,6 +96,7 @@ export class UserServiceImpl implements UserService {
       updated_at: now,
       last_login_at: null,
       deleted_at: null,
+      password_reset_required: false,
     }
 
     await this.storage.set(USER_STORAGE_KEYS.user(tenantId, userId), user)
@@ -413,6 +418,63 @@ export class UserServiceImpl implements UserService {
     if (this.d1Adapter) {
       await this.d1Adapter.updateLastLogin(tenantId, userId)
     }
+  }
+
+  async forcePasswordReset(tenantId: string, userId: string): Promise<User> {
+    const existingUser = await this.getUser(tenantId, userId)
+    if (!existingUser) {
+      throw new UserError("user_not_found", `User '${userId}' not found`)
+    }
+    if (existingUser.status === "deleted") {
+      throw new UserError(
+        "user_deleted",
+        "Cannot force password reset for a deleted user",
+      )
+    }
+
+    const updatedUser: User = {
+      ...existingUser,
+      password_reset_required: true,
+      updated_at: Date.now(),
+    }
+
+    await this.storage.set(
+      USER_STORAGE_KEYS.user(tenantId, userId),
+      updatedUser,
+    )
+
+    if (this.d1Adapter) {
+      await this.d1Adapter.setPasswordResetRequired(tenantId, userId, true)
+    }
+
+    return updatedUser
+  }
+
+  async clearPasswordResetRequired(
+    tenantId: string,
+    userId: string,
+  ): Promise<User> {
+    const existingUser = await this.getUser(tenantId, userId)
+    if (!existingUser) {
+      throw new UserError("user_not_found", `User '${userId}' not found`)
+    }
+
+    const updatedUser: User = {
+      ...existingUser,
+      password_reset_required: false,
+      updated_at: Date.now(),
+    }
+
+    await this.storage.set(
+      USER_STORAGE_KEYS.user(tenantId, userId),
+      updatedUser,
+    )
+
+    if (this.d1Adapter) {
+      await this.d1Adapter.setPasswordResetRequired(tenantId, userId, false)
+    }
+
+    return updatedUser
   }
 }
 

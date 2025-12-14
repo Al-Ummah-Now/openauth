@@ -79,6 +79,8 @@ describe("D1UserAdapter", () => {
         updated_at: Date.now(),
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
+        password_reset_required: false,
       }
 
       await adapter.createUser(user)
@@ -97,6 +99,7 @@ describe("D1UserAdapter", () => {
         user.updated_at,
         user.last_login_at,
         user.deleted_at,
+        0, // password_reset_required
       ])
     })
 
@@ -112,6 +115,8 @@ describe("D1UserAdapter", () => {
         updated_at: Date.now(),
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
+        password_reset_required: false,
       }
 
       await adapter.createUser(user)
@@ -132,6 +137,7 @@ describe("D1UserAdapter", () => {
         updated_at: Date.now(),
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
       }
 
       await adapter.createUser(user)
@@ -158,6 +164,7 @@ describe("D1UserAdapter", () => {
         updated_at: Date.now(),
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
       }
 
       await customAdapter.createUser(user)
@@ -180,6 +187,7 @@ describe("D1UserAdapter", () => {
         updated_at: 1234567890,
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: 0,
       }
 
       mockDb.prepare = (query: string) =>
@@ -219,6 +227,7 @@ describe("D1UserAdapter", () => {
         updated_at: 1234567890,
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
       })
     })
 
@@ -234,6 +243,7 @@ describe("D1UserAdapter", () => {
         updated_at: 1234567890,
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: 0,
       }
 
       mockDb.prepare = () =>
@@ -248,6 +258,7 @@ describe("D1UserAdapter", () => {
 
     test("handles null metadata", async () => {
       const userRow = {
+        password_reset_required: 0,
         id: "usr_123",
         tenant_id: tenantId,
         email: "test@example.com",
@@ -258,6 +269,7 @@ describe("D1UserAdapter", () => {
         updated_at: 1234567890,
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
       }
 
       mockDb.prepare = () =>
@@ -302,6 +314,7 @@ describe("D1UserAdapter", () => {
         updated_at: Date.now(),
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
       }
 
       await adapter.updateUser(user)
@@ -320,6 +333,7 @@ describe("D1UserAdapter", () => {
         user.updated_at,
         user.last_login_at,
         user.deleted_at,
+        0, // password_reset_required
         user.tenant_id,
         user.id,
       ])
@@ -394,6 +408,7 @@ describe("D1UserAdapter", () => {
           updated_at: 1234567890,
           last_login_at: null,
           deleted_at: null,
+        password_reset_required: false,
         },
         {
           id: "usr_2",
@@ -406,6 +421,7 @@ describe("D1UserAdapter", () => {
           updated_at: 1234567891,
           last_login_at: null,
           deleted_at: null,
+        password_reset_required: false,
         },
       ]
 
@@ -705,6 +721,7 @@ describe("D1UserAdapter", () => {
         updated_at: 1234567890 + i,
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
       }))
 
       let callCount = 0
@@ -743,6 +760,7 @@ describe("D1UserAdapter", () => {
         updated_at: 1234567890 + i,
         last_login_at: null,
         deleted_at: null,
+        password_reset_required: false,
       }))
 
       let callCount = 0

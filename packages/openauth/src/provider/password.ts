@@ -141,6 +141,38 @@ export interface PasswordConfig {
   validatePassword?:
     | v1.StandardSchema
     | ((password: string) => Promise<string | undefined> | string | undefined)
+  /**
+   * Callback to check if user needs to reset password before login succeeds.
+   * Return true to redirect to password change flow, false to proceed normally.
+   *
+   * @example
+   * ```ts
+   * {
+   *   checkPasswordResetRequired: async (email) => {
+   *     const user = await userService.getUserByEmail(tenantId, email)
+   *     return user?.password_reset_required ?? false
+   *   }
+   * }
+   * ```
+   */
+  checkPasswordResetRequired?: (email: string) => Promise<boolean>
+  /**
+   * Callback called after password is successfully changed.
+   * Use this to clear the password_reset_required flag.
+   *
+   * @example
+   * ```ts
+   * {
+   *   onPasswordChanged: async (email) => {
+   *     const user = await userService.getUserByEmail(tenantId, email)
+   *     if (user) {
+   *       await userService.clearPasswordResetRequired(tenantId, user.id)
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  onPasswordChanged?: (email: string) => Promise<void>
 }
 
 /**
@@ -293,6 +325,23 @@ export function PasswordProvider(
         const password = fd.get("password")?.toString()
         if (!password || !hash || !(await hasher.verify(password, hash)))
           return error({ type: "invalid_password" })
+
+        // Check if user needs to reset password before proceeding
+        if (config.checkPasswordResetRequired) {
+          const needsReset = await config.checkPasswordResetRequired(email)
+          if (needsReset) {
+            // Store state and redirect to password change flow
+            const state: PasswordChangeState = {
+              type: "update",
+              email,
+              redirect: getRelativeUrl(c, "./authorize"),
+            }
+            await ctx.set(c, "provider", 60 * 60 * 24, state)
+            const changeUrl = getRelativeUrl(c, "./change")
+            return c.redirect(changeUrl, 302)
+          }
+        }
+
         return ctx.success(
           c,
           {
@@ -527,6 +576,11 @@ export function PasswordProvider(
             "subject",
           ])
           if (subject) await ctx.invalidate(subject)
+
+          // Notify that password was changed (e.g., to clear password_reset_required flag)
+          if (config.onPasswordChanged) {
+            await config.onPasswordChanged(provider.email)
+          }
 
           return c.redirect(provider.redirect, 302)
         }

@@ -206,6 +206,32 @@ export function userApiRoutes(service: UserService): Hono {
     }
   })
 
+  // POST /:id/force-password-reset - Force user to reset password on next login
+  app.post("/:id/force-password-reset", async (ctx) => {
+    try {
+      const tenantId = getTenantId(ctx)
+
+      const id = validateUserId(ctx.req.param("id"))
+      const user = await service.forcePasswordReset(tenantId, id)
+      return ctx.json(user)
+    } catch (error) {
+      return handleError(ctx, error)
+    }
+  })
+
+  // POST /:id/clear-password-reset - Clear the password reset required flag
+  app.post("/:id/clear-password-reset", async (ctx) => {
+    try {
+      const tenantId = getTenantId(ctx)
+
+      const id = validateUserId(ctx.req.param("id"))
+      const user = await service.clearPasswordResetRequired(tenantId, id)
+      return ctx.json(user)
+    } catch (error) {
+      return handleError(ctx, error)
+    }
+  })
+
   return app
 }
 

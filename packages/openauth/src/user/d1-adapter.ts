@@ -34,6 +34,7 @@ interface UserRow {
   updated_at: number
   last_login_at: number | null
   deleted_at: number | null
+  password_reset_required: number
 }
 
 interface IdentityRow {
@@ -66,8 +67,8 @@ export class D1UserAdapter {
   async createUser(user: User): Promise<void> {
     const query = `
       INSERT INTO ${this.usersTable}
-      (id, tenant_id, email, name, metadata, status, created_at, updated_at, last_login_at, deleted_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, tenant_id, email, name, metadata, status, created_at, updated_at, last_login_at, deleted_at, password_reset_required)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     await this.db
       .prepare(query)
@@ -82,6 +83,7 @@ export class D1UserAdapter {
         user.updated_at,
         user.last_login_at,
         user.deleted_at,
+        user.password_reset_required ? 1 : 0,
       )
       .run()
   }
@@ -102,7 +104,7 @@ export class D1UserAdapter {
     const query = `
       UPDATE ${this.usersTable}
       SET email = ?, name = ?, metadata = ?, status = ?, updated_at = ?,
-          last_login_at = ?, deleted_at = ?
+          last_login_at = ?, deleted_at = ?, password_reset_required = ?
       WHERE tenant_id = ? AND id = ?
     `
     await this.db
@@ -115,6 +117,7 @@ export class D1UserAdapter {
         user.updated_at,
         user.last_login_at,
         user.deleted_at,
+        user.password_reset_required ? 1 : 0,
         user.tenant_id,
         user.id,
       )
@@ -134,6 +137,22 @@ export class D1UserAdapter {
     await this.db
       .prepare(query)
       .bind(status, Date.now(), tenantId, userId)
+      .run()
+  }
+
+  async setPasswordResetRequired(
+    tenantId: string,
+    userId: string,
+    required: boolean,
+  ): Promise<void> {
+    const query = `
+      UPDATE ${this.usersTable}
+      SET password_reset_required = ?, updated_at = ?
+      WHERE tenant_id = ? AND id = ?
+    `
+    await this.db
+      .prepare(query)
+      .bind(required ? 1 : 0, Date.now(), tenantId, userId)
       .run()
   }
 
@@ -328,6 +347,7 @@ export class D1UserAdapter {
       updated_at: row.updated_at,
       last_login_at: row.last_login_at,
       deleted_at: row.deleted_at,
+      password_reset_required: row.password_reset_required === 1,
     }
   }
 

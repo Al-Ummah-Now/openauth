@@ -15,6 +15,8 @@ export interface User {
   updated_at: number
   last_login_at: number | null
   deleted_at: number | null
+  /** When true, user must change password on next login */
+  password_reset_required: boolean
 }
 
 export interface UserIdentity {
