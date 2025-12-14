@@ -21,6 +21,7 @@ interface User {
   updated_at: number                  // Unix timestamp (milliseconds)
   last_login_at: number | null        // Last successful login timestamp
   deleted_at: number | null           // Soft delete timestamp
+  password_reset_required: boolean    // User must reset password on next login
 }
 ```
 
@@ -519,6 +520,102 @@ const response = await fetch(
 ```json title="clear-sessions-response.json"
 {
   "revoked_count": 5
+}
+```
+
+---
+
+### Force Password Reset
+
+Require a user to change their password on next login. This is useful for security compliance, after a password breach, or when onboarding users with temporary passwords.
+
+```http
+POST /api/users/:id/force-password-reset
+```
+
+**Required Scope:** `users:write`
+
+**Request:**
+
+```ts title="force-password-reset.ts"
+const response = await fetch(
+  "https://auth.example.com/api/users/usr_abc123/force-password-reset",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }
+)
+```
+
+**Response:**
+
+```json title="force-password-reset-response.json"
+{
+  "id": "usr_abc123",
+  "tenant_id": "tenant_001",
+  "email": "alice@example.com",
+  "name": "Alice Smith",
+  "status": "active",
+  "password_reset_required": true,
+  "created_at": 1699574400000,
+  "updated_at": 1699920000000,
+  "last_login_at": 1699660800000,
+  "deleted_at": null
+}
+```
+
+**Use Cases:**
+- Security breach response - force all affected users to reset passwords
+- Compliance requirements - periodic password rotation policies
+- New user onboarding - admin creates user with temporary password
+- Account recovery - helpdesk triggers reset for locked-out user
+
+:::note[Password Flow]
+When `password_reset_required` is `true`, the password provider will redirect the user to the password change flow after successful authentication. The flag is automatically cleared after the password is changed.
+:::
+
+---
+
+### Clear Password Reset Flag
+
+Clear the password reset requirement for a user (e.g., if set by mistake).
+
+```http
+DELETE /api/users/:id/force-password-reset
+```
+
+**Required Scope:** `users:write`
+
+**Request:**
+
+```ts title="clear-password-reset.ts"
+const response = await fetch(
+  "https://auth.example.com/api/users/usr_abc123/force-password-reset",
+  {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }
+)
+```
+
+**Response:**
+
+```json title="clear-password-reset-response.json"
+{
+  "id": "usr_abc123",
+  "tenant_id": "tenant_001",
+  "email": "alice@example.com",
+  "name": "Alice Smith",
+  "status": "active",
+  "password_reset_required": false,
+  "created_at": 1699574400000,
+  "updated_at": 1699920000000,
+  "last_login_at": 1699660800000,
+  "deleted_at": null
 }
 ```
 
