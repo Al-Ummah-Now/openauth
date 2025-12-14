@@ -435,3 +435,6 @@ export type RBACErrorCode =
   | "permission_denied"
   | "invalid_input"
   | "cannot_delete_system_role"
+  | "cannot_modify_system_role"
+  | "privilege_escalation_denied"
+  | "self_assignment_denied"

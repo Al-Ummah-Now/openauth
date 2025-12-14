@@ -191,6 +191,76 @@ CREATE TABLE rbac_user_roles (
 );
 ```
 
+## Security Features
+
+The RBAC system includes built-in security protections:
+
+### System Role Protection
+
+System roles (created with `isSystemRole: true`) cannot be modified or deleted:
+
+```ts
+// Create a protected system role
+await rbac.createRole({
+  id: "super-admin",
+  tenantId: "acme",
+  name: "Super Admin",
+  isSystemRole: true,  // Protected role
+})
+
+// This throws: cannot_modify_system_role
+await rbac.updateRole("super-admin", "acme", { name: "renamed" })
+
+// This throws: cannot_delete_system_role
+await rbac.deleteRole("super-admin", "acme")
+```
+
+### Self-Grant Prevention
+
+Users cannot assign roles to themselves:
+
+```ts
+// This throws: self_assignment_denied
+await rbac.assignRole({
+  userId: "user_123",
+  roleId: "admin",
+  tenantId: "acme",
+  assignedBy: "user_123",  // Same user - blocked!
+})
+```
+
+### Privilege Escalation Prevention
+
+Users can only assign system roles they already have:
+
+```ts
+// User "alice" does NOT have "super-admin" role
+// This throws: privilege_escalation_denied
+await rbac.assignRole({
+  userId: "bob",
+  roleId: "super-admin",  // System role alice doesn't have
+  tenantId: "acme",
+  assignedBy: "alice",
+})
+
+// But if alice HAS the role, she can assign it
+await rbac.assignRole({
+  userId: "bob",
+  roleId: "super-admin",
+  tenantId: "acme",
+  assignedBy: "charlie",  // charlie has super-admin - allowed!
+})
+```
+
+### Error Codes
+
+| Error | Description |
+|-------|-------------|
+| `cannot_modify_system_role` | Attempted to update a system role |
+| `cannot_delete_system_role` | Attempted to delete a system role |
+| `self_assignment_denied` | User tried to assign a role to themselves |
+| `privilege_escalation_denied` | User tried to assign a system role they don't have |
+
 ## REST API
 
 For programmatic management of RBAC resources, see the [RBAC Admin API](/docs/enterprise/admin-api/rbac/). The API supports managing permissions, roles, and role assignments via REST endpoints with M2M authentication.

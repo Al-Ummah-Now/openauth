@@ -14,6 +14,7 @@ This document describes the enterprise-grade features added to OpenAuth for prod
 8. [Configuration Guide](#configuration-guide)
 9. [Testing](#testing)
 10. [Migration Guide](#migration-guide)
+11. [RBAC Security](#rbac-security)
 
 ## Overview
 
@@ -1011,6 +1012,111 @@ npx wrangler d1 create openauth-audit
 npx wrangler d1 execute openauth-clients --file=./schema/clients.sql
 npx wrangler d1 execute openauth-audit --file=./schema/audit.sql
 ```
+
+## RBAC Security
+
+### Overview
+
+The RBAC (Role-Based Access Control) system includes built-in security protections to prevent common attack vectors and misconfigurations.
+
+### Security Features
+
+#### 1. System Role Protection
+
+System roles are protected from modification and deletion. This prevents accidental or malicious changes to core roles like `admin` or `super_admin`.
+
+```typescript
+// Creating a system role
+await rbacService.createRole({
+  name: "admin",
+  tenantId: "tenant-1",
+  description: "Administrator role",
+  isSystemRole: true, // Mark as system role
+})
+
+// This will throw: cannot_modify_system_role
+await rbacService.updateRole({
+  roleId: "admin-role-id",
+  tenantId: "tenant-1",
+  name: "new-name",
+})
+```
+
+#### 2. Self-Grant Prevention
+
+Users cannot assign roles to themselves, preventing privilege escalation through self-assignment.
+
+```typescript
+// This will throw: self_assignment_denied
+await rbacService.assignRoleToUser({
+  userId: "user-123",
+  roleId: "admin-role",
+  tenantId: "tenant-1",
+  assignedBy: "user-123", // Same as userId - blocked!
+})
+```
+
+#### 3. Privilege Escalation Prevention
+
+Users can only assign system roles they already possess. This prevents a user with limited privileges from granting themselves (through another account) higher privileges.
+
+```typescript
+// User "user-123" does NOT have the "super-admin" role
+// This will throw: privilege_escalation_denied
+await rbacService.assignRoleToUser({
+  userId: "user-456",
+  roleId: "super-admin", // System role that user-123 doesn't have
+  tenantId: "tenant-1",
+  assignedBy: "user-123",
+})
+
+// However, if user-123 HAS the "super-admin" role, they can assign it
+await rbacService.assignRoleToUser({
+  userId: "user-456",
+  roleId: "super-admin",
+  tenantId: "tenant-1",
+  assignedBy: "user-with-super-admin", // Has the role - allowed!
+})
+```
+
+### Error Codes
+
+| Error Code                    | HTTP Status | Description                                        |
+| ----------------------------- | ----------- | -------------------------------------------------- |
+| `cannot_modify_system_role`   | 403         | Attempted to update a system role                  |
+| `cannot_delete_system_role`   | 403         | Attempted to delete a system role                  |
+| `self_assignment_denied`      | 403         | User tried to assign a role to themselves          |
+| `privilege_escalation_denied` | 403         | User tried to assign a system role they don't have |
+
+### API Behavior
+
+The admin endpoints return appropriate HTTP status codes:
+
+```bash
+# Attempt to modify system role
+PATCH /admin/rbac/roles/:roleId
+# Returns 403 with: {"error": "cannot_modify_system_role", "message": "Cannot modify system role"}
+
+# Attempt self-assignment
+POST /admin/rbac/users/:userId/roles
+# Returns 403 with: {"error": "self_assignment_denied", "message": "Cannot assign roles to yourself"}
+
+# Attempt privilege escalation
+POST /admin/rbac/users/:userId/roles
+# Returns 403 with: {"error": "privilege_escalation_denied", "message": "Cannot assign a system role you do not have"}
+```
+
+### Best Practices for RBAC Security
+
+1. **Mark critical roles as system roles** - Use `is_system_role: true` for roles like `admin`, `super_admin`, etc.
+
+2. **Implement role hierarchy** - Design your role structure so that higher-privilege roles include lower-privilege ones
+
+3. **Audit role assignments** - Monitor the audit logs for role assignment events
+
+4. **Use separate service accounts** - For automated role assignments, use dedicated service accounts with appropriate permissions
+
+5. **Regular access reviews** - Periodically review role assignments to ensure least-privilege access
 
 ## Best Practices
 

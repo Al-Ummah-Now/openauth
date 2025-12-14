@@ -662,6 +662,19 @@ export class RBACAdapter {
     tenantId: string,
     updates: { name?: string; description?: string },
   ): Promise<Role> {
+    // Check if role exists and is not a system role
+    const existingRole = await this.getRole(roleId, tenantId)
+    if (!existingRole) {
+      throw new RBACError("role_not_found", "Role not found")
+    }
+
+    if (existingRole.is_system_role) {
+      throw new RBACError(
+        "cannot_modify_system_role",
+        "Cannot modify system role",
+      )
+    }
+
     const now = Date.now()
     const setClauses: string[] = ["updated_at = ?"]
     const values: (string | number | null)[] = [now]

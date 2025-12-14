@@ -546,6 +546,17 @@ const response = await fetch("/admin/rbac/roles/role-uuid-1", {
 }
 ```
 
+```json title="Response 403 - System Role"
+{
+  "error": "cannot_modify_system_role",
+  "message": "Cannot modify system role"
+}
+```
+
+:::danger[System Roles]
+System roles (where `is_system_role: true`) cannot be modified. Attempting to update a system role returns a 403 Forbidden error.
+:::
+
 </Segment>
 
 ### DELETE /roles/:id
@@ -668,8 +679,28 @@ const response = await fetch("/admin/rbac/users/user-123/roles", {
 }
 ```
 
+```json title="Response 403 - Self Assignment"
+{
+  "error": "self_assignment_denied",
+  "message": "Cannot assign roles to yourself"
+}
+```
+
+```json title="Response 403 - Privilege Escalation"
+{
+  "error": "privilege_escalation_denied",
+  "message": "Cannot assign a system role you do not have"
+}
+```
+
 :::tip[Time-Limited Access]
 Use the `expiresAt` field to grant temporary access. Expired assignments are automatically filtered out during permission checks.
+:::
+
+:::caution[Security Checks]
+Role assignment includes automatic security checks:
+- **Self-assignment prevention**: Users cannot assign roles to themselves
+- **Privilege escalation prevention**: Users can only assign system roles they already possess
 :::
 
 </Segment>
@@ -995,6 +1026,24 @@ All endpoints follow a consistent error response format:
 | 403 | Forbidden | Admin access required or system role protection |
 | 404 | Not Found | Resource not found |
 | 409 | Conflict | Resource already exists or is already assigned |
+
+### Security Error Codes
+
+The following security-specific error codes are returned with 403 status:
+
+| Error Code | Endpoint | Description |
+|------------|----------|-------------|
+| `cannot_modify_system_role` | PATCH /roles/:id | Attempted to update a system role |
+| `cannot_delete_system_role` | DELETE /roles/:id | Attempted to delete a system role |
+| `self_assignment_denied` | POST /users/:id/roles | User tried to assign a role to themselves |
+| `privilege_escalation_denied` | POST /users/:id/roles | User tried to assign a system role they don't have |
+
+```json title="Example Security Error Response"
+{
+  "error": "privilege_escalation_denied",
+  "message": "Cannot assign a system role you do not have"
+}
+```
 
 </Segment>
 
