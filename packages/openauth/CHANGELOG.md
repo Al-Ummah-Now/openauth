@@ -22,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update CHANGELOG v1.0.7 with all missing features and fixes
 - update CHANGELOG with RBAC security features
 
-
 ### Added
 
 - RBAC security features:
