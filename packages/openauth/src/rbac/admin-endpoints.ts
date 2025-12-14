@@ -418,6 +418,12 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
         if (error.code === "role_not_found") {
           return c.json({ error: "Not Found", message: error.message }, 404)
         }
+        if (
+          error.code === "privilege_escalation_denied" ||
+          error.code === "self_assignment_denied"
+        ) {
+          return c.json({ error: "Forbidden", message: error.message }, 403)
+        }
       }
       throw error
     }
@@ -748,6 +754,9 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
         }
         if (error.code === "invalid_input") {
           return c.json({ error: "Bad Request", message: error.message }, 400)
+        }
+        if (error.code === "cannot_modify_system_role") {
+          return c.json({ error: "Forbidden", message: error.message }, 403)
         }
       }
       throw error
