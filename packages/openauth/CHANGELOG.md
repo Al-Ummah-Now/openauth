@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.8] - 2025-12-14
+
+### Added
+
+- add pre-release tags/notes and automatic CHANGELOG generation
+- add RBAC security features
+
+### Documentation
+
+- update MDX docs for v1.0.7 features
+- add RBAC security features to MDX documentation
+- add comprehensive documentation for RBAC security and release workflow
+- update CHANGELOG v1.0.7 with all missing features and fixes
+- update CHANGELOG with RBAC security features
+
+
 ### Added
 
 - RBAC security features:
@@ -372,7 +388,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.7...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.8...HEAD
+[1.0.8]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.4...v1.0.5
