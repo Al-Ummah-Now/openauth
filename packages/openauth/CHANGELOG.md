@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.9] - 2025-12-14
+
+### Documentation
+
+- add session analytics documentation
+
+
 ## [1.0.8] - 2025-12-14
 
 ### Added
@@ -387,7 +394,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.8...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.9...HEAD
+[1.0.9]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.5...v1.0.6
