@@ -1,102 +1,174 @@
 #!/usr/bin/env node
 
 // bin/cli.ts
-import { execSync, spawnSync } from "child_process"
-import { readFileSync, existsSync } from "fs"
-import { dirname, join } from "path"
-import { fileURLToPath } from "url"
-var __filename2 = fileURLToPath(import.meta.url)
-var __dirname2 = dirname(__filename2)
-var schemaFile = join(__dirname2, "..", "src", "migrations", "001_schema.sql")
-var seedFile = join(__dirname2, "..", "src", "migrations", "002_seed.sql")
+import { execSync, spawnSync } from "child_process";
+import { createHash } from "crypto";
+import { readFileSync, existsSync, readdirSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+var __filename2 = fileURLToPath(import.meta.url);
+var __dirname2 = dirname(__filename2);
+var migrationsDir = join(__dirname2, "..", "src", "migrations");
+function calculateChecksum(filePath) {
+  const content = readFileSync(filePath, "utf-8");
+  return createHash("sha256").update(content).digest("hex").substring(0, 16);
+}
+function getMigrationFiles() {
+  if (!existsSync(migrationsDir)) {
+    return [];
+  }
+  const files = readdirSync(migrationsDir).filter((f) => f.endsWith(".sql") && /^\d{3}_/.test(f)).sort();
+  return files.map((name) => {
+    const path = join(migrationsDir, name);
+    return {
+      name,
+      path,
+      checksum: calculateChecksum(path)
+    };
+  });
+}
 function stripJsonComments(content) {
-  content = content.replace(/\/\/.*$/gm, "")
-  content = content.replace(/\/\*[\s\S]*?\*\//g, "")
-  return content
+  content = content.replace(/\/\/.*$/gm, "");
+  content = content.replace(/\/\*[\s\S]*?\*\//g, "");
+  return content;
 }
 function parseConfigFile(configPath) {
   if (!existsSync(configPath)) {
-    return null
+    return null;
   }
-  const content = readFileSync(configPath, "utf-8")
+  const content = readFileSync(configPath, "utf-8");
   if (configPath.endsWith(".toml")) {
-    const match = content.match(/database_name\s*=\s*"([^"]+)"/)
+    const match = content.match(/database_name\s*=\s*"([^"]+)"/);
     if (match) {
-      return { databaseName: match[1], configFile: configPath }
+      return { databaseName: match[1], configFile: configPath };
     }
   } else if (configPath.endsWith(".jsonc")) {
     try {
-      const stripped = stripJsonComments(content)
-      const config = JSON.parse(stripped)
-      const dbName = extractDbNameFromJson(config)
+      const stripped = stripJsonComments(content);
+      const config = JSON.parse(stripped);
+      const dbName = extractDbNameFromJson(config);
       if (dbName) {
-        return { databaseName: dbName, configFile: configPath }
+        return { databaseName: dbName, configFile: configPath };
       }
     } catch {}
   } else if (configPath.endsWith(".json")) {
     try {
-      const config = JSON.parse(content)
-      const dbName = extractDbNameFromJson(config)
+      const config = JSON.parse(content);
+      const dbName = extractDbNameFromJson(config);
       if (dbName) {
-        return { databaseName: dbName, configFile: configPath }
+        return { databaseName: dbName, configFile: configPath };
       }
     } catch {}
   }
-  return null
+  return null;
 }
 function parseWranglerConfig(customConfig) {
   if (customConfig) {
-    return parseConfigFile(customConfig)
+    return parseConfigFile(customConfig);
   }
-  const cwd = process.cwd()
-  const tomlResult = parseConfigFile(join(cwd, "wrangler.toml"))
-  if (tomlResult) return tomlResult
-  const jsonResult = parseConfigFile(join(cwd, "wrangler.json"))
-  if (jsonResult) return jsonResult
-  const jsoncResult = parseConfigFile(join(cwd, "wrangler.jsonc"))
-  if (jsoncResult) return jsoncResult
-  return null
+  const cwd = process.cwd();
+  const tomlResult = parseConfigFile(join(cwd, "wrangler.toml"));
+  if (tomlResult)
+    return tomlResult;
+  const jsonResult = parseConfigFile(join(cwd, "wrangler.json"));
+  if (jsonResult)
+    return jsonResult;
+  const jsoncResult = parseConfigFile(join(cwd, "wrangler.jsonc"));
+  if (jsoncResult)
+    return jsoncResult;
+  return null;
 }
 function extractDbNameFromJson(config) {
   if (Array.isArray(config.d1_databases) && config.d1_databases.length > 0) {
-    const db = config.d1_databases[0]
+    const db = config.d1_databases[0];
     if (db.database_name) {
-      return db.database_name
+      return db.database_name;
     }
   }
-  return null
+  return null;
 }
 function buildWranglerArgs(dbName, options) {
-  const args = ["d1", "execute", dbName]
-  if (options.isLocal) args.push("--local")
-  if (options.isRemote) args.push("--remote")
-  if (options.configFile) args.push("--config", options.configFile)
-  return args
+  const args = ["d1", "execute", dbName];
+  if (options.isLocal)
+    args.push("--local");
+  if (options.isRemote)
+    args.push("--remote");
+  if (options.configFile)
+    args.push("--config", options.configFile);
+  return args;
 }
 function executeSqlFile(dbName, filePath, options) {
   if (!existsSync(filePath)) {
-    return { success: false, error: `Migration file not found: ${filePath}` }
+    return { success: false, error: `Migration file not found: ${filePath}` };
   }
-  const args = buildWranglerArgs(dbName, options)
-  args.push("--file", filePath)
+  const args = buildWranglerArgs(dbName, options);
+  args.push("--file", filePath);
   const result = spawnSync("wrangler", args, {
     encoding: "utf-8",
     shell: false,
-    stdio: ["pipe", "pipe", "pipe"],
-  })
+    stdio: ["pipe", "pipe", "pipe"]
+  });
   if (result.status !== 0) {
-    const errorOutput = result.stderr || result.stdout || ""
-    return { success: false, error: errorOutput }
+    const errorOutput = result.stderr || result.stdout || "";
+    return { success: false, error: errorOutput };
   }
-  return { success: true }
+  return { success: true };
+}
+function executeSql(dbName, sql, options) {
+  const args = buildWranglerArgs(dbName, options);
+  args.push("--command", sql);
+  const result = spawnSync("wrangler", args, {
+    encoding: "utf-8",
+    shell: false,
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+  if (result.status !== 0) {
+    const errorOutput = result.stderr || result.stdout || "";
+    return { success: false, error: errorOutput };
+  }
+  return { success: true, output: result.stdout };
+}
+function checkMigrationsTableExists(dbName, options) {
+  const result = executeSql(dbName, "SELECT name FROM sqlite_master WHERE type='table' AND name='_openauth_migrations'", options);
+  return result.success && result.output?.includes("_openauth_migrations");
+}
+function getAppliedMigrations(dbName, options) {
+  const result = executeSql(dbName, "SELECT name, applied_at, checksum FROM _openauth_migrations ORDER BY name", options);
+  if (!result.success || !result.output) {
+    return [];
+  }
+  const migrations = [];
+  try {
+    const lines = result.output.split(`
+`);
+    for (const line of lines) {
+      if (line.includes('"name"')) {
+        const match = line.match(/"name":\s*"([^"]+)".*?"applied_at":\s*(\d+).*?"checksum":\s*(?:"([^"]*)"|\d+|null)/);
+        if (match) {
+          migrations.push({
+            name: match[1],
+            applied_at: parseInt(match[2]),
+            checksum: match[3] || null
+          });
+        }
+      }
+    }
+  } catch {}
+  return migrations;
+}
+function recordMigration(dbName, migration, options) {
+  const now = Date.now();
+  const sql = `INSERT INTO _openauth_migrations (name, applied_at, checksum) VALUES ('${migration.name}', ${now}, '${migration.checksum}')`;
+  return executeSql(dbName, sql, options);
 }
 function printHelp() {
   console.log(`
 OpenAuth CLI
 
 Usage:
-  openauth migrate [database-name] [options]    Apply database schema
-  openauth seed [database-name] [options]       Apply seed data (roles, permissions, clients)
+  openauth migrate [database-name] [options]    Apply pending migrations
+  openauth seed [database-name] [options]       Apply seed data only
+  openauth status [database-name] [options]     Show migration status
   openauth help                                 Show this help message
 
 Options:
@@ -104,185 +176,297 @@ Options:
   --remote             Apply to remote D1 database (production)
   --config, -c <file>  Use a specific wrangler config file
   --no-seed            Skip seed data (migrate only applies schema)
+  --force              Force re-run all migrations (ignores tracking)
 
 Examples:
   openauth migrate                       # Auto-detect from wrangler config
-  openauth migrate --local               # Local database (schema + seed)
-  openauth migrate --remote              # Remote database (schema + seed)
-  openauth migrate --no-seed --local     # Schema only, no seed data
-  openauth migrate my-auth-db --remote   # Specify database, remote
+  openauth migrate --local               # Local database
+  openauth migrate --remote              # Remote database
+  openauth migrate --no-seed --local     # Skip seed data
+  openauth migrate my-auth-db --remote   # Specify database name
+  openauth status --local                # Show which migrations are applied
   openauth seed --local                  # Apply only seed data
-  openauth migrate -c wrangler.qa.json --remote
 
-The migrate command applies schema AND seed data by default.
-Seed data includes default clients, roles, and permissions.
-Both commands are idempotent - safe to run multiple times.
-`)
+Migrations are tracked in the _openauth_migrations table.
+Only pending migrations are applied (safe to run multiple times).
+`);
 }
 function parseArgs(args) {
   const result = {
     isLocal: false,
     isRemote: false,
     withSeed: true,
-  }
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
+    force: false
+  };
+  for (let i = 0;i < args.length; i++) {
+    const arg = args[i];
     if (arg === "--local") {
-      result.isLocal = true
+      result.isLocal = true;
     } else if (arg === "--remote") {
-      result.isRemote = true
+      result.isRemote = true;
     } else if (arg === "--no-seed") {
-      result.withSeed = false
+      result.withSeed = false;
     } else if (arg === "--seed") {
-      result.withSeed = true
+      result.withSeed = true;
+    } else if (arg === "--force") {
+      result.force = true;
     } else if (arg === "--config" || arg === "-c") {
-      result.configFile = args[++i]
+      result.configFile = args[++i];
       if (!result.configFile) {
-        console.error("Error: --config requires a file path")
-        process.exit(1)
+        console.error("Error: --config requires a file path");
+        process.exit(1);
       }
     } else if (!arg.startsWith("-")) {
-      result.dbName = arg
+      result.dbName = arg;
     }
   }
-  return result
+  return result;
 }
 function resolveDbName(parsed) {
   if (parsed.dbName) {
-    return parsed.dbName
+    return parsed.dbName;
   }
-  const config = parseWranglerConfig(parsed.configFile)
+  const config = parseWranglerConfig(parsed.configFile);
   if (config) {
-    console.log(
-      `Found database in ${config.configFile}: ${config.databaseName}`,
-    )
-    return config.databaseName
+    console.log(`Found database in ${config.configFile}: ${config.databaseName}`);
+    return config.databaseName;
   }
   if (parsed.configFile) {
-    console.error(`Error: Could not read database from ${parsed.configFile}`)
+    console.error(`Error: Could not read database from ${parsed.configFile}`);
   } else {
-    console.error(
-      "Error: No database name provided and couldn't find wrangler config",
-    )
-    console.error("Supported: wrangler.toml, wrangler.json, wrangler.jsonc")
+    console.error("Error: No database name provided and couldn't find wrangler config");
+    console.error("Supported: wrangler.toml, wrangler.json, wrangler.jsonc");
   }
-  process.exit(1)
+  process.exit(1);
 }
 function checkWrangler() {
   try {
-    execSync("wrangler --version", { stdio: "ignore" })
+    execSync("wrangler --version", { stdio: "ignore" });
   } catch {
-    console.error("Error: wrangler CLI not found")
-    console.error("Install it with: npm install -g wrangler")
-    process.exit(1)
+    console.error("Error: wrangler CLI not found");
+    console.error("Install it with: npm install -g wrangler");
+    process.exit(1);
   }
 }
 function migrate(args) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgs(args);
   if (parsed.isLocal && parsed.isRemote) {
-    console.error("Error: Cannot specify both --local and --remote")
-    process.exit(1)
+    console.error("Error: Cannot specify both --local and --remote");
+    process.exit(1);
   }
-  const dbName = resolveDbName(parsed)
-  checkWrangler()
-  if (!existsSync(schemaFile)) {
-    console.error(`Error: Schema file not found: ${schemaFile}`)
-    console.error(
-      "This may indicate the openauth package was not installed correctly.",
-    )
-    process.exit(1)
-  }
+  const dbName = resolveDbName(parsed);
+  checkWrangler();
   const options = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
-    configFile: parsed.configFile,
+    configFile: parsed.configFile
+  };
+  const target = parsed.isLocal ? " (local)" : parsed.isRemote ? " (remote)" : "";
+  const migrations = getMigrationFiles();
+  if (migrations.length === 0) {
+    console.error("Error: No migration files found in", migrationsDir);
+    process.exit(1);
   }
-  const target = parsed.isLocal
-    ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
-  console.log(`Applying OpenAuth schema to ${dbName}${target}...`)
-  const schemaResult = executeSqlFile(dbName, schemaFile, options)
-  if (!schemaResult.success) {
-    console.error("Error: Failed to apply schema")
-    if (schemaResult.error) {
-      console.error(schemaResult.error)
-    }
-    process.exit(1)
+  console.log(`
+OpenAuth Migration - ${dbName}${target}`);
+  console.log("=".repeat(50));
+  const schemaMigrations = migrations.filter((m) => !m.name.includes("seed") && !m.name.includes("002_seed"));
+  const seedMigration = migrations.find((m) => m.name.includes("seed") || m.name.includes("002_seed"));
+  const tableExists = checkMigrationsTableExists(dbName, options);
+  const applied = tableExists ? getAppliedMigrations(dbName, options) : [];
+  const appliedNames = new Set(applied.map((m) => m.name));
+  let pendingMigrations;
+  if (parsed.force) {
+    console.log("Force mode: running all migrations");
+    pendingMigrations = schemaMigrations;
+  } else {
+    pendingMigrations = schemaMigrations.filter((m) => !appliedNames.has(m.name));
   }
-  console.log("Schema applied successfully!")
-  if (parsed.withSeed) {
-    if (!existsSync(seedFile)) {
-      console.error(`Error: Seed file not found: ${seedFile}`)
-      process.exit(1)
-    }
-    console.log(`Applying seed data to ${dbName}${target}...`)
-    const seedResult = executeSqlFile(dbName, seedFile, options)
-    if (!seedResult.success) {
-      console.error("Error: Failed to apply seed data")
-      if (seedResult.error) {
-        console.error(seedResult.error)
+  if (pendingMigrations.length === 0 && !parsed.withSeed) {
+    console.log(`
+All migrations are already applied.`);
+    return;
+  }
+  let appliedCount = 0;
+  for (const migration of pendingMigrations) {
+    const existingMigration = applied.find((a) => a.name === migration.name);
+    if (existingMigration && existingMigration.checksum !== migration.checksum) {
+      console.log(`
+Warning: ${migration.name} has been modified since it was applied.`);
+      console.log(`  Applied checksum: ${existingMigration.checksum}`);
+      console.log(`  Current checksum: ${migration.checksum}`);
+      if (!parsed.force) {
+        console.log("  Use --force to re-apply.");
+        continue;
       }
-      process.exit(1)
     }
-    console.log("Seed data applied successfully!")
+    console.log(`
+Applying: ${migration.name}`);
+    const result = executeSqlFile(dbName, migration.path, options);
+    if (!result.success) {
+      console.error(`Error: Failed to apply ${migration.name}`);
+      if (result.error) {
+        console.error(result.error);
+      }
+      process.exit(1);
+    }
+    if (migration.name === "001_schema.sql" || tableExists || appliedCount > 0) {
+      const recordResult = recordMigration(dbName, migration, options);
+      if (!recordResult.success) {
+        console.warn(`Warning: Could not record migration ${migration.name}`);
+      }
+    }
+    console.log(`  Applied successfully (checksum: ${migration.checksum})`);
+    appliedCount++;
   }
+  if (parsed.withSeed && seedMigration) {
+    const seedApplied = appliedNames.has(seedMigration.name);
+    const shouldRunSeed = !seedApplied || parsed.force;
+    if (shouldRunSeed) {
+      console.log(`
+Applying: ${seedMigration.name}`);
+      const seedResult = executeSqlFile(dbName, seedMigration.path, options);
+      if (!seedResult.success) {
+        console.error(`Error: Failed to apply ${seedMigration.name}`);
+        if (seedResult.error) {
+          console.error(seedResult.error);
+        }
+        process.exit(1);
+      }
+      if (!seedApplied) {
+        const recordResult = recordMigration(dbName, seedMigration, options);
+        if (!recordResult.success) {
+          console.warn(`Warning: Could not record migration ${seedMigration.name}`);
+        }
+      }
+      console.log(`  Applied successfully (checksum: ${seedMigration.checksum})`);
+      appliedCount++;
+    } else {
+      console.log(`
+Skipping: ${seedMigration.name} (already applied)`);
+    }
+  }
+  console.log(`
+` + "=".repeat(50));
+  if (appliedCount > 0) {
+    console.log(`Migration complete! Applied ${appliedCount} migration(s).`);
+  } else {
+    console.log("No new migrations to apply.");
+  }
+}
+function status(args) {
+  const parsed = parseArgs(args);
+  if (parsed.isLocal && parsed.isRemote) {
+    console.error("Error: Cannot specify both --local and --remote");
+    process.exit(1);
+  }
+  const dbName = resolveDbName(parsed);
+  checkWrangler();
+  const options = {
+    isLocal: parsed.isLocal,
+    isRemote: parsed.isRemote,
+    configFile: parsed.configFile
+  };
+  const target = parsed.isLocal ? " (local)" : parsed.isRemote ? " (remote)" : "";
+  console.log(`
+OpenAuth Migration Status - ${dbName}${target}`);
+  console.log("=".repeat(50));
+  const migrations = getMigrationFiles();
+  if (migrations.length === 0) {
+    console.error("Error: No migration files found");
+    process.exit(1);
+  }
+  const tableExists = checkMigrationsTableExists(dbName, options);
+  if (!tableExists) {
+    console.log(`
+Migrations table does not exist yet.`);
+    console.log(`Run 'openauth migrate' to initialize the database.
+`);
+    console.log("Pending migrations:");
+    for (const m of migrations) {
+      console.log(`  [ ] ${m.name}`);
+    }
+    return;
+  }
+  const applied = getAppliedMigrations(dbName, options);
+  const appliedMap = new Map(applied.map((m) => [m.name, m]));
+  console.log(`
+Migration Status:`);
+  console.log("-".repeat(50));
+  for (const migration of migrations) {
+    const appliedMigration = appliedMap.get(migration.name);
+    if (appliedMigration) {
+      const checksumMatch = appliedMigration.checksum === migration.checksum;
+      const date = new Date(appliedMigration.applied_at).toISOString();
+      const status2 = checksumMatch ? "[x]" : "[!]";
+      const warning = checksumMatch ? "" : " (MODIFIED)";
+      console.log(`  ${status2} ${migration.name}${warning}`);
+      console.log(`      Applied: ${date}`);
+      if (!checksumMatch) {
+        console.log(`      Applied checksum: ${appliedMigration.checksum}`);
+        console.log(`      Current checksum: ${migration.checksum}`);
+      }
+    } else {
+      console.log(`  [ ] ${migration.name}`);
+      console.log(`      Pending`);
+    }
+  }
+  const pending = migrations.filter((m) => !appliedMap.has(m.name));
+  console.log("-".repeat(50));
+  console.log(`Total: ${migrations.length} | Applied: ${applied.length} | Pending: ${pending.length}`);
 }
 function seed(args) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgs(args);
   if (parsed.isLocal && parsed.isRemote) {
-    console.error("Error: Cannot specify both --local and --remote")
-    process.exit(1)
+    console.error("Error: Cannot specify both --local and --remote");
+    process.exit(1);
   }
-  const dbName = resolveDbName(parsed)
-  checkWrangler()
-  if (!existsSync(seedFile)) {
-    console.error(`Error: Seed file not found: ${seedFile}`)
-    console.error(
-      "This may indicate the openauth package was not installed correctly.",
-    )
-    process.exit(1)
+  const dbName = resolveDbName(parsed);
+  checkWrangler();
+  const migrations = getMigrationFiles();
+  const seedMigration = migrations.find((m) => m.name.includes("seed") || m.name.includes("002_seed"));
+  if (!seedMigration) {
+    console.error("Error: Seed file not found");
+    process.exit(1);
   }
   const options = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
-    configFile: parsed.configFile,
-  }
-  const target = parsed.isLocal
-    ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
-  console.log(`Applying seed data to ${dbName}${target}...`)
-  const result = executeSqlFile(dbName, seedFile, options)
+    configFile: parsed.configFile
+  };
+  const target = parsed.isLocal ? " (local)" : parsed.isRemote ? " (remote)" : "";
+  console.log(`Applying seed data to ${dbName}${target}...`);
+  const result = executeSqlFile(dbName, seedMigration.path, options);
   if (!result.success) {
-    console.error("Error: Failed to apply seed data")
+    console.error("Error: Failed to apply seed data");
     if (result.error) {
-      console.error(result.error)
+      console.error(result.error);
     }
-    process.exit(1)
+    process.exit(1);
   }
-  console.log("Seed data applied successfully!")
+  console.log("Seed data applied successfully!");
 }
-var args = process.argv.slice(2)
-var command = args[0]
+var args = process.argv.slice(2);
+var command = args[0];
 switch (command) {
   case "migrate":
-    migrate(args.slice(1))
-    break
+    migrate(args.slice(1));
+    break;
   case "seed":
-    seed(args.slice(1))
-    break
+    seed(args.slice(1));
+    break;
+  case "status":
+    status(args.slice(1));
+    break;
   case "help":
   case "--help":
   case "-h":
-    printHelp()
-    break
+    printHelp();
+    break;
   default:
     if (command) {
-      console.error(`Unknown command: ${command}`)
+      console.error(`Unknown command: ${command}`);
     }
-    printHelp()
-    process.exit(command ? 1 : 0)
+    printHelp();
+    process.exit(command ? 1 : 0);
 }

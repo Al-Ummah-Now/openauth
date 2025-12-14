@@ -12,16 +12,58 @@
  */
 
 import { execSync, spawnSync } from "child_process"
-import { readFileSync, existsSync } from "fs"
-import { dirname, join } from "path"
+import { createHash } from "crypto"
+import { readFileSync, existsSync, readdirSync } from "fs"
+import { basename, dirname, join } from "path"
 import { fileURLToPath } from "url"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// Migration files
-const schemaFile = join(__dirname, "..", "src", "migrations", "001_schema.sql")
-const seedFile = join(__dirname, "..", "src", "migrations", "002_seed.sql")
+// Migration directory
+const migrationsDir = join(__dirname, "..", "src", "migrations")
+
+interface MigrationFile {
+  name: string
+  path: string
+  checksum: string
+}
+
+interface AppliedMigration {
+  name: string
+  applied_at: number
+  checksum: string | null
+}
+
+/**
+ * Calculate SHA-256 checksum of a file
+ */
+function calculateChecksum(filePath: string): string {
+  const content = readFileSync(filePath, "utf-8")
+  return createHash("sha256").update(content).digest("hex").substring(0, 16)
+}
+
+/**
+ * Get all migration files in order
+ */
+function getMigrationFiles(): MigrationFile[] {
+  if (!existsSync(migrationsDir)) {
+    return []
+  }
+
+  const files = readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".sql") && /^\d{3}_/.test(f))
+    .sort()
+
+  return files.map((name) => {
+    const path = join(migrationsDir, name)
+    return {
+      name,
+      path,
+      checksum: calculateChecksum(path),
+    }
+  })
+}
 
 /**
  * Strip JSON comments for JSONC support
@@ -114,13 +156,16 @@ function extractDbNameFromJson(config: any): string | null {
   return null
 }
 
+interface WranglerOptions {
+  isLocal: boolean
+  isRemote: boolean
+  configFile?: string
+}
+
 /**
  * Build wrangler command arguments
  */
-function buildWranglerArgs(
-  dbName: string,
-  options: { isLocal: boolean; isRemote: boolean; configFile?: string },
-): string[] {
+function buildWranglerArgs(dbName: string, options: WranglerOptions): string[] {
   const args = ["d1", "execute", dbName]
   if (options.isLocal) args.push("--local")
   if (options.isRemote) args.push("--remote")
@@ -134,7 +179,7 @@ function buildWranglerArgs(
 function executeSqlFile(
   dbName: string,
   filePath: string,
-  options: { isLocal: boolean; isRemote: boolean; configFile?: string },
+  options: WranglerOptions,
 ): { success: boolean; error?: string } {
   if (!existsSync(filePath)) {
     return { success: false, error: `Migration file not found: ${filePath}` }
@@ -157,13 +202,111 @@ function executeSqlFile(
   return { success: true }
 }
 
+/**
+ * Execute raw SQL command
+ */
+function executeSql(
+  dbName: string,
+  sql: string,
+  options: WranglerOptions,
+): { success: boolean; output?: string; error?: string } {
+  const args = buildWranglerArgs(dbName, options)
+  args.push("--command", sql)
+
+  const result = spawnSync("wrangler", args, {
+    encoding: "utf-8",
+    shell: false,
+    stdio: ["pipe", "pipe", "pipe"],
+  })
+
+  if (result.status !== 0) {
+    const errorOutput = result.stderr || result.stdout || ""
+    return { success: false, error: errorOutput }
+  }
+
+  return { success: true, output: result.stdout }
+}
+
+/**
+ * Check if migrations table exists
+ */
+function checkMigrationsTableExists(
+  dbName: string,
+  options: WranglerOptions,
+): boolean {
+  const result = executeSql(
+    dbName,
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='_openauth_migrations'",
+    options,
+  )
+  return result.success && result.output?.includes("_openauth_migrations")
+}
+
+/**
+ * Get applied migrations from database
+ */
+function getAppliedMigrations(
+  dbName: string,
+  options: WranglerOptions,
+): AppliedMigration[] {
+  const result = executeSql(
+    dbName,
+    "SELECT name, applied_at, checksum FROM _openauth_migrations ORDER BY name",
+    options,
+  )
+
+  if (!result.success || !result.output) {
+    return []
+  }
+
+  // Parse wrangler JSON output
+  const migrations: AppliedMigration[] = []
+  try {
+    // Wrangler outputs JSON with results
+    const lines = result.output.split("\n")
+    for (const line of lines) {
+      if (line.includes('"name"')) {
+        // Try to parse as part of results array
+        const match = line.match(
+          /"name":\s*"([^"]+)".*?"applied_at":\s*(\d+).*?"checksum":\s*(?:"([^"]*)"|\d+|null)/,
+        )
+        if (match) {
+          migrations.push({
+            name: match[1],
+            applied_at: parseInt(match[2]),
+            checksum: match[3] || null,
+          })
+        }
+      }
+    }
+  } catch {
+    // Parse error, return empty
+  }
+
+  return migrations
+}
+
+/**
+ * Record a migration as applied
+ */
+function recordMigration(
+  dbName: string,
+  migration: MigrationFile,
+  options: WranglerOptions,
+): { success: boolean; error?: string } {
+  const now = Date.now()
+  const sql = `INSERT INTO _openauth_migrations (name, applied_at, checksum) VALUES ('${migration.name}', ${now}, '${migration.checksum}')`
+  return executeSql(dbName, sql, options)
+}
+
 function printHelp() {
   console.log(`
 OpenAuth CLI
 
 Usage:
-  openauth migrate [database-name] [options]    Apply database schema
-  openauth seed [database-name] [options]       Apply seed data (roles, permissions, clients)
+  openauth migrate [database-name] [options]    Apply pending migrations
+  openauth seed [database-name] [options]       Apply seed data only
+  openauth status [database-name] [options]     Show migration status
   openauth help                                 Show this help message
 
 Options:
@@ -171,19 +314,19 @@ Options:
   --remote             Apply to remote D1 database (production)
   --config, -c <file>  Use a specific wrangler config file
   --no-seed            Skip seed data (migrate only applies schema)
+  --force              Force re-run all migrations (ignores tracking)
 
 Examples:
   openauth migrate                       # Auto-detect from wrangler config
-  openauth migrate --local               # Local database (schema + seed)
-  openauth migrate --remote              # Remote database (schema + seed)
-  openauth migrate --no-seed --local     # Schema only, no seed data
-  openauth migrate my-auth-db --remote   # Specify database, remote
+  openauth migrate --local               # Local database
+  openauth migrate --remote              # Remote database
+  openauth migrate --no-seed --local     # Skip seed data
+  openauth migrate my-auth-db --remote   # Specify database name
+  openauth status --local                # Show which migrations are applied
   openauth seed --local                  # Apply only seed data
-  openauth migrate -c wrangler.qa.json --remote
 
-The migrate command applies schema AND seed data by default.
-Seed data includes default clients, roles, and permissions.
-Both commands are idempotent - safe to run multiple times.
+Migrations are tracked in the _openauth_migrations table.
+Only pending migrations are applied (safe to run multiple times).
 `)
 }
 
@@ -193,13 +336,15 @@ interface ParsedArgs {
   isRemote: boolean
   configFile?: string
   withSeed: boolean
+  force: boolean
 }
 
 function parseArgs(args: string[]): ParsedArgs {
   const result: ParsedArgs = {
     isLocal: false,
     isRemote: false,
-    withSeed: true, // Seed by default
+    withSeed: true,
+    force: false,
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -211,7 +356,9 @@ function parseArgs(args: string[]): ParsedArgs {
     } else if (arg === "--no-seed") {
       result.withSeed = false
     } else if (arg === "--seed") {
-      result.withSeed = true // Keep for backwards compatibility
+      result.withSeed = true
+    } else if (arg === "--force") {
+      result.force = true
     } else if (arg === "--config" || arg === "-c") {
       result.configFile = args[++i]
       if (!result.configFile) {
@@ -271,60 +418,219 @@ function migrate(args: string[]) {
   const dbName = resolveDbName(parsed)
   checkWrangler()
 
-  // Check schema file exists
-  if (!existsSync(schemaFile)) {
-    console.error(`Error: Schema file not found: ${schemaFile}`)
-    console.error(
-      "This may indicate the openauth package was not installed correctly.",
-    )
-    process.exit(1)
-  }
-
-  const options = {
+  const options: WranglerOptions = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
     configFile: parsed.configFile,
   }
+
   const target = parsed.isLocal
     ? " (local)"
     : parsed.isRemote
       ? " (remote)"
       : ""
 
-  // Apply schema
-  console.log(`Applying OpenAuth schema to ${dbName}${target}...`)
-  const schemaResult = executeSqlFile(dbName, schemaFile, options)
-
-  if (!schemaResult.success) {
-    console.error("Error: Failed to apply schema")
-    if (schemaResult.error) {
-      console.error(schemaResult.error)
-    }
+  // Get all migration files
+  const migrations = getMigrationFiles()
+  if (migrations.length === 0) {
+    console.error("Error: No migration files found in", migrationsDir)
     process.exit(1)
   }
 
-  console.log("Schema applied successfully!")
+  console.log(`\nOpenAuth Migration - ${dbName}${target}`)
+  console.log("=".repeat(50))
 
-  // Apply seed if requested
-  if (parsed.withSeed) {
-    if (!existsSync(seedFile)) {
-      console.error(`Error: Seed file not found: ${seedFile}`)
-      process.exit(1)
+  // Separate schema migrations from seed
+  const schemaMigrations = migrations.filter(
+    (m) => !m.name.includes("seed") && !m.name.includes("002_seed"),
+  )
+  const seedMigration = migrations.find(
+    (m) => m.name.includes("seed") || m.name.includes("002_seed"),
+  )
+
+  // Check if migrations table exists
+  const tableExists = checkMigrationsTableExists(dbName, options)
+
+  // Get applied migrations (only if table exists)
+  const applied = tableExists ? getAppliedMigrations(dbName, options) : []
+  const appliedNames = new Set(applied.map((m) => m.name))
+
+  // Determine which schema migrations to run
+  let pendingMigrations: MigrationFile[]
+  if (parsed.force) {
+    console.log("Force mode: running all migrations")
+    pendingMigrations = schemaMigrations
+  } else {
+    pendingMigrations = schemaMigrations.filter((m) => !appliedNames.has(m.name))
+  }
+
+  if (pendingMigrations.length === 0 && !parsed.withSeed) {
+    console.log("\nAll migrations are already applied.")
+    return
+  }
+
+  // Run pending schema migrations
+  let appliedCount = 0
+  for (const migration of pendingMigrations) {
+    const existingMigration = applied.find((a) => a.name === migration.name)
+
+    // Check for checksum mismatch (modified migration)
+    if (existingMigration && existingMigration.checksum !== migration.checksum) {
+      console.log(
+        `\nWarning: ${migration.name} has been modified since it was applied.`,
+      )
+      console.log(`  Applied checksum: ${existingMigration.checksum}`)
+      console.log(`  Current checksum: ${migration.checksum}`)
+      if (!parsed.force) {
+        console.log("  Use --force to re-apply.")
+        continue
+      }
     }
 
-    console.log(`Applying seed data to ${dbName}${target}...`)
-    const seedResult = executeSqlFile(dbName, seedFile, options)
+    console.log(`\nApplying: ${migration.name}`)
+    const result = executeSqlFile(dbName, migration.path, options)
 
-    if (!seedResult.success) {
-      console.error("Error: Failed to apply seed data")
-      if (seedResult.error) {
-        console.error(seedResult.error)
+    if (!result.success) {
+      console.error(`Error: Failed to apply ${migration.name}`)
+      if (result.error) {
+        console.error(result.error)
       }
       process.exit(1)
     }
 
-    console.log("Seed data applied successfully!")
+    // Record the migration (after first migration creates the table)
+    if (migration.name === "001_schema.sql" || tableExists || appliedCount > 0) {
+      const recordResult = recordMigration(dbName, migration, options)
+      if (!recordResult.success) {
+        console.warn(`Warning: Could not record migration ${migration.name}`)
+      }
+    }
+
+    console.log(`  Applied successfully (checksum: ${migration.checksum})`)
+    appliedCount++
   }
+
+  // Apply seed if requested
+  if (parsed.withSeed && seedMigration) {
+    const seedApplied = appliedNames.has(seedMigration.name)
+    const shouldRunSeed = !seedApplied || parsed.force
+
+    if (shouldRunSeed) {
+      console.log(`\nApplying: ${seedMigration.name}`)
+      const seedResult = executeSqlFile(dbName, seedMigration.path, options)
+
+      if (!seedResult.success) {
+        console.error(`Error: Failed to apply ${seedMigration.name}`)
+        if (seedResult.error) {
+          console.error(seedResult.error)
+        }
+        process.exit(1)
+      }
+
+      // Record seed migration
+      if (!seedApplied) {
+        const recordResult = recordMigration(dbName, seedMigration, options)
+        if (!recordResult.success) {
+          console.warn(
+            `Warning: Could not record migration ${seedMigration.name}`,
+          )
+        }
+      }
+
+      console.log(
+        `  Applied successfully (checksum: ${seedMigration.checksum})`,
+      )
+      appliedCount++
+    } else {
+      console.log(`\nSkipping: ${seedMigration.name} (already applied)`)
+    }
+  }
+
+  console.log("\n" + "=".repeat(50))
+  if (appliedCount > 0) {
+    console.log(`Migration complete! Applied ${appliedCount} migration(s).`)
+  } else {
+    console.log("No new migrations to apply.")
+  }
+}
+
+function status(args: string[]) {
+  const parsed = parseArgs(args)
+
+  if (parsed.isLocal && parsed.isRemote) {
+    console.error("Error: Cannot specify both --local and --remote")
+    process.exit(1)
+  }
+
+  const dbName = resolveDbName(parsed)
+  checkWrangler()
+
+  const options: WranglerOptions = {
+    isLocal: parsed.isLocal,
+    isRemote: parsed.isRemote,
+    configFile: parsed.configFile,
+  }
+
+  const target = parsed.isLocal
+    ? " (local)"
+    : parsed.isRemote
+      ? " (remote)"
+      : ""
+
+  console.log(`\nOpenAuth Migration Status - ${dbName}${target}`)
+  console.log("=".repeat(50))
+
+  // Get all migration files
+  const migrations = getMigrationFiles()
+  if (migrations.length === 0) {
+    console.error("Error: No migration files found")
+    process.exit(1)
+  }
+
+  // Check if migrations table exists
+  const tableExists = checkMigrationsTableExists(dbName, options)
+  if (!tableExists) {
+    console.log("\nMigrations table does not exist yet.")
+    console.log("Run 'openauth migrate' to initialize the database.\n")
+    console.log("Pending migrations:")
+    for (const m of migrations) {
+      console.log(`  [ ] ${m.name}`)
+    }
+    return
+  }
+
+  // Get applied migrations
+  const applied = getAppliedMigrations(dbName, options)
+  const appliedMap = new Map(applied.map((m) => [m.name, m]))
+
+  console.log("\nMigration Status:")
+  console.log("-".repeat(50))
+
+  for (const migration of migrations) {
+    const appliedMigration = appliedMap.get(migration.name)
+
+    if (appliedMigration) {
+      const checksumMatch = appliedMigration.checksum === migration.checksum
+      const date = new Date(appliedMigration.applied_at).toISOString()
+      const status = checksumMatch ? "[x]" : "[!]"
+      const warning = checksumMatch ? "" : " (MODIFIED)"
+      console.log(`  ${status} ${migration.name}${warning}`)
+      console.log(`      Applied: ${date}`)
+      if (!checksumMatch) {
+        console.log(`      Applied checksum: ${appliedMigration.checksum}`)
+        console.log(`      Current checksum: ${migration.checksum}`)
+      }
+    } else {
+      console.log(`  [ ] ${migration.name}`)
+      console.log(`      Pending`)
+    }
+  }
+
+  const pending = migrations.filter((m) => !appliedMap.has(m.name))
+  console.log("-".repeat(50))
+  console.log(
+    `Total: ${migrations.length} | Applied: ${applied.length} | Pending: ${pending.length}`,
+  )
 }
 
 function seed(args: string[]) {
@@ -338,20 +644,22 @@ function seed(args: string[]) {
   const dbName = resolveDbName(parsed)
   checkWrangler()
 
-  // Check seed file exists
-  if (!existsSync(seedFile)) {
-    console.error(`Error: Seed file not found: ${seedFile}`)
-    console.error(
-      "This may indicate the openauth package was not installed correctly.",
-    )
+  const migrations = getMigrationFiles()
+  const seedMigration = migrations.find(
+    (m) => m.name.includes("seed") || m.name.includes("002_seed"),
+  )
+
+  if (!seedMigration) {
+    console.error("Error: Seed file not found")
     process.exit(1)
   }
 
-  const options = {
+  const options: WranglerOptions = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
     configFile: parsed.configFile,
   }
+
   const target = parsed.isLocal
     ? " (local)"
     : parsed.isRemote
@@ -359,7 +667,7 @@ function seed(args: string[]) {
       : ""
 
   console.log(`Applying seed data to ${dbName}${target}...`)
-  const result = executeSqlFile(dbName, seedFile, options)
+  const result = executeSqlFile(dbName, seedMigration.path, options)
 
   if (!result.success) {
     console.error("Error: Failed to apply seed data")
@@ -382,6 +690,9 @@ switch (command) {
     break
   case "seed":
     seed(args.slice(1))
+    break
+  case "status":
+    status(args.slice(1))
     break
   case "help":
   case "--help":
