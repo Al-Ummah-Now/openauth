@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- RBAC security features:
+  - System role update protection - prevents modifying system roles
+  - Self-grant prevention - users cannot assign roles to themselves
+  - Privilege escalation prevention - cannot assign system roles you don't have
+- New error codes: `cannot_modify_system_role`, `privilege_escalation_denied`, `self_assignment_denied`
+
 ## [1.0.7] - 2024-12-13
 
 ### Changed
