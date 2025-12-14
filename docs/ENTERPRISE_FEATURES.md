@@ -1081,12 +1081,12 @@ await rbacService.assignRoleToUser({
 
 ### Error Codes
 
-| Error Code | HTTP Status | Description |
-|------------|-------------|-------------|
-| `cannot_modify_system_role` | 403 | Attempted to update a system role |
-| `cannot_delete_system_role` | 403 | Attempted to delete a system role |
-| `self_assignment_denied` | 403 | User tried to assign a role to themselves |
-| `privilege_escalation_denied` | 403 | User tried to assign a system role they don't have |
+| Error Code                    | HTTP Status | Description                                        |
+| ----------------------------- | ----------- | -------------------------------------------------- |
+| `cannot_modify_system_role`   | 403         | Attempted to update a system role                  |
+| `cannot_delete_system_role`   | 403         | Attempted to delete a system role                  |
+| `self_assignment_denied`      | 403         | User tried to assign a role to themselves          |
+| `privilege_escalation_denied` | 403         | User tried to assign a system role they don't have |
 
 ### API Behavior
 

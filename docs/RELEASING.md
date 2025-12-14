@@ -12,15 +12,16 @@ The release workflow is fully automated via GitHub Actions. Releases are trigger
 
 When a PR is opened or updated:
 
-| Step | Action |
-|------|--------|
-| 1 | Wait for `test` and `format` checks to pass |
-| 2 | Publish to GitHub Packages with version `X.Y.Z-pr.{PR#}.{run#}` |
-| 3 | Create git tag `vX.Y.Z-pr.{PR#}.{run#}` |
-| 4 | Create GitHub Release (marked as pre-release) with PR commits |
-| 5 | Comment on PR with installation instructions |
+| Step | Action                                                          |
+| ---- | --------------------------------------------------------------- |
+| 1    | Wait for `test` and `format` checks to pass                     |
+| 2    | Publish to GitHub Packages with version `X.Y.Z-pr.{PR#}.{run#}` |
+| 3    | Create git tag `vX.Y.Z-pr.{PR#}.{run#}`                         |
+| 4    | Create GitHub Release (marked as pre-release) with PR commits   |
+| 5    | Comment on PR with installation instructions                    |
 
 **Example:** PR #7 run #42 would produce:
+
 - npm version: `1.0.8-pr.7.42`
 - npm tag: `@pr`
 - git tag: `v1.0.8-pr.7.42`
@@ -30,15 +31,15 @@ When a PR is opened or updated:
 
 When code is pushed to `master`:
 
-| Step | Action |
-|------|--------|
-| 1 | Wait for `test` and `format` workflows to complete |
-| 2 | Auto-bump patch version (e.g., `1.0.7` → `1.0.8`) |
-| 3 | Update `CHANGELOG.md` from commit messages |
-| 4 | Commit version and changelog updates |
-| 5 | Publish to GitHub Packages with `@latest` tag |
-| 6 | Create git tag `vX.Y.Z` |
-| 7 | Create GitHub Release with categorized release notes |
+| Step | Action                                               |
+| ---- | ---------------------------------------------------- |
+| 1    | Wait for `test` and `format` workflows to complete   |
+| 2    | Auto-bump patch version (e.g., `1.0.7` → `1.0.8`)    |
+| 3    | Update `CHANGELOG.md` from commit messages           |
+| 4    | Commit version and changelog updates                 |
+| 5    | Publish to GitHub Packages with `@latest` tag        |
+| 6    | Create git tag `vX.Y.Z`                              |
+| 7    | Create GitHub Release with categorized release notes |
 
 ### 3. Manual Releases (Workflow Dispatch)
 
@@ -81,15 +82,19 @@ Release notes are auto-generated with categories:
 ## What's Changed in v1.0.8
 
 ### Features
+
 - feat: add new RBAC security features (abc123)
 
 ### Bug Fixes
+
 - fix: resolve cache invalidation issue (def456)
 
 ### Documentation
+
 - docs: update enterprise features guide (ghi789)
 
 ---
+
 **Full Changelog**: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.7...v1.0.8
 ```
 
@@ -103,9 +108,11 @@ Pre-releases show PR-specific changes:
 > This is a pre-release from PR #7
 
 ### Features
+
 - feat: add RBAC security features (abc123)
 
 ### Bug Fixes
+
 - fix: resolve test failures (def456)
 ```
 
@@ -173,6 +180,7 @@ The CHANGELOG is only updated for stable releases (push to master), not pre-rele
 ### Pre-release Tag Missing
 
 Pre-release tags are created for every PR build. Check:
+
 1. PR triggers the workflow (changes in `packages/openauth/**`)
 2. `test` and `format` checks passed
 3. GitHub Actions has permissions to create tags
