@@ -34,10 +34,12 @@ import {
 
 const createMockD1 = () => {
   const mockResults: any[] = []
+  let consumeResults = false // When true, shift results off queue
 
-  const setResults = (results: any[]) => {
+  const setResults = (results: any[], consume = false) => {
     mockResults.length = 0
     mockResults.push(...results)
+    consumeResults = consume
   }
 
   const db = {
@@ -47,7 +49,13 @@ const createMockD1 = () => {
           Promise.resolve({ success: true, meta: { changes: 1 } }),
         ),
         all: mock(() => Promise.resolve({ results: [...mockResults] })),
-        first: mock(() => Promise.resolve(mockResults[0] || null)),
+        first: mock(() => {
+          const result = mockResults[0] || null
+          if (consumeResults && mockResults.length > 0) {
+            mockResults.shift()
+          }
+          return Promise.resolve(result)
+        }),
       }),
     }),
     _mockResults: mockResults,
@@ -639,6 +647,18 @@ describe("RBACAdapter", () => {
     })
 
     test("throws error for invalid role name format", async () => {
+      // Set up an existing non-system role for the getRole check
+      const existingRole = {
+        id: "role-1",
+        name: "admin",
+        tenant_id: "tenant-1",
+        description: "Admin role",
+        is_system_role: 0,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      }
+      mockDb._setResults([existingRole])
+
       await expect(
         adapter.updateRole("role-1", "tenant-1", {
           name: "invalid name!",
@@ -656,6 +676,26 @@ describe("RBACAdapter", () => {
           name: "new-name",
         }),
       ).rejects.toThrow("Role not found")
+    })
+
+    test("throws error when trying to update system role", async () => {
+      // Set up a system role
+      const systemRole = {
+        id: "system-role-1",
+        name: "system-admin",
+        tenant_id: "tenant-1",
+        description: "System admin role",
+        is_system_role: 1, // System role
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      }
+      mockDb._setResults([systemRole])
+
+      await expect(
+        adapter.updateRole("system-role-1", "tenant-1", {
+          name: "new-name",
+        }),
+      ).rejects.toThrow("Cannot modify system role")
     })
   })
 
@@ -1263,7 +1303,20 @@ describe("RBACServiceImpl", () => {
 
   describe("cache invalidation", () => {
     test("invalidates cache when assigning role to user", async () => {
-      mockDb._setResults([]) // No existing assignment
+      // Set up mock responses for the query sequence:
+      // 1. getRole: return the role object
+      // 2. check existing assignment: return null (no existing assignment)
+      const mockRole = {
+        id: "role-1",
+        name: "editor",
+        tenant_id: "tenant-1",
+        description: "Editor role",
+        is_system_role: 0,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      }
+      // Use consume mode (true) to shift results off queue after each query
+      mockDb._setResults([mockRole, null], true)
 
       const removeSpy = spyOn(storage, "remove")
 
@@ -1544,6 +1597,139 @@ describe("RBACServiceImpl", () => {
       await service.deletePermission("perm-1")
 
       expect(deletePermissionSpy).toHaveBeenCalledWith("perm-1")
+    })
+  })
+
+  // ==========================================
+  // Security Features Tests
+  // ==========================================
+
+  describe("security features", () => {
+    test("prevents self-assignment of roles", async () => {
+      // Set up mock role for getRole check
+      const mockRole = createTestRole({ is_system_role: false })
+      const getRoleSpy = spyOn(adapter, "getRole").mockResolvedValue(mockRole)
+
+      await expect(
+        service.assignRoleToUser({
+          userId: "user-1",
+          roleId: "role-1",
+          tenantId: "tenant-1",
+          assignedBy: "user-1", // Same as userId - self-assignment
+        }),
+      ).rejects.toThrow("Cannot assign roles to yourself")
+    })
+
+    test("prevents privilege escalation for system roles", async () => {
+      // Set up a system role
+      const systemRole = createTestRole({
+        id: "system-admin",
+        name: "system-admin",
+        is_system_role: true,
+      })
+      const getRoleSpy = spyOn(adapter, "getRole").mockResolvedValue(systemRole)
+
+      // Assigner does NOT have the system role
+      const getUserRolesSpy = spyOn(adapter, "getUserRoles").mockResolvedValue([
+        createTestRole({
+          id: "other-role",
+          name: "editor",
+          is_system_role: false,
+        }),
+      ])
+
+      await expect(
+        service.assignRoleToUser({
+          userId: "user-2",
+          roleId: "system-admin",
+          tenantId: "tenant-1",
+          assignedBy: "admin", // Admin trying to assign system role they don't have
+        }),
+      ).rejects.toThrow("Cannot assign a system role you do not have")
+    })
+
+    test("allows assigning system role if assigner has it", async () => {
+      // Set up a system role
+      const systemRole = createTestRole({
+        id: "system-admin",
+        name: "system-admin",
+        is_system_role: true,
+      })
+      const getRoleSpy = spyOn(adapter, "getRole").mockResolvedValue(systemRole)
+
+      // Assigner HAS the system role
+      const getUserRolesSpy = spyOn(adapter, "getUserRoles").mockResolvedValue([
+        createTestRole({
+          id: "system-admin",
+          name: "system-admin",
+          is_system_role: true,
+        }),
+      ])
+
+      // Mock the adapter's assignRoleToUser
+      const assignSpy = spyOn(adapter, "assignRoleToUser").mockResolvedValue({
+        user_id: "user-2",
+        role_id: "system-admin",
+        tenant_id: "tenant-1",
+        assigned_at: Date.now(),
+        assigned_by: "admin",
+      })
+
+      // Should succeed
+      const result = await service.assignRoleToUser({
+        userId: "user-2",
+        roleId: "system-admin",
+        tenantId: "tenant-1",
+        assignedBy: "admin",
+      })
+
+      expect(result.role_id).toBe("system-admin")
+      expect(assignSpy).toHaveBeenCalled()
+    })
+
+    test("allows assigning non-system role without privilege check", async () => {
+      // Set up a non-system role
+      const regularRole = createTestRole({
+        id: "editor",
+        name: "editor",
+        is_system_role: false,
+      })
+      const getRoleSpy = spyOn(adapter, "getRole").mockResolvedValue(
+        regularRole,
+      )
+
+      // Mock the adapter's assignRoleToUser
+      const assignSpy = spyOn(adapter, "assignRoleToUser").mockResolvedValue({
+        user_id: "user-2",
+        role_id: "editor",
+        tenant_id: "tenant-1",
+        assigned_at: Date.now(),
+        assigned_by: "admin",
+      })
+
+      // Should succeed without checking assigner's roles
+      const result = await service.assignRoleToUser({
+        userId: "user-2",
+        roleId: "editor",
+        tenantId: "tenant-1",
+        assignedBy: "admin",
+      })
+
+      expect(result.role_id).toBe("editor")
+      expect(assignSpy).toHaveBeenCalled()
+    })
+
+    test("throws role not found for non-existent role", async () => {
+      const getRoleSpy = spyOn(adapter, "getRole").mockResolvedValue(null)
+
+      await expect(
+        service.assignRoleToUser({
+          userId: "user-2",
+          roleId: "non-existent",
+          tenantId: "tenant-1",
+          assignedBy: "admin",
+        }),
+      ).rejects.toThrow("Role not found")
     })
   })
 })

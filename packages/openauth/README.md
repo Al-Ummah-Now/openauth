@@ -133,6 +133,41 @@ const hasPermission = await rbacService.checkPermission({
 })
 ```
 
+### Security Features
+
+The RBAC system includes built-in security protections:
+
+- **System Role Protection** - System roles (`is_system_role: true`) cannot be modified or deleted
+- **Self-Grant Prevention** - Users cannot assign roles to themselves
+- **Privilege Escalation Prevention** - Users can only assign system roles they already possess
+
+```typescript
+// These will throw appropriate errors:
+
+// Error: self_assignment_denied
+await rbacService.assignRoleToUser({
+  userId: "user-123",
+  roleId: "admin-role",
+  tenantId: "tenant-1",
+  assignedBy: "user-123", // Same as userId - blocked!
+})
+
+// Error: privilege_escalation_denied
+await rbacService.assignRoleToUser({
+  userId: "user-456",
+  roleId: "super-admin", // System role
+  tenantId: "tenant-1",
+  assignedBy: "user-123", // Doesn't have super-admin role
+})
+
+// Error: cannot_modify_system_role
+await rbacService.updateRole({
+  roleId: "admin",
+  tenantId: "tenant-1",
+  name: "new-name", // Cannot modify system role
+})
+```
+
 ## Middleware
 
 ```typescript

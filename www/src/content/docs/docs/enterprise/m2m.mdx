@@ -527,6 +527,160 @@ When token requests fail, the server returns an error response:
 }
 ```
 
+## Token Verification
+
+Use `verifyM2MToken` for server-side validation of M2M tokens with full error handling.
+
+### verifyM2MToken Function
+
+```ts title="Import"
+import { verifyM2MToken, hasScope, hasAllScopes } from "@openauthjs/openauth/m2m"
+```
+
+### Basic Usage
+
+```ts title="verify-token.ts"
+import { verifyM2MToken } from "@openauthjs/openauth/m2m"
+import { importSPKI } from "jose"
+
+const publicKey = await importSPKI(publicKeyPem, "ES256")
+
+const result = await verifyM2MToken({
+  token: accessToken,
+  publicKey,
+  issuer: "https://auth.example.com",
+})
+
+if (result.valid) {
+  console.log("Client ID:", result.clientId)
+  console.log("Tenant:", result.tenantId)
+  console.log("Scopes:", result.scopes)
+  console.log("Expires:", new Date(result.expiresAt * 1000))
+} else {
+  console.error("Invalid token:", result.error)
+  console.error("Error code:", result.code)
+}
+```
+
+### Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `token` | `string` | Yes | The M2M access token to verify |
+| `publicKey` | `KeyLike \| Uint8Array` | Yes | Public key for signature verification |
+| `issuer` | `string` | Yes | Expected issuer (iss claim) |
+| `audience` | `string` | No | Expected audience (aud claim) |
+| `clockTolerance` | `number` | No | Clock tolerance in seconds for exp/nbf checks |
+
+### Response Types
+
+**Success Response:**
+```ts
+interface VerifyM2MTokenResult {
+  valid: true
+  claims: M2MTokenClaims    // Full token claims
+  clientId: string          // Client ID from token
+  tenantId?: string         // Tenant ID if present
+  scopes: string[]          // Parsed scopes as array
+  expiresAt: number         // Expiration timestamp (Unix seconds)
+}
+```
+
+**Error Response:**
+```ts
+interface VerifyM2MTokenError {
+  valid: false
+  error: string             // Human-readable error message
+  code: "invalid_token" | "expired_token" | "invalid_issuer"
+      | "invalid_audience" | "not_m2m_token" | "missing_claims"
+}
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| `invalid_token` | Token signature verification failed |
+| `expired_token` | Token has expired |
+| `invalid_issuer` | Token issuer doesn't match expected |
+| `invalid_audience` | Token audience doesn't match expected |
+| `not_m2m_token` | Token is not an M2M token (missing `mode: "m2m"`) |
+| `missing_claims` | Required claims (client_id, scope, sub, exp) missing |
+
+### Scope Helper Functions
+
+```ts
+import { hasScope, hasAllScopes, hasAnyScope } from "@openauthjs/openauth/m2m"
+
+const result = await verifyM2MToken({ ... })
+
+if (result.valid) {
+  // Check single scope
+  if (hasScope(result.scopes, "users:write")) {
+    // Allow write access
+  }
+
+  // Check all scopes required
+  if (hasAllScopes(result.scopes, ["users:read", "users:write"])) {
+    // Has both scopes
+  }
+
+  // Check any scope matches
+  if (hasAnyScope(result.scopes, ["admin:*", "superuser"])) {
+    // Has at least one admin scope
+  }
+}
+```
+
+### Middleware Example
+
+```ts title="m2m-middleware.ts"
+import { verifyM2MToken, hasAllScopes } from "@openauthjs/openauth/m2m"
+import { importSPKI } from "jose"
+
+// Load public key once at startup
+const publicKey = await importSPKI(process.env.JWT_PUBLIC_KEY!, "ES256")
+
+export function requireM2M(requiredScopes: string[] = []) {
+  return async (c: Context, next: Next) => {
+    const authHeader = c.req.header("Authorization")
+    if (!authHeader?.startsWith("Bearer ")) {
+      return c.json({ error: "Missing bearer token" }, 401)
+    }
+
+    const result = await verifyM2MToken({
+      token: authHeader.slice(7),
+      publicKey,
+      issuer: process.env.AUTH_ISSUER!,
+    })
+
+    if (!result.valid) {
+      return c.json({
+        error: result.code,
+        message: result.error
+      }, 401)
+    }
+
+    // Check required scopes
+    if (requiredScopes.length && !hasAllScopes(result.scopes, requiredScopes)) {
+      return c.json({
+        error: "insufficient_scope",
+        required: requiredScopes,
+        granted: result.scopes,
+      }, 403)
+    }
+
+    // Attach to context
+    c.set("m2m", result)
+    await next()
+  }
+}
+
+// Usage
+app.get("/api/users", requireM2M(["users:read"]), handler)
+app.post("/api/users", requireM2M(["users:write"]), handler)
+```
+
 ## Security Best Practices
 
 1. **Rotate client secrets regularly** - Treat secrets like passwords and rotate them periodically
