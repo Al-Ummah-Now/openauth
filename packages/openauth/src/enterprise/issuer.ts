@@ -811,6 +811,64 @@ export function createMultiTenantIssuer<
   })
 
   // ============================================
+  // 7B. ACCOUNT PICKER REMOVE
+  // ============================================
+  // Remove an account from the session and return to the account picker
+
+  app.post("/account-picker/remove", async (c) => {
+    const tenant = getTenant(c)
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 400)
+    }
+
+    // Parse form data
+    const formData = await c.req.parseBody()
+    const userId = formData.user_id as string
+    const clientId = formData.client_id as string
+    const redirectUri = formData.redirect_uri as string
+    const responseType = formData.response_type as string
+    const state = formData.state as string
+    const scope = formData.scope as string
+    const nonce = formData.nonce as string
+
+    if (!userId) {
+      return c.json({ error: "Missing user_id" }, 400)
+    }
+
+    // Get browser session from cookie
+    const browserSession = c.get("browserSession")
+    if (browserSession) {
+      // Remove the account from the session
+      await config.sessionService.removeAccount(browserSession.id, userId)
+
+      // If this was the active account, we need to switch to another or clear
+      if (browserSession.active_user_id === userId) {
+        const remainingAccounts = await config.sessionService.listAccounts(
+          browserSession.id,
+        )
+        if (remainingAccounts.length > 0) {
+          await config.sessionService.switchActiveAccount(
+            browserSession.id,
+            remainingAccounts[0].user_id,
+          )
+        }
+      }
+    }
+
+    // Redirect back to authorize with select_account prompt
+    const authorizeUrl = new URL("/authorize", new URL(c.req.url).origin)
+    authorizeUrl.searchParams.set("client_id", clientId)
+    authorizeUrl.searchParams.set("redirect_uri", redirectUri)
+    authorizeUrl.searchParams.set("response_type", responseType)
+    if (state) authorizeUrl.searchParams.set("state", state)
+    if (scope) authorizeUrl.searchParams.set("scope", scope)
+    if (nonce) authorizeUrl.searchParams.set("nonce", nonce)
+    authorizeUrl.searchParams.set("prompt", "select_account")
+
+    return c.redirect(authorizeUrl.toString(), 302)
+  })
+
+  // ============================================
   // 8. WELL-KNOWN ENDPOINTS
   // ============================================
   // Override to include enterprise-specific claims
@@ -1107,6 +1165,31 @@ function renderAccountPicker(
     .add-account:hover {
       text-decoration: underline;
     }
+    .account-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      gap: 0.5rem;
+    }
+    .account-btn {
+      margin-bottom: 0;
+      flex: 1;
+    }
+    .signout-btn {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      color: var(--oa-secondary);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .signout-btn:hover {
+      border-color: #dc3545;
+      color: #dc3545;
+    }
   </style>
 </head>
 <body>
@@ -1116,21 +1199,33 @@ function renderAccountPicker(
     ${accounts
       .map(
         (account) => `
-      <a href="/authorize?client_id=${encodeURIComponent(authorization.client_id)}&redirect_uri=${encodeURIComponent(authorization.redirect_uri)}&response_type=${encodeURIComponent(authorization.response_type)}&state=${encodeURIComponent(authorization.state || "")}&prompt=none&account_hint=${encodeURIComponent(account.userId)}" class="account-btn ${account.isActive ? "active" : ""}">
-        <div class="avatar">
-          ${
-            account.avatarUrl
-              ? `<img src="${account.avatarUrl}" alt="">`
-              : (account.displayName || account.email || "?")
-                  .charAt(0)
-                  .toUpperCase()
-          }
-        </div>
-        <div class="account-info">
-          <div class="account-name">${account.displayName || account.email || account.userId}</div>
-          ${account.email && account.displayName ? `<div class="account-email">${account.email}</div>` : ""}
-        </div>
-      </a>
+      <div class="account-row">
+        <a href="/authorize?client_id=${encodeURIComponent(authorization.client_id)}&redirect_uri=${encodeURIComponent(authorization.redirect_uri)}&response_type=${encodeURIComponent(authorization.response_type)}&state=${encodeURIComponent(authorization.state || "")}&scope=${encodeURIComponent(authorization.scope || "")}&nonce=${encodeURIComponent(authorization.nonce || "")}&prompt=none&account_hint=${encodeURIComponent(account.userId)}" class="account-btn ${account.isActive ? "active" : ""}">
+          <div class="avatar">
+            ${
+              account.avatarUrl
+                ? `<img src="${account.avatarUrl}" alt="">`
+                : (account.displayName || account.email || "?")
+                    .charAt(0)
+                    .toUpperCase()
+            }
+          </div>
+          <div class="account-info">
+            <div class="account-name">${account.displayName || account.email || account.userId}</div>
+            ${account.email && account.displayName ? `<div class="account-email">${account.email}</div>` : ""}
+          </div>
+        </a>
+        <form method="POST" action="/account-picker/remove" style="margin: 0;">
+          <input type="hidden" name="user_id" value="${account.userId}">
+          <input type="hidden" name="client_id" value="${authorization.client_id}">
+          <input type="hidden" name="redirect_uri" value="${authorization.redirect_uri}">
+          <input type="hidden" name="response_type" value="${authorization.response_type}">
+          <input type="hidden" name="state" value="${authorization.state || ""}">
+          <input type="hidden" name="scope" value="${authorization.scope || ""}">
+          <input type="hidden" name="nonce" value="${authorization.nonce || ""}">
+          <button type="submit" class="signout-btn">Sign out</button>
+        </form>
+      </div>
     `,
       )
       .join("")}
