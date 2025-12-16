@@ -145,6 +145,16 @@ const loginUrl = `/authorize?prompt=login&...`
 const selectUrl = `/authorize?prompt=select_account&...`
 ```
 
+### Account Picker Sign Out
+
+When the account picker is displayed (`prompt=select_account`), users can sign out of individual accounts without leaving the authorization flow. Each account shows a "Sign out" button that:
+
+1. Removes that account from the browser session
+2. Keeps the user on the account picker with remaining accounts
+3. Preserves the original authorization parameters (redirect_uri, state, etc.)
+
+This allows users to clean up their session before selecting which account to use, similar to Google's account picker behavior.
+
 ## Session Service
 
 For advanced use cases, use the session service directly:

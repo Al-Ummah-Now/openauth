@@ -6,6 +6,46 @@ import { createHash } from "crypto"
 import { readFileSync, existsSync, readdirSync } from "fs"
 import { dirname, join } from "path"
 import { fileURLToPath } from "url"
+
+// src/migrations/utils.ts
+function parseSchemaChanges(sql) {
+  const changes = []
+  const addColumnRegex = /ALTER\s+TABLE\s+(\w+)\s+ADD\s+(?:COLUMN\s+)?(\w+)/gi
+  let match
+  while ((match = addColumnRegex.exec(sql)) !== null) {
+    changes.push({ type: "add_column", table: match[1], column: match[2] })
+  }
+  const dropColumnRegex = /ALTER\s+TABLE\s+(\w+)\s+DROP\s+(?:COLUMN\s+)?(\w+)/gi
+  while ((match = dropColumnRegex.exec(sql)) !== null) {
+    changes.push({ type: "drop_column", table: match[1], column: match[2] })
+  }
+  const createTableRegex = /CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\s+)(\w+)/gi
+  while ((match = createTableRegex.exec(sql)) !== null) {
+    changes.push({ type: "create_table", table: match[1] })
+  }
+  const dropTableRegex = /DROP\s+TABLE\s+(?!IF\s+EXISTS\s+)(\w+)/gi
+  while ((match = dropTableRegex.exec(sql)) !== null) {
+    changes.push({ type: "drop_table", table: match[1] })
+  }
+  const createIndexRegex =
+    /CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?!IF\s+NOT\s+EXISTS\s+)(\w+)\s+ON\s+(\w+)/gi
+  while ((match = createIndexRegex.exec(sql)) !== null) {
+    changes.push({ type: "create_index", table: match[2], index: match[1] })
+  }
+  return changes
+}
+function isAlreadyAppliedError(error) {
+  const alreadyAppliedPatterns = [
+    /duplicate column name/i,
+    /column .* already exists/i,
+    /table .* already exists/i,
+    /index .* already exists/i,
+    /SQLITE_ERROR.*already exists/i,
+  ]
+  return alreadyAppliedPatterns.some((pattern) => pattern.test(error))
+}
+
+// bin/cli.ts
 var __filename2 = fileURLToPath(import.meta.url)
 var __dirname2 = dirname(__filename2)
 var migrationsDir = join(__dirname2, "..", "src", "migrations")
@@ -130,7 +170,85 @@ function checkMigrationsTableExists(dbName, options) {
     "SELECT name FROM sqlite_master WHERE type='table' AND name='_openauth_migrations'",
     options,
   )
-  return result.success && result.output?.includes("_openauth_migrations")
+  return (
+    result.success && (result.output?.includes("_openauth_migrations") ?? false)
+  )
+}
+function checkColumnExists(dbName, tableName, columnName, options) {
+  const result = executeSql(
+    dbName,
+    `SELECT name FROM pragma_table_info('${tableName}') WHERE name = '${columnName}'`,
+    options,
+  )
+  return result.success && (result.output?.includes(columnName) ?? false)
+}
+function checkTableExists(dbName, tableName, options) {
+  const result = executeSql(
+    dbName,
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
+    options,
+  )
+  return result.success && (result.output?.includes(tableName) ?? false)
+}
+function checkIndexExists(dbName, indexName, options) {
+  const result = executeSql(
+    dbName,
+    `SELECT name FROM sqlite_master WHERE type='index' AND name='${indexName}'`,
+    options,
+  )
+  return result.success && (result.output?.includes(indexName) ?? false)
+}
+function isMigrationAlreadyApplied(dbName, migrationPath, options) {
+  const content = readFileSync(migrationPath, "utf-8")
+  const changes = parseSchemaChanges(content)
+  if (changes.length === 0) {
+    return { applied: false }
+  }
+  for (const change of changes) {
+    switch (change.type) {
+      case "add_column":
+        if (checkColumnExists(dbName, change.table, change.column, options)) {
+          return {
+            applied: true,
+            reason: `Column ${change.table}.${change.column} already exists`,
+          }
+        }
+        break
+      case "drop_column":
+        if (!checkColumnExists(dbName, change.table, change.column, options)) {
+          return {
+            applied: true,
+            reason: `Column ${change.table}.${change.column} already dropped`,
+          }
+        }
+        break
+      case "create_table":
+        if (checkTableExists(dbName, change.table, options)) {
+          return {
+            applied: true,
+            reason: `Table ${change.table} already exists`,
+          }
+        }
+        break
+      case "drop_table":
+        if (!checkTableExists(dbName, change.table, options)) {
+          return {
+            applied: true,
+            reason: `Table ${change.table} already dropped`,
+          }
+        }
+        break
+      case "create_index":
+        if (checkIndexExists(dbName, change.index, options)) {
+          return {
+            applied: true,
+            reason: `Index ${change.index} already exists`,
+          }
+        }
+        break
+    }
+  }
+  return { applied: false }
 }
 function getAppliedMigrations(dbName, options) {
   const result = executeSql(
@@ -323,10 +441,34 @@ Warning: ${migration.name} has been modified since it was applied.`)
         continue
       }
     }
+    const schemaCheck = isMigrationAlreadyApplied(
+      dbName,
+      migration.path,
+      options,
+    )
+    if (schemaCheck.applied) {
+      console.log(`
+Skipping: ${migration.name}`)
+      console.log(`  ${schemaCheck.reason}`)
+      const recordResult = recordMigration(dbName, migration, options)
+      if (recordResult.success) {
+        console.log(`  Recorded in migrations table`)
+      }
+      continue
+    }
     console.log(`
 Applying: ${migration.name}`)
     const result = executeSqlFile(dbName, migration.path, options)
     if (!result.success) {
+      if (result.error && isAlreadyAppliedError(result.error)) {
+        console.log(`  Already applied (schema exists)`)
+        const recordResult = recordMigration(dbName, migration, options)
+        if (recordResult.success) {
+          console.log(`  Recorded in migrations table`)
+        }
+        appliedCount++
+        continue
+      }
       console.error(`Error: Failed to apply ${migration.name}`)
       if (result.error) {
         console.error(result.error)
@@ -341,6 +483,12 @@ Applying: ${migration.name}`)
       const recordResult = recordMigration(dbName, migration, options)
       if (!recordResult.success) {
         console.warn(`Warning: Could not record migration ${migration.name}`)
+        setTimeout(() => {
+          const retryResult = recordMigration(dbName, migration, options)
+          if (retryResult.success) {
+            console.log(`  Migration recorded on retry`)
+          }
+        }, 500)
       }
     }
     console.log(`  Applied successfully (checksum: ${migration.checksum})`)
