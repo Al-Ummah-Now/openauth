@@ -16,6 +16,11 @@ import { createHash } from "crypto"
 import { readFileSync, existsSync, readdirSync } from "fs"
 import { basename, dirname, join } from "path"
 import { fileURLToPath } from "url"
+import {
+  parseSchemaChanges,
+  isAlreadyAppliedError,
+  type SchemaChange,
+} from "../src/migrations/utils.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -239,7 +244,127 @@ function checkMigrationsTableExists(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='_openauth_migrations'",
     options,
   )
-  return result.success && result.output?.includes("_openauth_migrations")
+  return (
+    result.success && (result.output?.includes("_openauth_migrations") ?? false)
+  )
+}
+
+/**
+ * Check if a column exists in a table
+ */
+function checkColumnExists(
+  dbName: string,
+  tableName: string,
+  columnName: string,
+  options: WranglerOptions,
+): boolean {
+  const result = executeSql(
+    dbName,
+    `SELECT name FROM pragma_table_info('${tableName}') WHERE name = '${columnName}'`,
+    options,
+  )
+  return result.success && (result.output?.includes(columnName) ?? false)
+}
+
+/**
+ * Check if a table exists
+ */
+function checkTableExists(
+  dbName: string,
+  tableName: string,
+  options: WranglerOptions,
+): boolean {
+  const result = executeSql(
+    dbName,
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
+    options,
+  )
+  return result.success && (result.output?.includes(tableName) ?? false)
+}
+
+/**
+ * Check if an index exists
+ */
+function checkIndexExists(
+  dbName: string,
+  indexName: string,
+  options: WranglerOptions,
+): boolean {
+  const result = executeSql(
+    dbName,
+    `SELECT name FROM sqlite_master WHERE type='index' AND name='${indexName}'`,
+    options,
+  )
+  return result.success && (result.output?.includes(indexName) ?? false)
+}
+
+/**
+ * Check if migration is already applied by examining schema
+ * This handles cases where tracking table failed to record
+ */
+function isMigrationAlreadyApplied(
+  dbName: string,
+  migrationPath: string,
+  options: WranglerOptions,
+): { applied: boolean; reason?: string } {
+  const content = readFileSync(migrationPath, "utf-8")
+  const changes = parseSchemaChanges(content)
+
+  if (changes.length === 0) {
+    // No detectable schema changes - can't pre-check
+    return { applied: false }
+  }
+
+  for (const change of changes) {
+    switch (change.type) {
+      case "add_column":
+        if (checkColumnExists(dbName, change.table, change.column!, options)) {
+          return {
+            applied: true,
+            reason: `Column ${change.table}.${change.column} already exists`,
+          }
+        }
+        break
+
+      case "drop_column":
+        if (!checkColumnExists(dbName, change.table, change.column!, options)) {
+          return {
+            applied: true,
+            reason: `Column ${change.table}.${change.column} already dropped`,
+          }
+        }
+        break
+
+      case "create_table":
+        if (checkTableExists(dbName, change.table, options)) {
+          return {
+            applied: true,
+            reason: `Table ${change.table} already exists`,
+          }
+        }
+        break
+
+      case "drop_table":
+        if (!checkTableExists(dbName, change.table, options)) {
+          return {
+            applied: true,
+            reason: `Table ${change.table} already dropped`,
+          }
+        }
+        break
+
+      case "create_index":
+        if (checkIndexExists(dbName, change.index!, options)) {
+          return {
+            applied: true,
+            reason: `Index ${change.index} already exists`,
+          }
+        }
+        break
+    }
+  }
+
+  return { applied: false }
 }
 
 /**
@@ -492,10 +617,40 @@ function migrate(args: string[]) {
       }
     }
 
+    // Pre-check: Is migration already applied by examining schema?
+    // This catches cases where tracking table failed to record
+    const schemaCheck = isMigrationAlreadyApplied(
+      dbName,
+      migration.path,
+      options,
+    )
+    if (schemaCheck.applied) {
+      console.log(`\nSkipping: ${migration.name}`)
+      console.log(`  ${schemaCheck.reason}`)
+      // Try to record it since it wasn't tracked
+      const recordResult = recordMigration(dbName, migration, options)
+      if (recordResult.success) {
+        console.log(`  Recorded in migrations table`)
+      }
+      continue
+    }
+
     console.log(`\nApplying: ${migration.name}`)
     const result = executeSqlFile(dbName, migration.path, options)
 
     if (!result.success) {
+      // Check if error indicates migration was already applied
+      if (result.error && isAlreadyAppliedError(result.error)) {
+        console.log(`  Already applied (schema exists)`)
+        // Record it since it wasn't tracked
+        const recordResult = recordMigration(dbName, migration, options)
+        if (recordResult.success) {
+          console.log(`  Recorded in migrations table`)
+        }
+        appliedCount++
+        continue
+      }
+
       console.error(`Error: Failed to apply ${migration.name}`)
       if (result.error) {
         console.error(result.error)
@@ -512,6 +667,13 @@ function migrate(args: string[]) {
       const recordResult = recordMigration(dbName, migration, options)
       if (!recordResult.success) {
         console.warn(`Warning: Could not record migration ${migration.name}`)
+        // Retry once after a short delay (D1 might need time to commit)
+        setTimeout(() => {
+          const retryResult = recordMigration(dbName, migration, options)
+          if (retryResult.success) {
+            console.log(`  Migration recorded on retry`)
+          }
+        }, 500)
       }
     }
 
