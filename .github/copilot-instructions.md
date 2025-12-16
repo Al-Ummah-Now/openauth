@@ -76,8 +76,9 @@ npx prettier --write src test bin
 
 ## Migration System
 
-Migrations are in `src/migrations/` with numeric prefixes (001_, 002_, etc.).
+Migrations are in `src/migrations/` with numeric prefixes (001*, 002*, etc.).
 The CLI (`bin/cli.ts`) handles:
+
 - Schema change detection (ADD COLUMN, CREATE TABLE, etc.)
 - Idempotent execution (checks if changes already applied)
 - Migration tracking in `_openauth_migrations` table
