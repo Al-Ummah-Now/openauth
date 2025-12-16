@@ -811,6 +811,85 @@ export function createMultiTenantIssuer<
   })
 
   // ============================================
+  // 7B. ACCOUNT PICKER REMOVE
+  // ============================================
+  // Remove an account from the session and return to the account picker
+
+  app.post("/account-picker/remove", async (c) => {
+    const tenant = getTenant(c)
+    if (!tenant) {
+      return c.json({ error: "Tenant not found" }, 400)
+    }
+
+    // Parse form data with proper type validation
+    const formData = await c.req.parseBody()
+    const userId =
+      typeof formData.user_id === "string" ? formData.user_id : undefined
+    const clientId =
+      typeof formData.client_id === "string" ? formData.client_id : undefined
+    const redirectUri =
+      typeof formData.redirect_uri === "string"
+        ? formData.redirect_uri
+        : undefined
+    const responseType =
+      typeof formData.response_type === "string"
+        ? formData.response_type
+        : undefined
+    const state =
+      typeof formData.state === "string" ? formData.state : undefined
+    const scope =
+      typeof formData.scope === "string" ? formData.scope : undefined
+    const nonce =
+      typeof formData.nonce === "string" ? formData.nonce : undefined
+
+    // Validate required OAuth parameters
+    if (!userId) {
+      return c.json({ error: "Missing user_id" }, 400)
+    }
+    if (!clientId) {
+      return c.json({ error: "Missing or invalid client_id" }, 400)
+    }
+    if (!redirectUri) {
+      return c.json({ error: "Missing or invalid redirect_uri" }, 400)
+    }
+    if (!responseType) {
+      return c.json({ error: "Missing or invalid response_type" }, 400)
+    }
+
+    // Get browser session from cookie
+    const browserSession = c.get("browserSession")
+    if (browserSession) {
+      // Remove the account from the session
+      await config.sessionService.removeAccount(browserSession.id, userId)
+
+      // If this was the active account, we need to switch to another or clear
+      if (browserSession.active_user_id === userId) {
+        const remainingAccounts = await config.sessionService.listAccounts(
+          browserSession.id,
+        )
+        if (remainingAccounts.length > 0) {
+          await config.sessionService.switchActiveAccount(
+            browserSession.id,
+            remainingAccounts[0].user_id,
+          )
+        }
+      }
+    }
+
+    // Redirect back to authorize with select_account prompt
+    const authorizeUrl = new URL("/authorize", new URL(c.req.url).origin)
+    authorizeUrl.searchParams.set("client_id", clientId)
+    authorizeUrl.searchParams.set("redirect_uri", redirectUri)
+    authorizeUrl.searchParams.set("response_type", responseType)
+    if (state) authorizeUrl.searchParams.set("state", state)
+    if (scope) authorizeUrl.searchParams.set("scope", scope)
+    if (nonce) authorizeUrl.searchParams.set("nonce", nonce)
+    authorizeUrl.searchParams.set("prompt", "select_account")
+
+    return c.redirect(authorizeUrl.toString(), 302)
+  })
+
+  // ============================================
   // 8. WELL-KNOWN ENDPOINTS
   // ============================================
   // Override to include enterprise-specific claims
@@ -994,6 +1073,19 @@ async function defaultAllowCheck(
 }
 
 /**
+ * Escape HTML special characters to prevent XSS
+ */
+export function escapeHtml(str: string | undefined | null): string {
+  if (!str) return ""
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+/**
  * Render account picker UI
  */
 function renderAccountPicker(
@@ -1107,6 +1199,31 @@ function renderAccountPicker(
     .add-account:hover {
       text-decoration: underline;
     }
+    .account-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      gap: 0.5rem;
+    }
+    .account-btn {
+      margin-bottom: 0;
+      flex: 1;
+    }
+    .signout-btn {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      color: var(--oa-secondary);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .signout-btn:hover {
+      border-color: #dc3545;
+      color: #dc3545;
+    }
   </style>
 </head>
 <body>
@@ -1114,25 +1231,55 @@ function renderAccountPicker(
     <h1>Choose Account</h1>
     <p class="subtitle">Select an account to continue</p>
     ${accounts
-      .map(
-        (account) => `
-      <a href="/authorize?client_id=${encodeURIComponent(authorization.client_id)}&redirect_uri=${encodeURIComponent(authorization.redirect_uri)}&response_type=${encodeURIComponent(authorization.response_type)}&state=${encodeURIComponent(authorization.state || "")}&prompt=none&account_hint=${encodeURIComponent(account.userId)}" class="account-btn ${account.isActive ? "active" : ""}">
-        <div class="avatar">
-          ${
-            account.avatarUrl
-              ? `<img src="${account.avatarUrl}" alt="">`
-              : (account.displayName || account.email || "?")
-                  .charAt(0)
-                  .toUpperCase()
-          }
-        </div>
-        <div class="account-info">
-          <div class="account-name">${account.displayName || account.email || account.userId}</div>
-          ${account.email && account.displayName ? `<div class="account-email">${account.email}</div>` : ""}
-        </div>
-      </a>
-    `,
-      )
+      .map((account) => {
+        const accountUrl = new URL("/authorize", baseUrl)
+        accountUrl.searchParams.set("client_id", authorization.client_id)
+        accountUrl.searchParams.set("redirect_uri", authorization.redirect_uri)
+        accountUrl.searchParams.set(
+          "response_type",
+          authorization.response_type,
+        )
+        if (authorization.state)
+          accountUrl.searchParams.set("state", authorization.state)
+        if (authorization.scope)
+          accountUrl.searchParams.set("scope", authorization.scope)
+        if (authorization.nonce)
+          accountUrl.searchParams.set("nonce", authorization.nonce)
+        accountUrl.searchParams.set("prompt", "none")
+        accountUrl.searchParams.set("account_hint", account.userId)
+        const activeClass = Boolean(account.isActive) ? "active" : ""
+        return `
+      <div class="account-row">
+        <a href="${escapeHtml(accountUrl.toString())}" class="account-btn ${activeClass}">
+          <div class="avatar">
+            ${
+              account.avatarUrl
+                ? `<img src="${escapeHtml(account.avatarUrl)}" alt="">`
+                : escapeHtml(
+                    (account.displayName || account.email || "?")
+                      .charAt(0)
+                      .toUpperCase(),
+                  )
+            }
+          </div>
+          <div class="account-info">
+            <div class="account-name">${escapeHtml(account.displayName || account.email || account.userId)}</div>
+            ${account.email && account.displayName ? `<div class="account-email">${escapeHtml(account.email)}</div>` : ""}
+          </div>
+        </a>
+        <form method="POST" action="/account-picker/remove" style="margin: 0;">
+          <input type="hidden" name="user_id" value="${escapeHtml(account.userId)}">
+          <input type="hidden" name="client_id" value="${escapeHtml(authorization.client_id)}">
+          <input type="hidden" name="redirect_uri" value="${escapeHtml(authorization.redirect_uri)}">
+          <input type="hidden" name="response_type" value="${escapeHtml(authorization.response_type)}">
+          <input type="hidden" name="state" value="${escapeHtml(authorization.state || "")}">
+          <input type="hidden" name="scope" value="${escapeHtml(authorization.scope || "")}">
+          <input type="hidden" name="nonce" value="${escapeHtml(authorization.nonce || "")}">
+          <button type="submit" class="signout-btn">Sign out</button>
+        </form>
+      </div>
+    `
+      })
       .join("")}
     <a href="${generateAddAccountUrl(baseUrl + "/authorize", authorization)}" class="add-account">
       + Use another account

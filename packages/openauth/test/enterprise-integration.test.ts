@@ -2127,3 +2127,342 @@ describe("Enterprise Issuer - Account Picker", () => {
     expect(parsed.searchParams.get("prompt")).toBe("login")
   })
 })
+
+// ============================================
+// ESCAPE HTML TESTS
+// ============================================
+
+import { escapeHtml } from "../src/enterprise/issuer.js"
+
+describe("escapeHtml", () => {
+  test("escapes ampersand", () => {
+    expect(escapeHtml("foo & bar")).toBe("foo &amp; bar")
+  })
+
+  test("escapes less than", () => {
+    expect(escapeHtml("foo < bar")).toBe("foo &lt; bar")
+  })
+
+  test("escapes greater than", () => {
+    expect(escapeHtml("foo > bar")).toBe("foo &gt; bar")
+  })
+
+  test("escapes double quotes", () => {
+    expect(escapeHtml('foo "bar" baz')).toBe("foo &quot;bar&quot; baz")
+  })
+
+  test("escapes single quotes", () => {
+    expect(escapeHtml("foo 'bar' baz")).toBe("foo &#39;bar&#39; baz")
+  })
+
+  test("escapes all special characters together", () => {
+    expect(escapeHtml('<script>alert("XSS")</script>')).toBe(
+      "&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;",
+    )
+  })
+
+  test("handles null input", () => {
+    expect(escapeHtml(null)).toBe("")
+  })
+
+  test("handles undefined input", () => {
+    expect(escapeHtml(undefined)).toBe("")
+  })
+
+  test("handles empty string", () => {
+    expect(escapeHtml("")).toBe("")
+  })
+
+  test("returns same string when no special characters", () => {
+    expect(escapeHtml("hello world")).toBe("hello world")
+  })
+
+  test("prevents XSS attack vectors", () => {
+    // Event handler injection
+    expect(escapeHtml('onmouseover="alert(1)"')).toBe(
+      "onmouseover=&quot;alert(1)&quot;",
+    )
+
+    // JavaScript URL
+    expect(escapeHtml("javascript:alert('XSS')")).toBe(
+      "javascript:alert(&#39;XSS&#39;)",
+    )
+
+    // HTML tag injection
+    expect(escapeHtml("<img src=x onerror=alert(1)>")).toBe(
+      "&lt;img src=x onerror=alert(1)&gt;",
+    )
+  })
+})
+
+// ============================================
+// ACCOUNT PICKER REMOVE ENDPOINT TESTS
+// ============================================
+
+describe("Account Picker Remove Endpoint", () => {
+  let storage: ReturnType<typeof MemoryStorage>
+  let sessionService: SessionServiceImpl
+  let tenantService: TenantServiceImpl
+  let browserSession: BrowserSession
+
+  beforeEach(async () => {
+    storage = MemoryStorage()
+    sessionService = new SessionServiceImpl(storage)
+    tenantService = new TenantServiceImpl(storage)
+
+    // Create default tenant
+    await tenantService.createTenant({
+      id: "default",
+      name: "Default Tenant",
+      domains: ["auth.example.com"],
+      status: "active",
+    })
+
+    // Create a browser session with multiple accounts
+    browserSession = await sessionService.createBrowserSession({
+      tenantId: "default",
+      userAgent: "Mozilla/5.0",
+    })
+    await sessionService.addAccountToSession({
+      browserSessionId: browserSession.id,
+      userId: "user-1",
+      subjectType: "user",
+      subjectProperties: { email: "user1@example.com" },
+      refreshToken: "refresh-token-1",
+      clientId: "test-client",
+      ttl: 86400,
+    })
+    await sessionService.addAccountToSession({
+      browserSessionId: browserSession.id,
+      userId: "user-2",
+      subjectType: "user",
+      subjectProperties: { email: "user2@example.com" },
+      refreshToken: "refresh-token-2",
+      clientId: "test-client",
+      ttl: 86400,
+    })
+  })
+
+  const dummyProvider = {
+    type: "dummy",
+    init(route: any, ctx: any) {
+      route.get("/authorize", async (c: any) => {
+        return ctx.success(c, { email: "test@example.com" })
+      })
+    },
+  }
+
+  test("returns error when user_id is missing", async () => {
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService,
+      storage,
+      sessionSecret,
+      providers: { dummy: dummyProvider },
+      subjects,
+    })
+
+    const formData = new FormData()
+    formData.append("client_id", "test-client")
+    formData.append("redirect_uri", "https://app.example.com/callback")
+    formData.append("response_type", "code")
+
+    const response = await app.request(
+      "http://auth.example.com/account-picker/remove",
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Tenant-ID": "default",
+        },
+      },
+    )
+
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe("Missing user_id")
+  })
+
+  test("returns error when client_id is missing", async () => {
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService,
+      storage,
+      sessionSecret,
+      providers: { dummy: dummyProvider },
+      subjects,
+    })
+
+    const formData = new FormData()
+    formData.append("user_id", "user-1")
+    formData.append("redirect_uri", "https://app.example.com/callback")
+    formData.append("response_type", "code")
+
+    const response = await app.request(
+      "http://auth.example.com/account-picker/remove",
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Tenant-ID": "default",
+        },
+      },
+    )
+
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe("Missing or invalid client_id")
+  })
+
+  test("returns error when redirect_uri is missing", async () => {
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService,
+      storage,
+      sessionSecret,
+      providers: { dummy: dummyProvider },
+      subjects,
+    })
+
+    const formData = new FormData()
+    formData.append("user_id", "user-1")
+    formData.append("client_id", "test-client")
+    formData.append("response_type", "code")
+
+    const response = await app.request(
+      "http://auth.example.com/account-picker/remove",
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Tenant-ID": "default",
+        },
+      },
+    )
+
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe("Missing or invalid redirect_uri")
+  })
+
+  test("returns error when response_type is missing", async () => {
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService,
+      storage,
+      sessionSecret,
+      providers: { dummy: dummyProvider },
+      subjects,
+    })
+
+    const formData = new FormData()
+    formData.append("user_id", "user-1")
+    formData.append("client_id", "test-client")
+    formData.append("redirect_uri", "https://app.example.com/callback")
+
+    const response = await app.request(
+      "http://auth.example.com/account-picker/remove",
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Tenant-ID": "default",
+        },
+      },
+    )
+
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe("Missing or invalid response_type")
+  })
+
+  test("redirects to authorize with select_account prompt after removal", async () => {
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService,
+      storage,
+      sessionSecret,
+      providers: { dummy: dummyProvider },
+      subjects,
+    })
+
+    const formData = new FormData()
+    formData.append("user_id", "user-1")
+    formData.append("client_id", "test-client")
+    formData.append("redirect_uri", "https://app.example.com/callback")
+    formData.append("response_type", "code")
+    formData.append("state", "test-state")
+    formData.append("scope", "openid profile")
+    formData.append("nonce", "test-nonce")
+
+    const response = await app.request(
+      "http://auth.example.com/account-picker/remove",
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Tenant-ID": "default",
+        },
+      },
+    )
+
+    expect(response.status).toBe(302)
+    const location = response.headers.get("Location")
+    expect(location).toBeTruthy()
+
+    const redirectUrl = new URL(location!)
+    expect(redirectUrl.pathname).toBe("/authorize")
+    expect(redirectUrl.searchParams.get("client_id")).toBe("test-client")
+    expect(redirectUrl.searchParams.get("redirect_uri")).toBe(
+      "https://app.example.com/callback",
+    )
+    expect(redirectUrl.searchParams.get("response_type")).toBe("code")
+    expect(redirectUrl.searchParams.get("state")).toBe("test-state")
+    expect(redirectUrl.searchParams.get("scope")).toBe("openid profile")
+    expect(redirectUrl.searchParams.get("nonce")).toBe("test-nonce")
+    expect(redirectUrl.searchParams.get("prompt")).toBe("select_account")
+  })
+
+  test("preserves OAuth parameters in redirect URL", async () => {
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService,
+      storage,
+      sessionSecret,
+      providers: { dummy: dummyProvider },
+      subjects,
+    })
+
+    const formData = new FormData()
+    formData.append("user_id", "user-1")
+    formData.append("client_id", "my-client-id")
+    formData.append("redirect_uri", "https://myapp.com/oauth/callback")
+    formData.append("response_type", "code")
+    formData.append("state", "my-state-123")
+    formData.append("scope", "openid email")
+
+    const response = await app.request(
+      "http://auth.example.com/account-picker/remove",
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Tenant-ID": "default",
+        },
+      },
+    )
+
+    expect(response.status).toBe(302)
+    const location = response.headers.get("Location")!
+    const redirectUrl = new URL(location)
+
+    // All OAuth params should be preserved
+    expect(redirectUrl.searchParams.get("client_id")).toBe("my-client-id")
+    expect(redirectUrl.searchParams.get("redirect_uri")).toBe(
+      "https://myapp.com/oauth/callback",
+    )
+    expect(redirectUrl.searchParams.get("response_type")).toBe("code")
+    expect(redirectUrl.searchParams.get("state")).toBe("my-state-123")
+    expect(redirectUrl.searchParams.get("scope")).toBe("openid email")
+  })
+})
