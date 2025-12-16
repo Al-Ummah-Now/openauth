@@ -244,7 +244,7 @@ function checkMigrationsTableExists(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='_openauth_migrations'",
     options,
   )
-  return result.success && result.output?.includes("_openauth_migrations")
+  return result.success && (result.output?.includes("_openauth_migrations") ?? false)
 }
 
 /**
@@ -261,7 +261,7 @@ function checkColumnExists(
     `SELECT name FROM pragma_table_info('${tableName}') WHERE name = '${columnName}'`,
     options,
   )
-  return result.success && result.output?.includes(columnName)
+  return result.success && (result.output?.includes(columnName) ?? false)
 }
 
 /**
@@ -277,7 +277,7 @@ function checkTableExists(
     `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
     options,
   )
-  return result.success && result.output?.includes(tableName)
+  return result.success && (result.output?.includes(tableName) ?? false)
 }
 
 /**
@@ -293,7 +293,7 @@ function checkIndexExists(
     `SELECT name FROM sqlite_master WHERE type='index' AND name='${indexName}'`,
     options,
   )
-  return result.success && result.output?.includes(indexName)
+  return result.success && (result.output?.includes(indexName) ?? false)
 }
 
 /**

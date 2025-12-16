@@ -170,7 +170,9 @@ function checkMigrationsTableExists(dbName, options) {
     "SELECT name FROM sqlite_master WHERE type='table' AND name='_openauth_migrations'",
     options,
   )
-  return result.success && result.output?.includes("_openauth_migrations")
+  return (
+    result.success && (result.output?.includes("_openauth_migrations") ?? false)
+  )
 }
 function checkColumnExists(dbName, tableName, columnName, options) {
   const result = executeSql(
@@ -178,7 +180,7 @@ function checkColumnExists(dbName, tableName, columnName, options) {
     `SELECT name FROM pragma_table_info('${tableName}') WHERE name = '${columnName}'`,
     options,
   )
-  return result.success && result.output?.includes(columnName)
+  return result.success && (result.output?.includes(columnName) ?? false)
 }
 function checkTableExists(dbName, tableName, options) {
   const result = executeSql(
@@ -186,7 +188,7 @@ function checkTableExists(dbName, tableName, options) {
     `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
     options,
   )
-  return result.success && result.output?.includes(tableName)
+  return result.success && (result.output?.includes(tableName) ?? false)
 }
 function checkIndexExists(dbName, indexName, options) {
   const result = executeSql(
@@ -194,7 +196,7 @@ function checkIndexExists(dbName, indexName, options) {
     `SELECT name FROM sqlite_master WHERE type='index' AND name='${indexName}'`,
     options,
   )
-  return result.success && result.output?.includes(indexName)
+  return result.success && (result.output?.includes(indexName) ?? false)
 }
 function isMigrationAlreadyApplied(dbName, migrationPath, options) {
   const content = readFileSync(migrationPath, "utf-8")
