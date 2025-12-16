@@ -1075,7 +1075,7 @@ async function defaultAllowCheck(
 /**
  * Escape HTML special characters to prevent XSS
  */
-function escapeHtml(str: string | undefined | null): string {
+export function escapeHtml(str: string | undefined | null): string {
   if (!str) return ""
   return str
     .replace(/&/g, "&amp;")

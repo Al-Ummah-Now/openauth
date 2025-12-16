@@ -198,7 +198,7 @@ import type { StorageAdapter } from "../storage/storage.js"
 // ============================================
 
 // Enterprise Issuer Factory
-export { createMultiTenantIssuer } from "./issuer.js"
+export { createMultiTenantIssuer, escapeHtml } from "./issuer.js"
 
 // Session Integration Helpers
 export {
