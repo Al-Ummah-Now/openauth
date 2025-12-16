@@ -268,6 +268,24 @@ describe("SQL query generators", () => {
       expect(query).toContain("pragma_table_info('rbac_roles')")
       expect(query).toContain("name = 'tenant_id'")
     })
+
+    test("rejects invalid table names", () => {
+      expect(() => columnExistsQuery("users; DROP TABLE", "email")).toThrow(
+        "Invalid table name",
+      )
+      expect(() => columnExistsQuery("users'--", "email")).toThrow(
+        "Invalid table name",
+      )
+    })
+
+    test("rejects invalid column names", () => {
+      expect(() => columnExistsQuery("users", "email; --")).toThrow(
+        "Invalid column name",
+      )
+      expect(() => columnExistsQuery("users", "col'")).toThrow(
+        "Invalid column name",
+      )
+    })
   })
 
   describe("tableExistsQuery", () => {
@@ -277,6 +295,13 @@ describe("SQL query generators", () => {
         "SELECT name FROM sqlite_master WHERE type='table' AND name='users'",
       )
     })
+
+    test("rejects invalid table names", () => {
+      expect(() => tableExistsQuery("users; DROP TABLE x")).toThrow(
+        "Invalid table name",
+      )
+      expect(() => tableExistsQuery("users'--")).toThrow("Invalid table name")
+    })
   })
 
   describe("indexExistsQuery", () => {
@@ -285,6 +310,13 @@ describe("SQL query generators", () => {
       expect(query).toBe(
         "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_users_email'",
       )
+    })
+
+    test("rejects invalid index names", () => {
+      expect(() => indexExistsQuery("idx; DROP INDEX")).toThrow(
+        "Invalid index name",
+      )
+      expect(() => indexExistsQuery("idx'--")).toThrow("Invalid index name")
     })
   })
 })

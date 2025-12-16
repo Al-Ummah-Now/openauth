@@ -1416,8 +1416,9 @@ describe("Enterprise Issuer - OAuth Flow with Session Creation", () => {
     })
 
     // Test that we can create a cookie header using the utility
-    const { createSessionCookieHeader } =
-      await import("../src/session/middleware.js")
+    const { createSessionCookieHeader } = await import(
+      "../src/session/middleware.js"
+    )
 
     const cookieHeader = await createSessionCookieHeader(
       browserSession,

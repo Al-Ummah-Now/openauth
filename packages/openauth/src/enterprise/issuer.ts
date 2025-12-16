@@ -821,27 +821,38 @@ export function createMultiTenantIssuer<
       return c.json({ error: "Tenant not found" }, 400)
     }
 
-    // Parse form data
+    // Parse form data with proper type validation
     const formData = await c.req.parseBody()
-    const userId = formData.user_id as string
-    const clientId = formData.client_id as string
-    const redirectUri = formData.redirect_uri as string
-    const responseType = formData.response_type as string
-    const state = formData.state as string
-    const scope = formData.scope as string
-    const nonce = formData.nonce as string
+    const userId =
+      typeof formData.user_id === "string" ? formData.user_id : undefined
+    const clientId =
+      typeof formData.client_id === "string" ? formData.client_id : undefined
+    const redirectUri =
+      typeof formData.redirect_uri === "string"
+        ? formData.redirect_uri
+        : undefined
+    const responseType =
+      typeof formData.response_type === "string"
+        ? formData.response_type
+        : undefined
+    const state =
+      typeof formData.state === "string" ? formData.state : undefined
+    const scope =
+      typeof formData.scope === "string" ? formData.scope : undefined
+    const nonce =
+      typeof formData.nonce === "string" ? formData.nonce : undefined
 
     // Validate required OAuth parameters
     if (!userId) {
       return c.json({ error: "Missing user_id" }, 400)
     }
-    if (!clientId || typeof clientId !== "string") {
+    if (!clientId) {
       return c.json({ error: "Missing or invalid client_id" }, 400)
     }
-    if (!redirectUri || typeof redirectUri !== "string") {
+    if (!redirectUri) {
       return c.json({ error: "Missing or invalid redirect_uri" }, 400)
     }
-    if (!responseType || typeof responseType !== "string") {
+    if (!responseType) {
       return c.json({ error: "Missing or invalid response_type" }, 400)
     }
 

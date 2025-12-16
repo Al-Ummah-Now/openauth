@@ -3,6 +3,22 @@
  * @packageDocumentation
  */
 
+import { createHash } from "crypto"
+
+/**
+ * Valid SQL identifier pattern (alphanumeric and underscore only)
+ */
+const VALID_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+
+/**
+ * Validate SQL identifier to prevent injection
+ */
+function validateIdentifier(name: string, type: string): void {
+  if (!VALID_IDENTIFIER.test(name)) {
+    throw new Error(`Invalid ${type} name: ${name}`)
+  }
+}
+
 /**
  * Schema change types that can be detected and checked
  */
@@ -78,6 +94,8 @@ export function isAlreadyAppliedError(error: string): boolean {
  * Generate SQL to check if a column exists
  */
 export function columnExistsQuery(table: string, column: string): string {
+  validateIdentifier(table, "table")
+  validateIdentifier(column, "column")
   return `SELECT name FROM pragma_table_info('${table}') WHERE name = '${column}'`
 }
 
@@ -85,6 +103,7 @@ export function columnExistsQuery(table: string, column: string): string {
  * Generate SQL to check if a table exists
  */
 export function tableExistsQuery(table: string): string {
+  validateIdentifier(table, "table")
   return `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`
 }
 
@@ -92,6 +111,7 @@ export function tableExistsQuery(table: string): string {
  * Generate SQL to check if an index exists
  */
 export function indexExistsQuery(index: string): string {
+  validateIdentifier(index, "index")
   return `SELECT name FROM sqlite_master WHERE type='index' AND name='${index}'`
 }
 
@@ -99,8 +119,5 @@ export function indexExistsQuery(index: string): string {
  * Calculate SHA-256 checksum (first 16 chars)
  */
 export function calculateChecksum(content: string): string {
-  // Note: In Node/Bun, use crypto.createHash
-  // This is a simplified version for testing
-  const { createHash } = require("crypto")
   return createHash("sha256").update(content).digest("hex").substring(0, 16)
 }
