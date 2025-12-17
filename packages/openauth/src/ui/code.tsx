@@ -29,11 +29,7 @@ import { UnknownStateError } from "../error.js"
 import { Layout } from "./base.js"
 import { FormAlert } from "./form.js"
 import type { Theme } from "./theme.js"
-import {
-  getLocaleFromRequest,
-  getTranslations,
-  type Locale,
-} from "./i18n.js"
+import { getLocaleFromRequest, getTranslations, type Locale } from "./i18n.js"
 
 /**
  * Extracts theme from request header if available
