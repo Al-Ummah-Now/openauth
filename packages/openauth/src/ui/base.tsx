@@ -116,9 +116,7 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
               ) : (
                 ICON_OPENAUTH
               )}
-              {title && (
-                <h1 data-component="site-title">{title}</h1>
-              )}
+              {title && <h1 data-component="site-title">{title}</h1>}
             </div>
             {props.children}
           </div>

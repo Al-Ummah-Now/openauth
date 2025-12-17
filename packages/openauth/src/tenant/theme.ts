@@ -323,6 +323,7 @@ export function readThemeFromHeaders(headers: Headers): {
     logoDark: headers.get(THEME_HEADERS.logoDark) || undefined,
     favicon: headers.get(THEME_HEADERS.favicon) || undefined,
     locale: headers.get(THEME_HEADERS.locale) || undefined,
-    direction: direction === "rtl" ? "rtl" : direction === "ltr" ? "ltr" : undefined,
+    direction:
+      direction === "rtl" ? "rtl" : direction === "ltr" ? "ltr" : undefined,
   }
 }

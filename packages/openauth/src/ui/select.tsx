@@ -27,11 +27,7 @@
 import { Layout } from "./base.js"
 import { ICON_GITHUB, ICON_GOOGLE } from "./icon.js"
 import type { Theme } from "./theme.js"
-import {
-  getLocaleFromRequest,
-  getTranslations,
-  type Locale,
-} from "./i18n.js"
+import { getLocaleFromRequest, getTranslations, type Locale } from "./i18n.js"
 
 /**
  * Extracts theme from request header if available
@@ -115,7 +111,11 @@ export function Select(props?: SelectProps) {
                 data-color="ghost"
               >
                 {icon && <i data-slot="icon">{icon}</i>}
-                {t.continue_with} {match?.display || localizedDisplay[type] || DISPLAY[type] || type}
+                {t.continue_with}{" "}
+                {match?.display ||
+                  localizedDisplay[type] ||
+                  DISPLAY[type] ||
+                  type}
               </a>
             )
           })}
