@@ -34,6 +34,12 @@ import { Layout } from "./base.js"
 import "./form.js"
 import { FormAlert } from "./form.js"
 import type { Theme } from "./theme.js"
+import {
+  getLocaleFromRequest,
+  getTranslations,
+  type Locale,
+  type Translations,
+} from "./i18n.js"
 
 /**
  * Extracts theme from request header if available
@@ -171,17 +177,44 @@ export interface PasswordUIOptions extends Pick<
  * @param input - Configure the UI.
  */
 export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
-  const copy = {
-    ...DEFAULT_COPY,
-    ...input.copy,
-  }
   return {
     validatePassword: input.validatePassword,
     sendCode: input.sendCode,
     login: async (req, form, error): Promise<Response> => {
       const theme = getThemeFromRequest(req)
+      const locale = getLocaleFromRequest(req)
+      const t = getTranslations(locale)
+      const copy = {
+        ...DEFAULT_COPY,
+        // Override with translations
+        error_email_taken: t.error_email_taken,
+        error_invalid_code: t.error_invalid_code,
+        error_invalid_email: t.error_invalid_email,
+        error_invalid_password: t.error_invalid_password,
+        error_password_mismatch: t.error_password_mismatch,
+        error_validation_error: t.error_validation_error,
+        register_title: t.register_title,
+        register_description: t.register_description,
+        login_title: t.login_title,
+        login_description: t.login_description,
+        register: t.register,
+        register_prompt: t.register_prompt,
+        login_prompt: t.login_prompt,
+        login: t.login,
+        change_prompt: t.change_prompt,
+        code_resend: t.code_resend,
+        code_return: t.code_return,
+        logo: t.logo,
+        input_email: t.input_email,
+        input_password: t.input_password,
+        input_code: t.input_code,
+        input_repeat: t.input_repeat,
+        button_continue: t.button_continue,
+        // User overrides take precedence
+        ...input.copy,
+      }
       const jsx = (
-        <Layout theme={theme}>
+        <Layout theme={theme} locale={locale}>
           <form data-component="form" method="post">
             <FormAlert message={error?.type && copy?.[`error_${error.type}`]} />
             <input
@@ -226,6 +259,35 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
     },
     register: async (req, state, form, error): Promise<Response> => {
       const theme = getThemeFromRequest(req)
+      const locale = getLocaleFromRequest(req)
+      const t = getTranslations(locale)
+      const copy = {
+        ...DEFAULT_COPY,
+        error_email_taken: t.error_email_taken,
+        error_invalid_code: t.error_invalid_code,
+        error_invalid_email: t.error_invalid_email,
+        error_invalid_password: t.error_invalid_password,
+        error_password_mismatch: t.error_password_mismatch,
+        error_validation_error: t.error_validation_error,
+        register_title: t.register_title,
+        register_description: t.register_description,
+        login_title: t.login_title,
+        login_description: t.login_description,
+        register: t.register,
+        register_prompt: t.register_prompt,
+        login_prompt: t.login_prompt,
+        login: t.login,
+        change_prompt: t.change_prompt,
+        code_resend: t.code_resend,
+        code_return: t.code_return,
+        logo: t.logo,
+        input_email: t.input_email,
+        input_password: t.input_password,
+        input_code: t.input_code,
+        input_repeat: t.input_repeat,
+        button_continue: t.button_continue,
+        ...input.copy,
+      }
       const emailError = ["invalid_email", "email_taken"].includes(
         error?.type || "",
       )
@@ -235,7 +297,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         "validation_error",
       ].includes(error?.type || "")
       const jsx = (
-        <Layout theme={theme}>
+        <Layout theme={theme} locale={locale}>
           <form data-component="form" method="post">
             <FormAlert
               message={
@@ -318,13 +380,42 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
     },
     change: async (req, state, form, error): Promise<Response> => {
       const theme = getThemeFromRequest(req)
+      const locale = getLocaleFromRequest(req)
+      const t = getTranslations(locale)
+      const copy = {
+        ...DEFAULT_COPY,
+        error_email_taken: t.error_email_taken,
+        error_invalid_code: t.error_invalid_code,
+        error_invalid_email: t.error_invalid_email,
+        error_invalid_password: t.error_invalid_password,
+        error_password_mismatch: t.error_password_mismatch,
+        error_validation_error: t.error_validation_error,
+        register_title: t.register_title,
+        register_description: t.register_description,
+        login_title: t.login_title,
+        login_description: t.login_description,
+        register: t.register,
+        register_prompt: t.register_prompt,
+        login_prompt: t.login_prompt,
+        login: t.login,
+        change_prompt: t.change_prompt,
+        code_resend: t.code_resend,
+        code_return: t.code_return,
+        logo: t.logo,
+        input_email: t.input_email,
+        input_password: t.input_password,
+        input_code: t.input_code,
+        input_repeat: t.input_repeat,
+        button_continue: t.button_continue,
+        ...input.copy,
+      }
       const passwordError = [
         "invalid_password",
         "password_mismatch",
         "validation_error",
       ].includes(error?.type || "")
       const jsx = (
-        <Layout theme={theme}>
+        <Layout theme={theme} locale={locale}>
           <form data-component="form" method="post" replace>
             <FormAlert
               message={

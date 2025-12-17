@@ -153,6 +153,14 @@ export function createTenantThemeMiddleware(
         ctx.res.headers.set(THEME_HEADERS.favicon, theme.favicon)
       }
     }
+
+    // Set locale and direction if available
+    if (theme.locale) {
+      ctx.res.headers.set(THEME_HEADERS.locale, theme.locale)
+    }
+    if (theme.direction) {
+      ctx.res.headers.set(THEME_HEADERS.direction, theme.direction)
+    }
   }
 }
 
@@ -300,9 +308,13 @@ export function readThemeFromHeaders(headers: Headers): {
   logoLight?: string
   logoDark?: string
   favicon?: string
+  locale?: string
+  direction?: "ltr" | "rtl"
 } {
   const themeVars = headers.get(THEME_HEADERS.themeVars)
   const theme = themeVars ? parseCssVars(themeVars) : {}
+
+  const direction = headers.get(THEME_HEADERS.direction)
 
   return {
     theme,
@@ -310,5 +322,8 @@ export function readThemeFromHeaders(headers: Headers): {
     logoLight: headers.get(THEME_HEADERS.logoLight) || undefined,
     logoDark: headers.get(THEME_HEADERS.logoDark) || undefined,
     favicon: headers.get(THEME_HEADERS.favicon) || undefined,
+    locale: headers.get(THEME_HEADERS.locale) || undefined,
+    direction:
+      direction === "rtl" ? "rtl" : direction === "ltr" ? "ltr" : undefined,
   }
 }
