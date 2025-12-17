@@ -29,6 +29,11 @@ import { UnknownStateError } from "../error.js"
 import { Layout } from "./base.js"
 import { FormAlert } from "./form.js"
 import type { Theme } from "./theme.js"
+import {
+  getLocaleFromRequest,
+  getTranslations,
+  type Locale,
+} from "./i18n.js"
 
 /**
  * Extracts theme from request header if available
@@ -124,11 +129,6 @@ export interface CodeUIOptions {
  * @param props - Configure the UI.
  */
 export function CodeUI(props: CodeUIOptions): CodeProviderOptions {
-  const copy = {
-    ...DEFAULT_COPY,
-    ...props.copy,
-  }
-
   const mode = props.mode ?? "email"
 
   return {
@@ -136,10 +136,26 @@ export function CodeUI(props: CodeUIOptions): CodeProviderOptions {
     length: 6,
     request: async (req, state, _form, error): Promise<Response> => {
       const theme = getThemeFromRequest(req)
+      const locale = getLocaleFromRequest(req)
+      const t = getTranslations(locale)
+      const copy = {
+        ...DEFAULT_COPY,
+        email_placeholder: t.email_placeholder,
+        email_invalid: t.email_invalid,
+        button_continue: t.button_continue,
+        code_info: t.code_info,
+        code_placeholder: t.code_placeholder,
+        code_invalid: t.code_invalid,
+        code_sent: t.code_sent,
+        code_resent: t.code_resent,
+        code_didnt_get: t.code_didnt_get,
+        code_resend: t.code_resend,
+        ...props.copy,
+      }
 
       if (state.type === "start") {
         const jsx = (
-          <Layout theme={theme}>
+          <Layout theme={theme} locale={locale}>
             <form data-component="form" method="post">
               {error?.type === "invalid_claim" && (
                 <FormAlert message={copy.email_invalid} />
@@ -168,7 +184,7 @@ export function CodeUI(props: CodeUIOptions): CodeProviderOptions {
 
       if (state.type === "code") {
         const jsx = (
-          <Layout theme={theme}>
+          <Layout theme={theme} locale={locale}>
             <form data-component="form" class="form" method="post">
               {error?.type === "invalid_code" && (
                 <FormAlert message={copy.code_invalid} />
