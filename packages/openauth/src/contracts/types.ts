@@ -6,6 +6,10 @@
  */
 
 import type { StorageAdapter } from "../storage/storage.js"
+import type { Theme, ColorScheme } from "../ui/theme.js"
+
+// Re-export Theme types for convenience
+export type { Theme, ColorScheme }
 
 // ============================================
 // SESSION CONTRACTS
@@ -106,21 +110,45 @@ export interface SessionService {
 // TENANT CONTRACTS
 // ============================================
 
-export interface Theme {
-  primary?: string
-  secondary?: string
-  background?: string
-  text?: string
-  logo?: string
-  fontFamily?: string
-}
-
+/**
+ * Tenant branding configuration.
+ *
+ * The `theme` property uses the standard OpenAuth Theme interface which supports:
+ * - Light/dark mode via ColorScheme (e.g., `{ light: "#fff", dark: "#000" }`)
+ * - Logo with light/dark variants
+ * - Custom CSS for font imports
+ * - Border radius presets
+ * - Font family and scale
+ *
+ * @example
+ * ```typescript
+ * const branding: TenantBranding = {
+ *   theme: {
+ *     title: "My App",
+ *     primary: { light: "#0066cc", dark: "#66b3ff" },
+ *     background: { light: "#ffffff", dark: "#1a1a2d" },
+ *     logo: {
+ *       light: "https://example.com/logo-dark.svg",
+ *       dark: "https://example.com/logo-light.svg",
+ *     },
+ *     favicon: "https://example.com/favicon.ico",
+ *     radius: "md",
+ *     font: { family: "Inter, sans-serif" },
+ *     css: `@import url('https://fonts.googleapis.com/css2?family=Inter&display=swap');`,
+ *   },
+ *   emailTemplates: { ... }
+ * }
+ * ```
+ */
 export interface TenantBranding {
+  /**
+   * Theme configuration using the standard OpenAuth Theme interface.
+   * Supports light/dark mode, custom logos, fonts, and CSS.
+   */
   theme?: Partial<Theme>
-  logoLight?: string
-  logoDark?: string
-  favicon?: string
-  customCss?: string
+  /**
+   * Email template configuration for transactional emails.
+   */
   emailTemplates?: EmailTemplateConfig
 }
 

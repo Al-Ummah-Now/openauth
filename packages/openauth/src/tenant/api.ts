@@ -407,9 +407,12 @@ export function tenantApiRoutes(service: TenantService): Hono {
    *
    * Request body:
    * {
-   *   "theme": { "primary": "#007bff" },
-   *   "logoLight": "https://...",
-   *   "customCss": ".login { ... }"
+   *   "theme": {
+   *     "primary": "#007bff",
+   *     "logo": { "light": "https://...", "dark": "https://..." },
+   *     "favicon": "https://...",
+   *     "css": "@import url('...');"
+   *   }
    * }
    *
    * Response: 200 OK

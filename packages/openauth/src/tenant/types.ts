@@ -130,12 +130,11 @@ export const TENANT_STORAGE_PREFIX = "t" as const
 
 /**
  * CSS custom property names for theme variables
+ * Aligned with the standard OpenAuth Theme interface
  */
 export const THEME_CSS_VARS = {
   primary: "--oa-primary",
-  secondary: "--oa-secondary",
   background: "--oa-background",
-  text: "--oa-text",
   fontFamily: "--oa-font-family",
 } as const
 
