@@ -71,6 +71,31 @@ export interface Theme {
    */
   title?: string
   /**
+   * The text direction for the UI.
+   *
+   * @default "ltr"
+   * @example
+   * ```ts
+   * {
+   *   direction: "rtl"
+   * }
+   * ```
+   */
+  direction?: "ltr" | "rtl"
+  /**
+   * The locale for the UI. Determines the language of UI text.
+   * Can also be set via `?lang=` URL parameter.
+   *
+   * @default "en"
+   * @example
+   * ```ts
+   * {
+   *   locale: "ar"
+   * }
+   * ```
+   */
+  locale?: string
+  /**
    * A URL to the favicon of your app.
    *
    * @example
