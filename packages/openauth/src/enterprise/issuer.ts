@@ -206,24 +206,16 @@ function createEnterpriseThemeMiddleware(
 
 /**
  * Convert tenant branding theme to UI Theme type
+ *
+ * Since TenantBranding.theme now uses the standard Theme interface,
+ * this function simply validates and returns the theme with a default primary color.
  */
-function convertTenantThemeToUITheme(tenantTheme: Record<string, any>): Theme {
-  if (tenantTheme.primary !== undefined) {
-    return tenantTheme as Theme
-  }
-
+function convertTenantThemeToUITheme(tenantTheme: Partial<Theme>): Theme {
   return {
-    primary: tenantTheme.primary || tenantTheme.primaryColor || "#007bff",
-    background: tenantTheme.background || tenantTheme.backgroundColor,
-    title: tenantTheme.title,
-    favicon: tenantTheme.favicon,
-    logo: tenantTheme.logo || tenantTheme.logoLight,
-    font: tenantTheme.font || {
-      family: tenantTheme.fontFamily,
-    },
-    css: tenantTheme.css || tenantTheme.customCss,
-    radius: tenantTheme.radius,
-  }
+    ...tenantTheme,
+    // Ensure primary has a default value (required by Theme interface)
+    primary: tenantTheme.primary || "#007bff",
+  } as Theme
 }
 
 // ============================================

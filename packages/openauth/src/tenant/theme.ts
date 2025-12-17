@@ -7,7 +7,7 @@
  *
  * Headers set:
  * - X-Theme-Vars: CSS custom properties for theme colors/fonts
- * - X-Custom-CSS: URL or inline styles for custom CSS
+ * - X-Custom-CSS: Custom CSS (for font imports, etc.)
  * - X-Logo-Light: Light mode logo URL
  * - X-Logo-Dark: Dark mode logo URL
  * - X-Favicon: Favicon URL
@@ -16,8 +16,25 @@
  */
 
 import type { Context, MiddlewareHandler, Next } from "hono"
-import type { Tenant, Theme, TenantBranding } from "../contracts/types.js"
+import type {
+  Tenant,
+  Theme,
+  ColorScheme,
+  TenantBranding,
+} from "../contracts/types.js"
 import { THEME_CSS_VARS, THEME_HEADERS } from "./types.js"
+
+/**
+ * Helper to get value from string or ColorScheme
+ */
+function getColorValue(
+  value: string | ColorScheme | undefined,
+  mode: "light" | "dark" = "light",
+): string | undefined {
+  if (!value) return undefined
+  if (typeof value === "string") return value
+  return value[mode]
+}
 
 /**
  * Options for the tenant theme middleware
@@ -26,7 +43,7 @@ export interface TenantThemeOptions {
   /**
    * Default theme to use when tenant has no branding
    */
-  defaultTheme?: Theme
+  defaultTheme?: Partial<Theme>
 
   /**
    * Whether to include branding URLs (logos, favicon)
@@ -41,9 +58,10 @@ export interface TenantThemeOptions {
   includeCustomCss?: boolean
 
   /**
-   * Custom header prefix (default: "X-")
+   * Color mode preference for ColorScheme values
+   * @default "light"
    */
-  headerPrefix?: string
+  colorMode?: "light" | "dark"
 }
 
 /**
@@ -51,16 +69,6 @@ export interface TenantThemeOptions {
  *
  * This middleware reads the tenant from context (set by tenant resolver)
  * and injects theme-related headers into the response.
- *
- * Testing checklist:
- * - Theme middleware sets CSS vars when tenant has theme
- * - Theme middleware sets custom CSS when tenant has customCss
- * - Theme middleware sets logo URLs when tenant has logos
- * - Theme middleware sets favicon when tenant has favicon
- * - Theme middleware handles missing tenant gracefully
- * - Theme middleware handles missing branding gracefully
- * - Default theme is used when tenant has no theme
- * - CSS vars are properly formatted
  *
  * @param options - Theme middleware options
  * @returns Hono middleware handler
@@ -77,7 +85,7 @@ export interface TenantThemeOptions {
  *
  * // Or with options
  * app.use("*", createTenantThemeMiddleware({
- *   defaultTheme: { primary: "#007bff", secondary: "#6c757d" },
+ *   defaultTheme: { primary: "#007bff" },
  *   includeBrandingUrls: true
  * }))
  * ```
@@ -89,6 +97,7 @@ export function createTenantThemeMiddleware(
     defaultTheme = {},
     includeBrandingUrls = true,
     includeCustomCss = true,
+    colorMode = "light",
   } = options
 
   return async function tenantThemeMiddleware(
@@ -104,7 +113,7 @@ export function createTenantThemeMiddleware(
     if (!tenant) {
       // No tenant resolved, apply default theme if any
       if (Object.keys(defaultTheme).length > 0) {
-        const cssVars = buildCssVars(defaultTheme)
+        const cssVars = buildCssVars(defaultTheme, colorMode)
         if (cssVars) {
           ctx.res.headers.set(THEME_HEADERS.themeVars, cssVars)
         }
@@ -113,29 +122,35 @@ export function createTenantThemeMiddleware(
     }
 
     const branding = tenant.branding || {}
+    const theme = branding.theme || {}
+
+    // Merge default theme with tenant theme
+    const mergedTheme = { ...defaultTheme, ...theme }
 
     // Set theme CSS variables
-    const theme = { ...defaultTheme, ...branding.theme }
-    const cssVars = buildCssVars(theme)
+    const cssVars = buildCssVars(mergedTheme, colorMode)
     if (cssVars) {
       ctx.res.headers.set(THEME_HEADERS.themeVars, cssVars)
     }
 
-    // Set custom CSS if available
-    if (includeCustomCss && branding.customCss) {
-      ctx.res.headers.set(THEME_HEADERS.customCss, branding.customCss)
+    // Set custom CSS if available (from theme.css)
+    if (includeCustomCss && theme.css) {
+      ctx.res.headers.set(THEME_HEADERS.customCss, theme.css)
     }
 
-    // Set branding URLs if available
+    // Set branding URLs if available (from theme.logo and theme.favicon)
     if (includeBrandingUrls) {
-      if (branding.logoLight) {
-        ctx.res.headers.set(THEME_HEADERS.logoLight, branding.logoLight)
+      const logoLight = getColorValue(theme.logo, "light")
+      const logoDark = getColorValue(theme.logo, "dark")
+
+      if (logoLight) {
+        ctx.res.headers.set(THEME_HEADERS.logoLight, logoLight)
       }
-      if (branding.logoDark) {
-        ctx.res.headers.set(THEME_HEADERS.logoDark, branding.logoDark)
+      if (logoDark) {
+        ctx.res.headers.set(THEME_HEADERS.logoDark, logoDark)
       }
-      if (branding.favicon) {
-        ctx.res.headers.set(THEME_HEADERS.favicon, branding.favicon)
+      if (theme.favicon) {
+        ctx.res.headers.set(THEME_HEADERS.favicon, theme.favicon)
       }
     }
   }
@@ -144,26 +159,28 @@ export function createTenantThemeMiddleware(
 /**
  * Build CSS custom properties string from theme object
  *
- * @param theme - Theme object
- * @returns CSS custom properties string (e.g., "--oa-primary: #007bff; --oa-secondary: #6c757d;")
+ * @param theme - Theme object (supports ColorScheme for colors)
+ * @param colorMode - Which color mode to use for ColorScheme values
+ * @returns CSS custom properties string (e.g., "--oa-primary: #007bff;")
  */
-export function buildCssVars(theme: Partial<Theme>): string | null {
+export function buildCssVars(
+  theme: Partial<Theme>,
+  colorMode: "light" | "dark" = "light",
+): string | null {
   const vars: string[] = []
 
-  if (theme.primary) {
-    vars.push(`${THEME_CSS_VARS.primary}: ${theme.primary}`)
+  const primary = getColorValue(theme.primary, colorMode)
+  if (primary) {
+    vars.push(`${THEME_CSS_VARS.primary}: ${primary}`)
   }
-  if (theme.secondary) {
-    vars.push(`${THEME_CSS_VARS.secondary}: ${theme.secondary}`)
+
+  const background = getColorValue(theme.background, colorMode)
+  if (background) {
+    vars.push(`${THEME_CSS_VARS.background}: ${background}`)
   }
-  if (theme.background) {
-    vars.push(`${THEME_CSS_VARS.background}: ${theme.background}`)
-  }
-  if (theme.text) {
-    vars.push(`${THEME_CSS_VARS.text}: ${theme.text}`)
-  }
-  if (theme.fontFamily) {
-    vars.push(`${THEME_CSS_VARS.fontFamily}: ${theme.fontFamily}`)
+
+  if (theme.font?.family) {
+    vars.push(`${THEME_CSS_VARS.fontFamily}: ${theme.font.family}`)
   }
 
   if (vars.length === 0) {
@@ -177,7 +194,7 @@ export function buildCssVars(theme: Partial<Theme>): string | null {
  * Parse CSS custom properties string back to theme object
  *
  * @param cssVars - CSS custom properties string
- * @returns Theme object
+ * @returns Partial theme object
  */
 export function parseCssVars(cssVars: string): Partial<Theme> {
   const theme: Partial<Theme> = {}
@@ -192,23 +209,21 @@ export function parseCssVars(cssVars: string): Partial<Theme> {
     .filter(Boolean)
 
   for (const pair of pairs) {
-    const [key, value] = pair.split(":").map((s) => s.trim())
+    const colonIndex = pair.indexOf(":")
+    if (colonIndex === -1) continue
+
+    const key = pair.substring(0, colonIndex).trim()
+    const value = pair.substring(colonIndex + 1).trim()
 
     switch (key) {
       case THEME_CSS_VARS.primary:
         theme.primary = value
         break
-      case THEME_CSS_VARS.secondary:
-        theme.secondary = value
-        break
       case THEME_CSS_VARS.background:
         theme.background = value
         break
-      case THEME_CSS_VARS.text:
-        theme.text = value
-        break
       case THEME_CSS_VARS.fontFamily:
-        theme.fontFamily = value
+        theme.font = { ...theme.font, family: value }
         break
     }
   }
@@ -221,19 +236,21 @@ export function parseCssVars(cssVars: string): Partial<Theme> {
  *
  * @param theme - Theme object
  * @param selector - CSS selector to apply styles to (default: ":root")
+ * @param colorMode - Which color mode to use for ColorScheme values
  * @returns CSS style content
  *
  * @example
  * ```typescript
  * const css = generateThemeStyles(tenant.branding.theme)
- * // Returns: ":root { --oa-primary: #007bff; --oa-secondary: #6c757d; }"
+ * // Returns: ":root { --oa-primary: #007bff; }"
  * ```
  */
 export function generateThemeStyles(
   theme: Partial<Theme>,
   selector: string = ":root",
+  colorMode: "light" | "dark" = "light",
 ): string {
-  const cssVars = buildCssVars(theme)
+  const cssVars = buildCssVars(theme, colorMode)
   if (!cssVars) {
     return ""
   }
@@ -245,25 +262,27 @@ export function generateThemeStyles(
  *
  * @param branding - Tenant branding object
  * @param selector - CSS selector to apply theme styles to (default: ":root")
+ * @param colorMode - Which color mode to use for ColorScheme values
  * @returns Complete CSS content
  */
 export function generateBrandingStyles(
   branding: TenantBranding,
   selector: string = ":root",
+  colorMode: "light" | "dark" = "light",
 ): string {
   const parts: string[] = []
 
   // Add theme CSS variables
   if (branding.theme) {
-    const themeStyles = generateThemeStyles(branding.theme, selector)
+    const themeStyles = generateThemeStyles(branding.theme, selector, colorMode)
     if (themeStyles) {
       parts.push(themeStyles)
     }
   }
 
-  // Add custom CSS
-  if (branding.customCss) {
-    parts.push(branding.customCss)
+  // Add custom CSS from theme
+  if (branding.theme?.css) {
+    parts.push(branding.theme.css)
   }
 
   return parts.join("\n")
@@ -277,7 +296,7 @@ export function generateBrandingStyles(
  */
 export function readThemeFromHeaders(headers: Headers): {
   theme: Partial<Theme>
-  customCss?: string
+  css?: string
   logoLight?: string
   logoDark?: string
   favicon?: string
@@ -287,7 +306,7 @@ export function readThemeFromHeaders(headers: Headers): {
 
   return {
     theme,
-    customCss: headers.get(THEME_HEADERS.customCss) || undefined,
+    css: headers.get(THEME_HEADERS.customCss) || undefined,
     logoLight: headers.get(THEME_HEADERS.logoLight) || undefined,
     logoDark: headers.get(THEME_HEADERS.logoDark) || undefined,
     favicon: headers.get(THEME_HEADERS.favicon) || undefined,
