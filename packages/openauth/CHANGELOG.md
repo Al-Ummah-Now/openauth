@@ -27,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add GitHub Copilot custom instructions
 
-
 ## [1.0.9] - 2025-12-14
 
 ### Documentation

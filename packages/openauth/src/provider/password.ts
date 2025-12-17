@@ -323,6 +323,12 @@ export function PasswordProvider(
           "password",
         ])
         const password = fd.get("password")?.toString()
+        console.log("[password-provider] Login attempt:", {
+          email,
+          hasHash: !!hash,
+          hasPassword: !!password,
+          storageKey: ["email", email, "password"],
+        })
         if (!password || !hash || !(await hasher.verify(password, hash)))
           return error({ type: "invalid_password" })
 

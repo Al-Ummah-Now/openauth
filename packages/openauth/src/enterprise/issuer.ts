@@ -1086,7 +1086,46 @@ export function escapeHtml(str: string | undefined | null): string {
 }
 
 /**
- * Render account picker UI
+ * Helper to get theme value supporting both string and ColorScheme types
+ */
+function getThemeValue(
+  value: string | { light: string; dark: string } | undefined,
+  mode: "light" | "dark",
+): string | undefined {
+  if (!value) return undefined
+  if (typeof value === "string") return value
+  return value[mode]
+}
+
+/**
+ * Convert theme radius to CSS multiplier
+ */
+function getRadiusMultiplier(radius?: string): string {
+  switch (radius) {
+    case "none":
+      return "0"
+    case "sm":
+      return "1"
+    case "md":
+      return "1.25"
+    case "lg":
+      return "1.5"
+    case "full":
+      return "1000000000001"
+    default:
+      return "1"
+  }
+}
+
+/**
+ * Default OpenAuth logo SVG for fallback
+ */
+const OPENAUTH_LOGO_SVG = `<svg class="logo-default" width="51" height="51" viewBox="0 0 51 51" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 50.2303V0.12854H50.1017V50.2303H0ZM3.08002 11.8326H11.7041V3.20856H3.08002V11.8326ZM14.8526 11.8326H23.4766V3.20856H14.8526V11.8326ZM26.5566 11.8326H35.1807V3.20856H26.5566V11.8326ZM38.3292 11.8326H47.0217V3.20856H38.3292V11.8326ZM3.08002 23.6052H11.7041V14.9811H3.08002V23.6052ZM14.8526 23.6052H23.4766V14.9811H14.8526V23.6052ZM26.5566 23.6052H35.1807V14.9811H26.5566V23.6052ZM38.3292 23.6052H47.0217V14.9811H38.3292V23.6052ZM3.08002 35.3092H11.7041V26.6852H3.08002V35.3092ZM14.8526 35.3092H23.4766V26.6852H14.8526V35.3092ZM26.5566 35.3092H35.1807V26.6852H26.5566V35.3092ZM38.3292 35.3092H47.0217V26.6852H38.3292V35.3092ZM3.08002 47.1502H11.7041V38.3893H3.08002V47.1502ZM14.8526 47.1502H23.4766V38.3893H14.8526V47.1502ZM26.5566 47.1502H35.1807V38.3893H26.5566V47.1502ZM38.3292 47.1502H47.0217V38.3893H38.3292V47.1502Z" fill="currentColor"/>
+</svg>`
+
+/**
+ * Render account picker UI with full theme support
  */
 function renderAccountPicker(
   ctx: Context,
@@ -1094,142 +1133,279 @@ function renderAccountPicker(
   authorization: EnterpriseAuthorizationState,
   tenant: Tenant,
 ): Response {
-  const theme = tenant?.branding?.theme || {}
+  // Get resolved theme from middleware context, with fallbacks
+  const resolvedTheme: Theme | undefined = ctx.get("resolvedTheme")
+  const tenantTheme = tenant?.branding?.theme
+  const theme: Theme = resolvedTheme || (tenantTheme as Theme) || THEME_OPENAUTH
+
   const baseUrl = new URL(ctx.req.url).origin
+
+  // Extract theme values with light/dark support
+  const primaryLight = getThemeValue(theme.primary, "light") || "#000000"
+  const primaryDark = getThemeValue(theme.primary, "dark") || "#ffffff"
+  const bgLight = getThemeValue(theme.background, "light") || "#ffffff"
+  const bgDark = getThemeValue(theme.background, "dark") || "#0e0e11"
+  const logoLight = getThemeValue(theme.logo, "light")
+  const logoDark = getThemeValue(theme.logo, "dark")
+  const hasLogo = logoLight && logoDark
+  const fontFamily =
+    theme.font?.family ||
+    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  const fontScale = theme.font?.scale || "1"
+  const radius = getRadiusMultiplier(theme.radius)
+  const title = theme.title || tenant?.name || "OpenAuth"
+
+  // Build favicon HTML
+  let faviconHtml = ""
+  if (theme.favicon) {
+    faviconHtml = `<link rel="icon" href="${escapeHtml(theme.favicon)}">`
+  } else {
+    faviconHtml = `
+    <link rel="icon" href="https://openauth.js.org/favicon.ico" sizes="48x48">
+    <link rel="icon" href="https://openauth.js.org/favicon.svg" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="https://openauth.js.org/favicon-dark.svg" media="(prefers-color-scheme: dark)">
+    <link rel="shortcut icon" href="https://openauth.js.org/favicon.svg" type="image/svg+xml">`
+  }
+
+  // Build logo HTML
+  let logoHtml = ""
+  if (hasLogo) {
+    logoHtml = `
+    <img class="logo" src="${escapeHtml(logoLight!)}" data-mode="light" alt="${escapeHtml(title)}">
+    <img class="logo" src="${escapeHtml(logoDark!)}" data-mode="dark" alt="${escapeHtml(title)}">`
+  } else {
+    logoHtml = OPENAUTH_LOGO_SVG
+  }
 
   const html = `
 <!DOCTYPE html>
-<html>
+<html style="
+  --color-background-light: ${escapeHtml(bgLight)};
+  --color-background-dark: ${escapeHtml(bgDark)};
+  --color-primary-light: ${escapeHtml(primaryLight)};
+  --color-primary-dark: ${escapeHtml(primaryDark)};
+  --font-family: ${escapeHtml(fontFamily)};
+  --font-scale: ${escapeHtml(fontScale)};
+  --border-radius: ${escapeHtml(radius)};
+">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Choose Account - ${tenant?.name || "OpenAuth"}</title>
+  <title>Choose Account - ${escapeHtml(title)}</title>
+  ${faviconHtml}
   <style>
+    @import url("https://unpkg.com/tailwindcss@3.4.15/src/css/preflight.css");
+
     :root {
-      --oa-primary: ${theme.primary || "#007bff"};
-      --oa-secondary: ${theme.secondary || "#6c757d"};
-      --oa-background: ${theme.background || "#ffffff"};
-      --oa-text: ${theme.text || "#212529"};
-      --oa-font-family: ${theme.fontFamily || "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"};
+      --color-background: var(--color-background-dark);
+      --color-primary: var(--color-primary-dark);
+      --font-size-xs: calc(0.75rem * var(--font-scale, 1));
+      --font-size-sm: calc(0.875rem * var(--font-scale, 1));
+      --font-size-md: calc(1rem * var(--font-scale, 1));
+      --font-size-lg: calc(1.125rem * var(--font-scale, 1));
     }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --color-background: var(--color-background-light);
+        --color-primary: var(--color-primary-light);
+      }
+    }
+
+    /* Computed contrast colors */
+    :root {
+      --color-high: oklch(from var(--color-background) clamp(0, calc((l - 0.714) * -1000), 1) 0 0);
+      --color-low: oklch(from var(--color-background) clamp(0, calc((l - 0.714) * 1000), 1) 0 0);
+      --color-border: oklch(from var(--color-background) calc(clamp(0.22, l + (-0.12 * clamp(0, calc((l - 0.714) * 1000), 1) + 0.06), 0.88)) c h);
+      --color-surface: oklch(from var(--color-background) calc(l + (-0.06 * clamp(0, calc((l - 0.714) * 1000), 1) + 0.03)) c h);
+    }
+
     body {
-      font-family: var(--oa-font-family);
-      background: var(--oa-background);
-      color: var(--oa-text);
+      font-family: var(--font-family);
+      background: var(--color-background);
+      color: var(--color-high);
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
       margin: 0;
+      padding: 1rem;
     }
+
     .container {
-      max-width: 400px;
+      max-width: 380px;
       width: 100%;
-      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
     }
-    h1 {
+
+    .logo-container {
       text-align: center;
       margin-bottom: 0.5rem;
     }
-    .subtitle {
-      text-align: center;
-      color: var(--oa-secondary);
-      margin-bottom: 2rem;
+
+    .logo {
+      height: 2.5rem;
+      width: auto;
+      margin: 0 auto;
+      display: none;
     }
+
+    @media (prefers-color-scheme: light) {
+      .logo[data-mode="light"] { display: block; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .logo[data-mode="dark"] { display: block; }
+    }
+
+    .logo-default {
+      height: 2.5rem;
+      width: auto;
+      margin: 0 auto;
+      color: var(--color-high);
+    }
+
+    .header {
+      text-align: center;
+    }
+
+    h1 {
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+      margin: 0 0 0.25rem 0;
+    }
+
+    .subtitle {
+      color: var(--color-low);
+      font-size: var(--font-size-sm);
+      margin: 0;
+    }
+
+    .accounts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .account-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
     .account-btn {
       display: flex;
       align-items: center;
-      width: 100%;
-      padding: 1rem;
-      margin-bottom: 0.75rem;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: white;
+      flex: 1;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--color-border);
+      border-radius: calc(var(--border-radius) * 0.25rem);
+      background: var(--color-surface);
       cursor: pointer;
       text-decoration: none;
       color: inherit;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
+
     .account-btn:hover {
-      border-color: var(--oa-primary);
+      border-color: var(--color-primary);
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
+
     .account-btn.active {
-      border-color: var(--oa-primary);
+      border-color: var(--color-primary);
       border-width: 2px;
     }
+
     .avatar {
-      width: 48px;
-      height: 48px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
-      background: var(--oa-secondary);
+      background: var(--color-primary);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
-      font-weight: bold;
-      margin-right: 1rem;
+      color: oklch(from var(--color-primary) clamp(0, calc((l - 0.714) * -1000), 1) 0 0);
+      font-weight: 600;
+      font-size: var(--font-size-sm);
+      margin-right: 0.75rem;
       flex-shrink: 0;
     }
+
     .avatar img {
       width: 100%;
       height: 100%;
       border-radius: 50%;
       object-fit: cover;
     }
+
     .account-info {
       flex: 1;
       text-align: left;
+      min-width: 0;
     }
+
     .account-name {
       font-weight: 500;
+      font-size: var(--font-size-sm);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
+
     .account-email {
-      color: var(--oa-secondary);
-      font-size: 0.875rem;
+      color: var(--color-low);
+      font-size: var(--font-size-xs);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .add-account {
-      display: block;
-      text-align: center;
-      color: var(--oa-primary);
-      text-decoration: none;
-      padding: 1rem;
-      margin-top: 1rem;
-    }
-    .add-account:hover {
-      text-decoration: underline;
-    }
-    .account-row {
-      display: flex;
-      align-items: center;
-      margin-bottom: 0.75rem;
-      gap: 0.5rem;
-    }
-    .account-btn {
-      margin-bottom: 0;
-      flex: 1;
-    }
+
     .signout-btn {
       padding: 0.5rem 0.75rem;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: white;
-      color: var(--oa-secondary);
-      font-size: 0.75rem;
+      border: 1px solid var(--color-border);
+      border-radius: calc(var(--border-radius) * 0.25rem);
+      background: transparent;
+      color: var(--color-low);
+      font-size: var(--font-size-xs);
       cursor: pointer;
       transition: border-color 0.2s, color 0.2s;
       white-space: nowrap;
     }
+
     .signout-btn:hover {
       border-color: #dc3545;
       color: #dc3545;
     }
+
+    .add-account {
+      display: block;
+      text-align: center;
+      color: var(--color-primary);
+      text-decoration: none;
+      padding: 0.75rem;
+      font-size: var(--font-size-sm);
+      font-weight: 500;
+    }
+
+    .add-account:hover {
+      text-decoration: underline;
+    }
   </style>
+  ${theme.css ? `<style>${theme.css}</style>` : ""}
 </head>
 <body>
   <div class="container">
-    <h1>Choose Account</h1>
-    <p class="subtitle">Select an account to continue</p>
+    <div class="logo-container">
+      ${logoHtml}
+    </div>
+    <div class="header">
+      <h1>Choose Account</h1>
+      <p class="subtitle">Select an account to continue</p>
+    </div>
+    <div class="accounts-list">
     ${accounts
       .map((account) => {
         const accountUrl = new URL("/authorize", baseUrl)
@@ -1281,6 +1457,7 @@ function renderAccountPicker(
     `
       })
       .join("")}
+    </div>
     <a href="${generateAddAccountUrl(baseUrl + "/authorize", authorization)}" class="add-account">
       + Use another account
     </a>
