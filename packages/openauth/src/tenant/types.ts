@@ -147,4 +147,6 @@ export const THEME_HEADERS = {
   logoLight: "X-Logo-Light",
   logoDark: "X-Logo-Dark",
   favicon: "X-Favicon",
+  locale: "X-Locale",
+  direction: "X-Direction",
 } as const
