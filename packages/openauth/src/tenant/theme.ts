@@ -16,7 +16,12 @@
  */
 
 import type { Context, MiddlewareHandler, Next } from "hono"
-import type { Tenant, Theme, ColorScheme, TenantBranding } from "../contracts/types.js"
+import type {
+  Tenant,
+  Theme,
+  ColorScheme,
+  TenantBranding,
+} from "../contracts/types.js"
 import { THEME_CSS_VARS, THEME_HEADERS } from "./types.js"
 
 /**
