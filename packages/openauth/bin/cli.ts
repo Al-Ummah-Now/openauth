@@ -12,15 +12,29 @@
  */
 
 import { execSync, spawnSync } from "child_process"
-import { createHash } from "crypto"
 import { readFileSync, existsSync, readdirSync } from "fs"
-import { basename, dirname, join } from "path"
+import { dirname, join } from "path"
 import { fileURLToPath } from "url"
 import {
   parseSchemaChanges,
   isAlreadyAppliedError,
   type SchemaChange,
 } from "../src/migrations/utils.js"
+import {
+  calculateChecksum,
+  stripJsonComments,
+  extractDbNameFromJson,
+  buildWranglerArgs,
+  parseArgs,
+  parseAppliedMigrationsOutput,
+  buildRecordMigrationSql,
+  buildVerifyMigrationSql,
+  migrationRecordExistsInOutput,
+  type MigrationFile,
+  type AppliedMigration,
+  type ParsedArgs,
+  type WranglerOptions,
+} from "./cli-utils.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -28,24 +42,12 @@ const __dirname = dirname(__filename)
 // Migration directory
 const migrationsDir = join(__dirname, "..", "src", "migrations")
 
-interface MigrationFile {
-  name: string
-  path: string
-  checksum: string
-}
-
-interface AppliedMigration {
-  name: string
-  applied_at: number
-  checksum: string | null
-}
-
 /**
- * Calculate SHA-256 checksum of a file
+ * Calculate checksum of a file
  */
-function calculateChecksum(filePath: string): string {
+function calculateFileChecksum(filePath: string): string {
   const content = readFileSync(filePath, "utf-8")
-  return createHash("sha256").update(content).digest("hex").substring(0, 16)
+  return calculateChecksum(content)
 }
 
 /**
@@ -65,18 +67,9 @@ function getMigrationFiles(): MigrationFile[] {
     return {
       name,
       path,
-      checksum: calculateChecksum(path),
+      checksum: calculateFileChecksum(path),
     }
   })
-}
-
-/**
- * Strip JSON comments for JSONC support
- */
-function stripJsonComments(content: string): string {
-  content = content.replace(/\/\/.*$/gm, "")
-  content = content.replace(/\/\*[\s\S]*?\*\//g, "")
-  return content
 }
 
 /**
@@ -146,36 +139,6 @@ function parseWranglerConfig(customConfig?: string): {
   if (jsoncResult) return jsoncResult
 
   return null
-}
-
-/**
- * Extract database name from parsed JSON config
- */
-function extractDbNameFromJson(config: any): string | null {
-  if (Array.isArray(config.d1_databases) && config.d1_databases.length > 0) {
-    const db = config.d1_databases[0]
-    if (db.database_name) {
-      return db.database_name
-    }
-  }
-  return null
-}
-
-interface WranglerOptions {
-  isLocal: boolean
-  isRemote: boolean
-  configFile?: string
-}
-
-/**
- * Build wrangler command arguments
- */
-function buildWranglerArgs(dbName: string, options: WranglerOptions): string[] {
-  const args = ["d1", "execute", dbName]
-  if (options.isLocal) args.push("--local")
-  if (options.isRemote) args.push("--remote")
-  if (options.configFile) args.push("--config", options.configFile)
-  return args
 }
 
 /**
@@ -384,31 +347,7 @@ function getAppliedMigrations(
     return []
   }
 
-  // Parse wrangler JSON output
-  const migrations: AppliedMigration[] = []
-  try {
-    // Wrangler outputs JSON with results
-    const lines = result.output.split("\n")
-    for (const line of lines) {
-      if (line.includes('"name"')) {
-        // Try to parse as part of results array
-        const match = line.match(
-          /"name":\s*"([^"]+)".*?"applied_at":\s*(\d+).*?"checksum":\s*(?:"([^"]*)"|\d+|null)/,
-        )
-        if (match) {
-          migrations.push({
-            name: match[1],
-            applied_at: parseInt(match[2]),
-            checksum: match[3] || null,
-          })
-        }
-      }
-    }
-  } catch {
-    // Parse error, return empty
-  }
-
-  return migrations
+  return parseAppliedMigrationsOutput(result.output)
 }
 
 /**
@@ -419,9 +358,24 @@ function recordMigration(
   migration: MigrationFile,
   options: WranglerOptions,
 ): { success: boolean; error?: string } {
-  const now = Date.now()
-  const sql = `INSERT INTO _openauth_migrations (name, applied_at, checksum) VALUES ('${migration.name}', ${now}, '${migration.checksum}')`
-  return executeSql(dbName, sql, options)
+  const sql = buildRecordMigrationSql(migration.name, migration.checksum)
+  const result = executeSql(dbName, sql, options)
+
+  // If executeSql reported failure, verify by checking if record actually exists
+  // This handles cases where wrangler returns non-zero exit code but the INSERT succeeded
+  if (!result.success) {
+    const verifySql = buildVerifyMigrationSql(migration.name)
+    const verifyResult = executeSql(dbName, verifySql, options)
+    if (
+      verifyResult.success &&
+      verifyResult.output &&
+      migrationRecordExistsInOutput(verifyResult.output, migration.name)
+    ) {
+      return { success: true }
+    }
+  }
+
+  return result
 }
 
 function printHelp() {
@@ -455,46 +409,14 @@ Only pending migrations are applied (safe to run multiple times).
 `)
 }
 
-interface ParsedArgs {
-  dbName?: string
-  isLocal: boolean
-  isRemote: boolean
-  configFile?: string
-  withSeed: boolean
-  force: boolean
-}
-
-function parseArgs(args: string[]): ParsedArgs {
-  const result: ParsedArgs = {
-    isLocal: false,
-    isRemote: false,
-    withSeed: true,
-    force: false,
+function parseArgsWithValidation(args: string[]): ParsedArgs {
+  const result = parseArgs(args)
+  // Validate --config has a value
+  const configIndex = args.findIndex((a) => a === "--config" || a === "-c")
+  if (configIndex !== -1 && !result.configFile) {
+    console.error("Error: --config requires a file path")
+    process.exit(1)
   }
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-    if (arg === "--local") {
-      result.isLocal = true
-    } else if (arg === "--remote") {
-      result.isRemote = true
-    } else if (arg === "--no-seed") {
-      result.withSeed = false
-    } else if (arg === "--seed") {
-      result.withSeed = true
-    } else if (arg === "--force") {
-      result.force = true
-    } else if (arg === "--config" || arg === "-c") {
-      result.configFile = args[++i]
-      if (!result.configFile) {
-        console.error("Error: --config requires a file path")
-        process.exit(1)
-      }
-    } else if (!arg.startsWith("-")) {
-      result.dbName = arg
-    }
-  }
-
   return result
 }
 
@@ -533,7 +455,7 @@ function checkWrangler() {
 }
 
 function migrate(args: string[]) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
 
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
@@ -726,7 +648,7 @@ function migrate(args: string[]) {
 }
 
 function status(args: string[]) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
 
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
@@ -805,7 +727,7 @@ function status(args: string[]) {
 }
 
 function seed(args: string[]) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
 
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")

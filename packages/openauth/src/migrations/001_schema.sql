@@ -230,14 +230,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_rbac_roles_name_tenant ON rbac_roles(name,
 CREATE INDEX IF NOT EXISTS idx_rbac_roles_tenant ON rbac_roles(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_rbac_roles_system ON rbac_roles(is_system_role);
 
--- System roles for default tenant
-INSERT OR IGNORE INTO rbac_roles (id, name, tenant_id, description, is_system_role, created_at, updated_at)
-VALUES
-    ('role_super_admin_default', 'super_admin', 'default', 'Full administrative access', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000),
-    ('role_admin_default', 'admin', 'default', 'Tenant administrative access', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000),
-    ('role_member_default', 'member', 'default', 'Standard member access', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000),
-    ('role_viewer_default', 'viewer', 'default', 'Read-only access', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000);
-
 -- ============================================
 -- RBAC: PERMISSIONS
 -- ============================================

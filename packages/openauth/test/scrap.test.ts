@@ -21,7 +21,7 @@ const auth = issuer({
     })
   },
   ttl: {
-    access: 1,
+    access: 2,
   },
   providers: {
     dummy: {
@@ -70,7 +70,7 @@ test("code flow", async () => {
   expect(verified.subject.type).toBe("user")
   if (verified.subject.type !== "user") throw new Error("Invalid subject")
   expect(verified.subject.properties.userID).toBe("123")
-  await new Promise((resolve) => setTimeout(resolve, 2000))
+  await new Promise((resolve) => setTimeout(resolve, 3000))
   const failed = await client.verify(subjects, exchanged.tokens.access)
   expect(failed.err).toBeInstanceOf(Error)
   const next = await client.verify(subjects, exchanged.tokens.access, {
