@@ -111,6 +111,13 @@
   font-size: var(--font-size-xs);
 }
 
+[data-component="branding"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 [data-component="logo"] {
   margin: 0 auto;
   height: 2.5rem;
@@ -142,6 +149,14 @@
   @media (prefers-color-scheme: dark) {
     color: var(--color-high);
   }
+}
+
+[data-component="site-title"] {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-high);
+  text-align: center;
 }
 
 [data-component="input"] {
@@ -288,4 +303,21 @@
   &:has(> :nth-child(2)) {
     justify-content: space-between;
   }
+}
+
+/* RTL Support */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] [data-component="form-alert"] {
+  text-align: right;
+}
+
+[dir="rtl"] [data-component="input"] {
+  text-align: right;
+}
+
+[dir="rtl"] [data-component="button"] {
+  flex-direction: row-reverse;
 }

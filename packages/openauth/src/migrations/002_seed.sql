@@ -298,6 +298,20 @@ VALUES
 -- These are placeholder entries for development environments.
 
 -- System user (for automated operations)
+INSERT OR IGNORE INTO users (
+    id, tenant_id, email, name, metadata, status, created_at, updated_at
+) VALUES (
+    'user_system',
+    'default',
+    'system@openauth.local',
+    'System',
+    '{"type": "system", "description": "Automated system operations"}',
+    'active',
+    strftime('%s', 'now') * 1000,
+    strftime('%s', 'now') * 1000
+);
+
+-- Assign super admin role to system user
 INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, tenant_id, assigned_at, assigned_by)
 VALUES (
     'user_system',
