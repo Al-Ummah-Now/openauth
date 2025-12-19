@@ -22,6 +22,7 @@ export interface ParsedArgs {
   dbName?: string
   isLocal: boolean
   isRemote: boolean
+  isPreview: boolean
   configFile?: string
   withSeed: boolean
   force: boolean
@@ -30,6 +31,7 @@ export interface ParsedArgs {
 export interface WranglerOptions {
   isLocal: boolean
   isRemote: boolean
+  isPreview: boolean
   configFile?: string
 }
 
@@ -72,6 +74,7 @@ export function buildWranglerArgs(
   const args = ["d1", "execute", dbName]
   if (options.isLocal) args.push("--local")
   if (options.isRemote) args.push("--remote")
+  if (options.isPreview) args.push("--preview")
   if (options.configFile) args.push("--config", options.configFile)
   return args
 }
@@ -93,6 +96,8 @@ export function parseArgs(args: string[]): ParsedArgs {
       result.isLocal = true
     } else if (arg === "--remote") {
       result.isRemote = true
+    } else if (arg === "--preview") {
+      result.isPreview = true
     } else if (arg === "--no-seed") {
       result.withSeed = false
     } else if (arg === "--seed") {

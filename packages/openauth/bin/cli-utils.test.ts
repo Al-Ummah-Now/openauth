@@ -133,6 +133,7 @@ describe("buildWranglerArgs", () => {
     const args = buildWranglerArgs("mydb", {
       isLocal: false,
       isRemote: false,
+      isPreview: false,
     })
     expect(args).toEqual(["d1", "execute", "mydb"])
   })
@@ -141,6 +142,7 @@ describe("buildWranglerArgs", () => {
     const args = buildWranglerArgs("mydb", {
       isLocal: true,
       isRemote: false,
+      isPreview: false,
     })
     expect(args).toEqual(["d1", "execute", "mydb", "--local"])
   })
@@ -149,14 +151,25 @@ describe("buildWranglerArgs", () => {
     const args = buildWranglerArgs("mydb", {
       isLocal: false,
       isRemote: true,
+      isPreview: false,
     })
     expect(args).toEqual(["d1", "execute", "mydb", "--remote"])
+  })
+
+  test("adds --preview flag", () => {
+    const args = buildWranglerArgs("mydb", {
+      isLocal: false,
+      isRemote: false,
+      isPreview: true,
+    })
+    expect(args).toEqual(["d1", "execute", "mydb", "--preview"])
   })
 
   test("adds --config flag with path", () => {
     const args = buildWranglerArgs("mydb", {
       isLocal: false,
       isRemote: false,
+      isPreview: false,
       configFile: "./wrangler.toml",
     })
     expect(args).toEqual([
@@ -172,6 +185,7 @@ describe("buildWranglerArgs", () => {
     const args = buildWranglerArgs("mydb", {
       isLocal: true,
       isRemote: false,
+      isPreview: false,
       configFile: "./custom.toml",
     })
     expect(args).toEqual([
@@ -179,6 +193,23 @@ describe("buildWranglerArgs", () => {
       "execute",
       "mydb",
       "--local",
+      "--config",
+      "./custom.toml",
+    ])
+  })
+
+  test("combines preview with config", () => {
+    const args = buildWranglerArgs("mydb", {
+      isLocal: false,
+      isRemote: false,
+      isPreview: true,
+      configFile: "./custom.toml",
+    })
+    expect(args).toEqual([
+      "d1",
+      "execute",
+      "mydb",
+      "--preview",
       "--config",
       "./custom.toml",
     ])
@@ -201,6 +232,13 @@ describe("parseArgs", () => {
     const result = parseArgs(["--remote"])
     expect(result.isRemote).toBe(true)
     expect(result.isLocal).toBe(false)
+  })
+
+  test("parses --preview flag", () => {
+    const result = parseArgs(["--preview"])
+    expect(result.isPreview).toBe(true)
+    expect(result.isLocal).toBe(false)
+    expect(result.isRemote).toBe(false)
   })
 
   test("parses --no-seed flag", () => {
