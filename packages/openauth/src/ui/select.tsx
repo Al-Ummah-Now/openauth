@@ -27,6 +27,7 @@
 import { Layout } from "./base.js"
 import { ICON_GITHUB, ICON_GOOGLE } from "./icon.js"
 import type { Theme } from "./theme.js"
+import { getLocaleFromRequest, getTranslations, type Locale } from "./i18n.js"
 
 /**
  * Extracts theme from request header if available
@@ -81,8 +82,23 @@ export function Select(props?: SelectProps) {
     req: Request,
   ): Promise<Response> => {
     const theme = getThemeFromRequest(req)
+    const locale = getLocaleFromRequest(req)
+    const t = getTranslations(locale)
+
+    // Locale-aware display names
+    const localizedDisplay: Record<string, string> = {
+      twitch: t.provider_twitch,
+      google: t.provider_google,
+      github: t.provider_github,
+      apple: t.provider_apple,
+      x: t.provider_x,
+      facebook: t.provider_facebook,
+      microsoft: t.provider_microsoft,
+      slack: t.provider_slack,
+    }
+
     const jsx = (
-      <Layout theme={theme}>
+      <Layout theme={theme} locale={locale}>
         <div data-component="form">
           {Object.entries(providers).map(([key, type]) => {
             const match = props?.providers?.[key]
@@ -95,7 +111,11 @@ export function Select(props?: SelectProps) {
                 data-color="ghost"
               >
                 {icon && <i data-slot="icon">{icon}</i>}
-                Continue with {match?.display || DISPLAY[type] || type}
+                {t.continue_with}{" "}
+                {match?.display ||
+                  localizedDisplay[type] ||
+                  DISPLAY[type] ||
+                  type}
               </a>
             )
           })}

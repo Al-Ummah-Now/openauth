@@ -122,7 +122,11 @@ import {
   UnauthorizedClientError,
   UnknownStateError,
 } from "../error.js"
-import { setTheme, THEME_OPENAUTH } from "../ui/theme.js"
+import {
+  setTheme,
+  THEME_OPENAUTH,
+  resolveLocalizedString,
+} from "../ui/theme.js"
 import type { Theme } from "../ui/theme.js"
 
 // ============================================
@@ -1145,7 +1149,12 @@ function renderAccountPicker(
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   const fontScale = theme.font?.scale || "1"
   const radius = getRadiusMultiplier(theme.radius)
-  const title = theme.title || tenant?.name || "OpenAuth"
+
+  // Get locale from URL or theme
+  const url = new URL(ctx.req.url)
+  const locale = url.searchParams.get("lang") || theme.locale || "en"
+  const title =
+    resolveLocalizedString(theme.title, locale) || tenant?.name || "OpenAuth"
 
   // Build favicon HTML
   let faviconHtml = ""

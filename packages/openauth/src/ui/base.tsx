@@ -1,14 +1,32 @@
 import { PropsWithChildren } from "hono/jsx"
 import css from "./ui.css" assert { type: "text" }
-import { resolveTheme, type Theme } from "./theme.js"
+import { resolveTheme, resolveLocalizedString, type Theme } from "./theme.js"
+import {
+  getDirection,
+  getTranslations,
+  type Locale,
+  type Translations,
+} from "./i18n.js"
 
-export function Layout(
-  props: PropsWithChildren<{
-    size?: "small"
-    theme?: Theme
-  }>,
-) {
+export interface LayoutProps {
+  size?: "small"
+  theme?: Theme
+  /**
+   * The locale for the UI. Overrides theme.locale.
+   */
+  locale?: Locale | string
+  /**
+   * The text direction. If not provided, derived from locale.
+   */
+  direction?: "ltr" | "rtl"
+}
+
+export function Layout(props: PropsWithChildren<LayoutProps>) {
   const theme = resolveTheme(props.theme)
+  // Priority: props.locale > theme.locale > "en"
+  const locale = (props.locale || theme?.locale || "en") as Locale
+  // Priority: props.direction > theme.direction > derived from locale
+  const direction = props.direction || theme?.direction || getDirection(locale)
   function get(key: "primary" | "background" | "logo", mode: "light" | "dark") {
     if (!theme) return
     if (!theme[key]) return
@@ -27,9 +45,12 @@ export function Layout(
   })()
 
   const hasLogo = get("logo", "light") && get("logo", "dark")
+  const title = resolveLocalizedString(theme?.title, locale)
 
   return (
     <html
+      lang={locale}
+      dir={direction}
       style={{
         "--color-background-light": get("background", "light"),
         "--color-background-dark": get("background", "dark"),
@@ -41,7 +62,7 @@ export function Layout(
       }}
     >
       <head>
-        <title>{theme?.title || "OpenAuthJS"}</title>
+        <title>{title || "OpenAuthJS"}</title>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {theme?.favicon ? (
@@ -78,22 +99,25 @@ export function Layout(
       <body>
         <div data-component="root">
           <div data-component="center" data-size={props.size}>
-            {hasLogo ? (
-              <>
-                <img
-                  data-component="logo"
-                  src={get("logo", "light")}
-                  data-mode="light"
-                />
-                <img
-                  data-component="logo"
-                  src={get("logo", "dark")}
-                  data-mode="dark"
-                />
-              </>
-            ) : (
-              ICON_OPENAUTH
-            )}
+            <div data-component="branding">
+              {hasLogo ? (
+                <>
+                  <img
+                    data-component="logo"
+                    src={get("logo", "light")}
+                    data-mode="light"
+                  />
+                  <img
+                    data-component="logo"
+                    src={get("logo", "dark")}
+                    data-mode="dark"
+                  />
+                </>
+              ) : (
+                ICON_OPENAUTH
+              )}
+              {title && <h1 data-component="site-title">{title}</h1>}
+            </div>
             {props.children}
           </div>
         </div>
