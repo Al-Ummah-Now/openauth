@@ -56,20 +56,66 @@ export interface ColorScheme {
 }
 
 /**
+ * A type for localized string values.
+ * Can be a simple string or an object with locale keys.
+ *
+ * @example
+ * ```ts
+ * // Simple string (same for all locales)
+ * title: "My App"
+ *
+ * // Localized string
+ * title: {
+ *   en: "My App",
+ *   ar: "تطبيقي"
+ * }
+ * ```
+ */
+export type LocalizedString = string | Record<string, string>
+
+/**
  * A type to define your custom theme.
  */
 export interface Theme {
   /**
    * The name of your app. Also used as the title of the page.
+   * Can be a string or localized per language.
    *
    * @example
    * ```ts
+   * // Simple string
+   * { title: "Acme" }
+   *
+   * // Localized
+   * { title: { en: "Acme", ar: "أكمي" } }
+   * ```
+   */
+  title?: LocalizedString
+  /**
+   * The text direction for the UI.
+   *
+   * @default "ltr"
+   * @example
+   * ```ts
    * {
-   *   title: "Acne"
+   *   direction: "rtl"
    * }
    * ```
    */
-  title?: string
+  direction?: "ltr" | "rtl"
+  /**
+   * The locale for the UI. Determines the language of UI text.
+   * Can also be set via `?lang=` URL parameter.
+   *
+   * @default "en"
+   * @example
+   * ```ts
+   * {
+   *   locale: "ar"
+   * }
+   * ```
+   */
+  locale?: string
   /**
    * A URL to the favicon of your app.
    *
@@ -339,4 +385,42 @@ export interface ThemeProps {
    * Optional theme override. If not provided, falls back to global theme.
    */
   theme?: Theme
+}
+
+/**
+ * Resolve a localized string value for a given locale.
+ *
+ * @param value - The localized string (string or Record<locale, string>)
+ * @param locale - The locale to resolve for
+ * @param fallbackLocale - Fallback locale if primary not found (default: "en")
+ * @returns The resolved string or undefined
+ *
+ * @example
+ * ```ts
+ * resolveLocalizedString("Hello", "ar") // "Hello"
+ * resolveLocalizedString({ en: "Hello", ar: "مرحبا" }, "ar") // "مرحبا"
+ * resolveLocalizedString({ en: "Hello" }, "ar") // "Hello" (fallback)
+ * ```
+ */
+export function resolveLocalizedString(
+  value: LocalizedString | undefined,
+  locale: string,
+  fallbackLocale: string = "en",
+): string | undefined {
+  if (!value) return undefined
+  if (typeof value === "string") return value
+
+  // Try exact locale match
+  if (value[locale]) return value[locale]
+
+  // Try base locale (e.g., "en" from "en-US")
+  const baseLocale = locale.split("-")[0]
+  if (value[baseLocale]) return value[baseLocale]
+
+  // Try fallback locale
+  if (value[fallbackLocale]) return value[fallbackLocale]
+
+  // Return first available value
+  const keys = Object.keys(value)
+  return keys.length > 0 ? value[keys[0]] : undefined
 }

@@ -2,7 +2,6 @@
 
 // bin/cli.ts
 import { execSync, spawnSync } from "child_process"
-import { createHash } from "crypto"
 import { readFileSync, existsSync, readdirSync } from "fs"
 import { dirname, join } from "path"
 import { fileURLToPath } from "url"
@@ -45,13 +44,139 @@ function isAlreadyAppliedError(error) {
   return alreadyAppliedPatterns.some((pattern) => pattern.test(error))
 }
 
+// src/client/secret-generator.ts
+var SECRET_BYTE_LENGTH = 32
+var PBKDF2_ITERATIONS = 1e5
+var SALT_BYTE_LENGTH = 16
+function generateClientSecret() {
+  const bytes = crypto.getRandomValues(new Uint8Array(SECRET_BYTE_LENGTH))
+  return bytesToBase64Url(bytes)
+}
+async function hashClientSecret(secret) {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTE_LENGTH))
+  const encoder = new TextEncoder()
+  const secretBytes = encoder.encode(secret)
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    secretBytes,
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  )
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    256,
+  )
+  const hash = new Uint8Array(derivedBits)
+  return `$pbkdf2-sha256$${PBKDF2_ITERATIONS}$${bytesToBase64Url(salt)}$${bytesToBase64Url(hash)}`
+}
+function bytesToBase64Url(bytes) {
+  const base64 = btoa(String.fromCharCode(...bytes))
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+}
+
+// bin/cli-utils.ts
+import { createHash } from "crypto"
+function calculateChecksum(content) {
+  return createHash("sha256").update(content).digest("hex").substring(0, 16)
+}
+function stripJsonComments(content) {
+  content = content.replace(/\/\/.*$/gm, "")
+  content = content.replace(/\/\*[\s\S]*?\*\//g, "")
+  return content
+}
+function extractDbNameFromJson(config) {
+  if (Array.isArray(config.d1_databases) && config.d1_databases.length > 0) {
+    const db = config.d1_databases[0]
+    if (db.database_name) {
+      return db.database_name
+    }
+  }
+  return null
+}
+function buildWranglerArgs(dbName, options) {
+  const args = ["d1", "execute", dbName]
+  if (options.isLocal) args.push("--local")
+  if (options.isRemote) args.push("--remote")
+  if (options.configFile) args.push("--config", options.configFile)
+  return args
+}
+function parseArgs(args) {
+  const result = {
+    isLocal: false,
+    isRemote: false,
+    withSeed: true,
+    force: false,
+  }
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === "--local") {
+      result.isLocal = true
+    } else if (arg === "--remote") {
+      result.isRemote = true
+    } else if (arg === "--no-seed") {
+      result.withSeed = false
+    } else if (arg === "--seed") {
+      result.withSeed = true
+    } else if (arg === "--force") {
+      result.force = true
+    } else if (arg === "--config" || arg === "-c") {
+      result.configFile = args[++i]
+    } else if (!arg.startsWith("-")) {
+      result.dbName = arg
+    }
+  }
+  return result
+}
+function parseAppliedMigrationsOutput(output) {
+  const migrations = []
+  try {
+    const lines = output.split(`
+`)
+    for (const line of lines) {
+      if (line.includes('"name"')) {
+        const match = line.match(
+          /"name":\s*"([^"]+)".*?"applied_at":\s*(\d+).*?"checksum":\s*(?:"([^"]*)"|\d+|null)/,
+        )
+        if (match) {
+          migrations.push({
+            name: match[1],
+            applied_at: parseInt(match[2]),
+            checksum: match[3] || null,
+          })
+        }
+      }
+    }
+  } catch {}
+  return migrations
+}
+function buildRecordMigrationSql(
+  migrationName,
+  checksum,
+  timestamp = Date.now(),
+) {
+  return `INSERT INTO _openauth_migrations (name, applied_at, checksum) VALUES ('${migrationName}', ${timestamp}, '${checksum}')`
+}
+function buildVerifyMigrationSql(migrationName) {
+  return `SELECT name FROM _openauth_migrations WHERE name = '${migrationName}'`
+}
+function migrationRecordExistsInOutput(output, migrationName) {
+  return output.includes(migrationName)
+}
+
 // bin/cli.ts
 var __filename2 = fileURLToPath(import.meta.url)
 var __dirname2 = dirname(__filename2)
 var migrationsDir = join(__dirname2, "..", "src", "migrations")
-function calculateChecksum(filePath) {
+function calculateFileChecksum(filePath) {
   const content = readFileSync(filePath, "utf-8")
-  return createHash("sha256").update(content).digest("hex").substring(0, 16)
+  return calculateChecksum(content)
 }
 function getMigrationFiles() {
   if (!existsSync(migrationsDir)) {
@@ -65,14 +190,9 @@ function getMigrationFiles() {
     return {
       name,
       path,
-      checksum: calculateChecksum(path),
+      checksum: calculateFileChecksum(path),
     }
   })
-}
-function stripJsonComments(content) {
-  content = content.replace(/\/\/.*$/gm, "")
-  content = content.replace(/\/\*[\s\S]*?\*\//g, "")
-  return content
 }
 function parseConfigFile(configPath) {
   if (!existsSync(configPath)) {
@@ -116,22 +236,6 @@ function parseWranglerConfig(customConfig) {
   const jsoncResult = parseConfigFile(join(cwd, "wrangler.jsonc"))
   if (jsoncResult) return jsoncResult
   return null
-}
-function extractDbNameFromJson(config) {
-  if (Array.isArray(config.d1_databases) && config.d1_databases.length > 0) {
-    const db = config.d1_databases[0]
-    if (db.database_name) {
-      return db.database_name
-    }
-  }
-  return null
-}
-function buildWranglerArgs(dbName, options) {
-  const args = ["d1", "execute", dbName]
-  if (options.isLocal) args.push("--local")
-  if (options.isRemote) args.push("--remote")
-  if (options.configFile) args.push("--config", options.configFile)
-  return args
 }
 function executeSqlFile(dbName, filePath, options) {
   if (!existsSync(filePath)) {
@@ -259,41 +363,34 @@ function getAppliedMigrations(dbName, options) {
   if (!result.success || !result.output) {
     return []
   }
-  const migrations = []
-  try {
-    const lines = result.output.split(`
-`)
-    for (const line of lines) {
-      if (line.includes('"name"')) {
-        const match = line.match(
-          /"name":\s*"([^"]+)".*?"applied_at":\s*(\d+).*?"checksum":\s*(?:"([^"]*)"|\d+|null)/,
-        )
-        if (match) {
-          migrations.push({
-            name: match[1],
-            applied_at: parseInt(match[2]),
-            checksum: match[3] || null,
-          })
-        }
-      }
-    }
-  } catch {}
-  return migrations
+  return parseAppliedMigrationsOutput(result.output)
 }
 function recordMigration(dbName, migration, options) {
-  const now = Date.now()
-  const sql = `INSERT INTO _openauth_migrations (name, applied_at, checksum) VALUES ('${migration.name}', ${now}, '${migration.checksum}')`
-  return executeSql(dbName, sql, options)
+  const sql = buildRecordMigrationSql(migration.name, migration.checksum)
+  const result = executeSql(dbName, sql, options)
+  if (!result.success) {
+    const verifySql = buildVerifyMigrationSql(migration.name)
+    const verifyResult = executeSql(dbName, verifySql, options)
+    if (
+      verifyResult.success &&
+      verifyResult.output &&
+      migrationRecordExistsInOutput(verifyResult.output, migration.name)
+    ) {
+      return { success: true }
+    }
+  }
+  return result
 }
 function printHelp() {
   console.log(`
 OpenAuth CLI
 
 Usage:
-  openauth migrate [database-name] [options]    Apply pending migrations
-  openauth seed [database-name] [options]       Apply seed data only
-  openauth status [database-name] [options]     Show migration status
-  openauth help                                 Show this help message
+  openauth migrate [database-name] [options]           Apply pending migrations
+  openauth seed [database-name] [options]              Apply seed data only
+  openauth status [database-name] [options]            Show migration status
+  openauth bootstrap-secrets [database-name] [options] Generate secrets for seeded clients
+  openauth help                                        Show this help message
 
 Options:
   --local              Apply to local D1 database (for development)
@@ -310,39 +407,22 @@ Examples:
   openauth migrate my-auth-db --remote   # Specify database name
   openauth status --local                # Show which migrations are applied
   openauth seed --local                  # Apply only seed data
+  openauth bootstrap-secrets --local     # Generate secrets for clients without them
 
 Migrations are tracked in the _openauth_migrations table.
 Only pending migrations are applied (safe to run multiple times).
+
+The bootstrap-secrets command generates client secrets for seeded clients
+that don't have secrets configured. This solves the chicken-and-egg problem
+where you need a secret to authenticate, but can't get a secret without auth.
 `)
 }
-function parseArgs(args) {
-  const result = {
-    isLocal: false,
-    isRemote: false,
-    withSeed: true,
-    force: false,
-  }
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-    if (arg === "--local") {
-      result.isLocal = true
-    } else if (arg === "--remote") {
-      result.isRemote = true
-    } else if (arg === "--no-seed") {
-      result.withSeed = false
-    } else if (arg === "--seed") {
-      result.withSeed = true
-    } else if (arg === "--force") {
-      result.force = true
-    } else if (arg === "--config" || arg === "-c") {
-      result.configFile = args[++i]
-      if (!result.configFile) {
-        console.error("Error: --config requires a file path")
-        process.exit(1)
-      }
-    } else if (!arg.startsWith("-")) {
-      result.dbName = arg
-    }
+function parseArgsWithValidation(args) {
+  const result = parseArgs(args)
+  const configIndex = args.findIndex((a) => a === "--config" || a === "-c")
+  if (configIndex !== -1 && !result.configFile) {
+    console.error("Error: --config requires a file path")
+    process.exit(1)
   }
   return result
 }
@@ -377,7 +457,7 @@ function checkWrangler() {
   }
 }
 function migrate(args) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
@@ -536,7 +616,7 @@ Skipping: ${seedMigration.name} (already applied)`)
   }
 }
 function status(args) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
@@ -603,7 +683,7 @@ Migration Status:`)
   )
 }
 function seed(args) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
@@ -639,6 +719,138 @@ function seed(args) {
   }
   console.log("Seed data applied successfully!")
 }
+async function bootstrapSecrets(args) {
+  const parsed = parseArgsWithValidation(args)
+  if (parsed.isLocal && parsed.isRemote) {
+    console.error("Error: Cannot specify both --local and --remote")
+    process.exit(1)
+  }
+  const dbName = resolveDbName(parsed)
+  checkWrangler()
+  const options = {
+    isLocal: parsed.isLocal,
+    isRemote: parsed.isRemote,
+    configFile: parsed.configFile,
+  }
+  const target = parsed.isLocal
+    ? " (local)"
+    : parsed.isRemote
+      ? " (remote)"
+      : ""
+  console.log(`
+OpenAuth Bootstrap Secrets - ${dbName}${target}`)
+  console.log("=".repeat(50))
+  const findResult = executeSql(
+    dbName,
+    "SELECT id, name, tenant_id FROM oauth_clients WHERE client_secret_hash IS NULL OR client_secret_hash = ''",
+    options,
+  )
+  if (!findResult.success) {
+    console.error("Error: Failed to query clients")
+    if (findResult.error) {
+      console.error(findResult.error)
+    }
+    process.exit(1)
+  }
+  const clients = parseClientsFromOutput(findResult.output || "")
+  if (clients.length === 0) {
+    console.log(`
+No clients found without secrets.`)
+    console.log("All clients already have secrets configured.")
+    return
+  }
+  console.log(`
+Found ${clients.length} client(s) without secrets:`)
+  for (const client of clients) {
+    console.log(`  - ${client.name} (${client.id})`)
+  }
+  console.log(`
+Generating and applying secrets...
+`)
+  const generatedSecrets = []
+  for (const client of clients) {
+    const secret = generateClientSecret()
+    const hash = await hashClientSecret(secret)
+    const updateSql = `UPDATE oauth_clients SET client_secret_hash = '${hash}', updated_at = ${Date.now()} WHERE id = '${client.id}'`
+    const updateResult = executeSql(dbName, updateSql, options)
+    if (!updateResult.success) {
+      console.error(`Error: Failed to update secret for ${client.name}`)
+      if (updateResult.error) {
+        console.error(updateResult.error)
+      }
+      continue
+    }
+    generatedSecrets.push({
+      id: client.id,
+      name: client.name,
+      secret,
+    })
+    console.log(`  ✓ ${client.name}`)
+  }
+  console.log(
+    `
+` + "=".repeat(50),
+  )
+  console.log(
+    "IMPORTANT: Save these secrets now! They cannot be retrieved later.",
+  )
+  console.log("=".repeat(50))
+  for (const client of generatedSecrets) {
+    console.log(`
+${client.name}:`)
+    console.log(`  Client ID:     ${client.id}`)
+    console.log(`  Client Secret: ${client.secret}`)
+  }
+  console.log(
+    `
+` + "=".repeat(50),
+  )
+  console.log(
+    `Bootstrap complete! Generated ${generatedSecrets.length} secret(s).`,
+  )
+}
+function parseClientsFromOutput(output) {
+  const clients = []
+  const lines = output.trim().split(`
+`)
+  for (const line of lines) {
+    try {
+      const data = JSON.parse(line)
+      if (Array.isArray(data)) {
+        for (const row of data) {
+          if (row.id && row.name) {
+            clients.push({
+              id: row.id,
+              name: row.name,
+              tenant_id: row.tenant_id || "default",
+            })
+          }
+        }
+        continue
+      } else if (data.id && data.name) {
+        clients.push({
+          id: data.id,
+          name: data.name,
+          tenant_id: data.tenant_id || "default",
+        })
+        continue
+      }
+    } catch {}
+    const parts = line.split("|").map((p) => p.trim())
+    if (parts.length >= 2) {
+      const id = parts[0]
+      const name = parts[1]
+      if (id && name && id !== "id" && !id.startsWith("-")) {
+        clients.push({
+          id,
+          name,
+          tenant_id: parts[2] || "default",
+        })
+      }
+    }
+  }
+  return clients
+}
 var args = process.argv.slice(2)
 var command = args[0]
 switch (command) {
@@ -650,6 +862,9 @@ switch (command) {
     break
   case "status":
     status(args.slice(1))
+    break
+  case "bootstrap-secrets":
+    bootstrapSecrets(args.slice(1))
     break
   case "help":
   case "--help":

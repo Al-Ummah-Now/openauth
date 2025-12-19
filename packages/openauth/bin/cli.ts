@@ -5,22 +5,40 @@
  * Provides commands for managing OpenAuth in your project.
  *
  * Usage:
- *   npx openauth migrate [database-name] [--local] [--remote] [--config <file>]
+ *   npx openauth migrate [database-name] [--local] [--remote] [--preview] [--config <file>]
  *
  * If database-name is not provided, reads from wrangler config.
  * Supports: wrangler.toml, wrangler.json, wrangler.jsonc
  */
 
 import { execSync, spawnSync } from "child_process"
-import { createHash } from "crypto"
 import { readFileSync, existsSync, readdirSync } from "fs"
-import { basename, dirname, join } from "path"
+import { dirname, join } from "path"
 import { fileURLToPath } from "url"
 import {
   parseSchemaChanges,
   isAlreadyAppliedError,
   type SchemaChange,
 } from "../src/migrations/utils.js"
+import {
+  generateClientSecret,
+  hashClientSecret,
+} from "../src/client/secret-generator.js"
+import {
+  calculateChecksum,
+  stripJsonComments,
+  extractDbNameFromJson,
+  buildWranglerArgs,
+  parseArgs,
+  parseAppliedMigrationsOutput,
+  buildRecordMigrationSql,
+  buildVerifyMigrationSql,
+  migrationRecordExistsInOutput,
+  type MigrationFile,
+  type AppliedMigration,
+  type ParsedArgs,
+  type WranglerOptions,
+} from "./cli-utils.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -28,24 +46,12 @@ const __dirname = dirname(__filename)
 // Migration directory
 const migrationsDir = join(__dirname, "..", "src", "migrations")
 
-interface MigrationFile {
-  name: string
-  path: string
-  checksum: string
-}
-
-interface AppliedMigration {
-  name: string
-  applied_at: number
-  checksum: string | null
-}
-
 /**
- * Calculate SHA-256 checksum of a file
+ * Calculate checksum of a file
  */
-function calculateChecksum(filePath: string): string {
+function calculateFileChecksum(filePath: string): string {
   const content = readFileSync(filePath, "utf-8")
-  return createHash("sha256").update(content).digest("hex").substring(0, 16)
+  return calculateChecksum(content)
 }
 
 /**
@@ -65,18 +71,9 @@ function getMigrationFiles(): MigrationFile[] {
     return {
       name,
       path,
-      checksum: calculateChecksum(path),
+      checksum: calculateFileChecksum(path),
     }
   })
-}
-
-/**
- * Strip JSON comments for JSONC support
- */
-function stripJsonComments(content: string): string {
-  content = content.replace(/\/\/.*$/gm, "")
-  content = content.replace(/\/\*[\s\S]*?\*\//g, "")
-  return content
 }
 
 /**
@@ -146,36 +143,6 @@ function parseWranglerConfig(customConfig?: string): {
   if (jsoncResult) return jsoncResult
 
   return null
-}
-
-/**
- * Extract database name from parsed JSON config
- */
-function extractDbNameFromJson(config: any): string | null {
-  if (Array.isArray(config.d1_databases) && config.d1_databases.length > 0) {
-    const db = config.d1_databases[0]
-    if (db.database_name) {
-      return db.database_name
-    }
-  }
-  return null
-}
-
-interface WranglerOptions {
-  isLocal: boolean
-  isRemote: boolean
-  configFile?: string
-}
-
-/**
- * Build wrangler command arguments
- */
-function buildWranglerArgs(dbName: string, options: WranglerOptions): string[] {
-  const args = ["d1", "execute", dbName]
-  if (options.isLocal) args.push("--local")
-  if (options.isRemote) args.push("--remote")
-  if (options.configFile) args.push("--config", options.configFile)
-  return args
 }
 
 /**
@@ -384,31 +351,7 @@ function getAppliedMigrations(
     return []
   }
 
-  // Parse wrangler JSON output
-  const migrations: AppliedMigration[] = []
-  try {
-    // Wrangler outputs JSON with results
-    const lines = result.output.split("\n")
-    for (const line of lines) {
-      if (line.includes('"name"')) {
-        // Try to parse as part of results array
-        const match = line.match(
-          /"name":\s*"([^"]+)".*?"applied_at":\s*(\d+).*?"checksum":\s*(?:"([^"]*)"|\d+|null)/,
-        )
-        if (match) {
-          migrations.push({
-            name: match[1],
-            applied_at: parseInt(match[2]),
-            checksum: match[3] || null,
-          })
-        }
-      }
-    }
-  } catch {
-    // Parse error, return empty
-  }
-
-  return migrations
+  return parseAppliedMigrationsOutput(result.output)
 }
 
 /**
@@ -419,9 +362,24 @@ function recordMigration(
   migration: MigrationFile,
   options: WranglerOptions,
 ): { success: boolean; error?: string } {
-  const now = Date.now()
-  const sql = `INSERT INTO _openauth_migrations (name, applied_at, checksum) VALUES ('${migration.name}', ${now}, '${migration.checksum}')`
-  return executeSql(dbName, sql, options)
+  const sql = buildRecordMigrationSql(migration.name, migration.checksum)
+  const result = executeSql(dbName, sql, options)
+
+  // If executeSql reported failure, verify by checking if record actually exists
+  // This handles cases where wrangler returns non-zero exit code but the INSERT succeeded
+  if (!result.success) {
+    const verifySql = buildVerifyMigrationSql(migration.name)
+    const verifyResult = executeSql(dbName, verifySql, options)
+    if (
+      verifyResult.success &&
+      verifyResult.output &&
+      migrationRecordExistsInOutput(verifyResult.output, migration.name)
+    ) {
+      return { success: true }
+    }
+  }
+
+  return result
 }
 
 function printHelp() {
@@ -429,14 +387,16 @@ function printHelp() {
 OpenAuth CLI
 
 Usage:
-  openauth migrate [database-name] [options]    Apply pending migrations
-  openauth seed [database-name] [options]       Apply seed data only
-  openauth status [database-name] [options]     Show migration status
-  openauth help                                 Show this help message
+  openauth migrate [database-name] [options]           Apply pending migrations
+  openauth seed [database-name] [options]              Apply seed data only
+  openauth status [database-name] [options]            Show migration status
+  openauth bootstrap-secrets [database-name] [options] Generate secrets for seeded clients
+  openauth help                                        Show this help message
 
 Options:
   --local              Apply to local D1 database (for development)
   --remote             Apply to remote D1 database (production)
+  --preview            Apply to remote preview D1 database (implies --remote)
   --config, -c <file>  Use a specific wrangler config file
   --no-seed            Skip seed data (migrate only applies schema)
   --force              Force re-run all migrations (ignores tracking)
@@ -445,56 +405,30 @@ Examples:
   openauth migrate                       # Auto-detect from wrangler config
   openauth migrate --local               # Local database
   openauth migrate --remote              # Remote database
+  openauth migrate --preview             # Remote preview database
   openauth migrate --no-seed --local     # Skip seed data
   openauth migrate my-auth-db --remote   # Specify database name
   openauth status --local                # Show which migrations are applied
   openauth seed --local                  # Apply only seed data
+  openauth bootstrap-secrets --local     # Generate secrets for clients without them
 
 Migrations are tracked in the _openauth_migrations table.
 Only pending migrations are applied (safe to run multiple times).
+
+The bootstrap-secrets command generates client secrets for seeded clients
+that don't have secrets configured. This solves the chicken-and-egg problem
+where you need a secret to authenticate, but can't get a secret without auth.
 `)
 }
 
-interface ParsedArgs {
-  dbName?: string
-  isLocal: boolean
-  isRemote: boolean
-  configFile?: string
-  withSeed: boolean
-  force: boolean
-}
-
-function parseArgs(args: string[]): ParsedArgs {
-  const result: ParsedArgs = {
-    isLocal: false,
-    isRemote: false,
-    withSeed: true,
-    force: false,
+function parseArgsWithValidation(args: string[]): ParsedArgs {
+  const result = parseArgs(args)
+  // Validate --config has a value
+  const configIndex = args.findIndex((a) => a === "--config" || a === "-c")
+  if (configIndex !== -1 && !result.configFile) {
+    console.error("Error: --config requires a file path")
+    process.exit(1)
   }
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-    if (arg === "--local") {
-      result.isLocal = true
-    } else if (arg === "--remote") {
-      result.isRemote = true
-    } else if (arg === "--no-seed") {
-      result.withSeed = false
-    } else if (arg === "--seed") {
-      result.withSeed = true
-    } else if (arg === "--force") {
-      result.force = true
-    } else if (arg === "--config" || arg === "-c") {
-      result.configFile = args[++i]
-      if (!result.configFile) {
-        console.error("Error: --config requires a file path")
-        process.exit(1)
-      }
-    } else if (!arg.startsWith("-")) {
-      result.dbName = arg
-    }
-  }
-
   return result
 }
 
@@ -533,11 +467,21 @@ function checkWrangler() {
 }
 
 function migrate(args: string[]) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
 
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
+  }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  // --preview requires --remote in wrangler
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
   }
 
   const dbName = resolveDbName(parsed)
@@ -546,14 +490,17 @@ function migrate(args: string[]) {
   const options: WranglerOptions = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
     configFile: parsed.configFile,
   }
 
   const target = parsed.isLocal
     ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
 
   // Get all migration files
   const migrations = getMigrationFiles()
@@ -726,11 +673,21 @@ function migrate(args: string[]) {
 }
 
 function status(args: string[]) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
 
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
+  }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  // --preview requires --remote in wrangler
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
   }
 
   const dbName = resolveDbName(parsed)
@@ -739,14 +696,17 @@ function status(args: string[]) {
   const options: WranglerOptions = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
     configFile: parsed.configFile,
   }
 
   const target = parsed.isLocal
     ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
 
   console.log(`\nOpenAuth Migration Status - ${dbName}${target}`)
   console.log("=".repeat(50))
@@ -805,11 +765,21 @@ function status(args: string[]) {
 }
 
 function seed(args: string[]) {
-  const parsed = parseArgs(args)
+  const parsed = parseArgsWithValidation(args)
 
   if (parsed.isLocal && parsed.isRemote) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
+  }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  // --preview requires --remote in wrangler
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
   }
 
   const dbName = resolveDbName(parsed)
@@ -828,14 +798,17 @@ function seed(args: string[]) {
   const options: WranglerOptions = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
     configFile: parsed.configFile,
   }
 
   const target = parsed.isLocal
     ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
 
   console.log(`Applying seed data to ${dbName}${target}...`)
   const result = executeSqlFile(dbName, seedMigration.path, options)
@@ -851,6 +824,187 @@ function seed(args: string[]) {
   console.log("Seed data applied successfully!")
 }
 
+/**
+ * Bootstrap secrets for OAuth clients that don't have one
+ * Solves the chicken-and-egg problem where seeded clients have empty secrets
+ */
+async function bootstrapSecrets(args: string[]) {
+  const parsed = parseArgsWithValidation(args)
+
+  if (parsed.isLocal && parsed.isRemote) {
+    console.error("Error: Cannot specify both --local and --remote")
+    process.exit(1)
+  }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  // --preview requires --remote in wrangler
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
+  }
+
+  const dbName = resolveDbName(parsed)
+  checkWrangler()
+
+  const options: WranglerOptions = {
+    isLocal: parsed.isLocal,
+    isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
+    configFile: parsed.configFile,
+  }
+
+  const target = parsed.isLocal
+    ? " (local)"
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
+
+  console.log(`\nOpenAuth Bootstrap Secrets - ${dbName}${target}`)
+  console.log("=".repeat(50))
+
+  // Find clients with empty or null client_secret_hash
+  const findResult = executeSql(
+    dbName,
+    "SELECT id, name, tenant_id FROM oauth_clients WHERE client_secret_hash IS NULL OR client_secret_hash = ''",
+    options,
+  )
+
+  if (!findResult.success) {
+    console.error("Error: Failed to query clients")
+    if (findResult.error) {
+      console.error(findResult.error)
+    }
+    process.exit(1)
+  }
+
+  // Parse the output to get client list
+  const clients = parseClientsFromOutput(findResult.output || "")
+
+  if (clients.length === 0) {
+    console.log("\nNo clients found without secrets.")
+    console.log("All clients already have secrets configured.")
+    return
+  }
+
+  console.log(`\nFound ${clients.length} client(s) without secrets:`)
+  for (const client of clients) {
+    console.log(`  - ${client.name} (${client.id})`)
+  }
+
+  console.log("\nGenerating and applying secrets...\n")
+
+  const generatedSecrets: Array<{
+    id: string
+    name: string
+    secret: string
+  }> = []
+
+  for (const client of clients) {
+    // Generate new secret
+    const secret = generateClientSecret()
+    const hash = await hashClientSecret(secret)
+
+    // Update the client in database
+    const updateSql = `UPDATE oauth_clients SET client_secret_hash = '${hash}', updated_at = ${Date.now()} WHERE id = '${client.id}'`
+    const updateResult = executeSql(dbName, updateSql, options)
+
+    if (!updateResult.success) {
+      console.error(`Error: Failed to update secret for ${client.name}`)
+      if (updateResult.error) {
+        console.error(updateResult.error)
+      }
+      continue
+    }
+
+    generatedSecrets.push({
+      id: client.id,
+      name: client.name,
+      secret,
+    })
+    console.log(`  ✓ ${client.name}`)
+  }
+
+  console.log("\n" + "=".repeat(50))
+  console.log(
+    "IMPORTANT: Save these secrets now! They cannot be retrieved later.",
+  )
+  console.log("=".repeat(50))
+
+  for (const client of generatedSecrets) {
+    console.log(`\n${client.name}:`)
+    console.log(`  Client ID:     ${client.id}`)
+    console.log(`  Client Secret: ${client.secret}`)
+  }
+
+  console.log("\n" + "=".repeat(50))
+  console.log(
+    `Bootstrap complete! Generated ${generatedSecrets.length} secret(s).`,
+  )
+}
+
+/**
+ * Parse clients from wrangler D1 output
+ */
+function parseClientsFromOutput(
+  output: string,
+): Array<{ id: string; name: string; tenant_id: string }> {
+  const clients: Array<{ id: string; name: string; tenant_id: string }> = []
+
+  // D1 output format varies - try to parse JSON or table format
+  const lines = output.trim().split("\n")
+
+  for (const line of lines) {
+    // Try JSON format first
+    try {
+      const data = JSON.parse(line)
+      if (Array.isArray(data)) {
+        for (const row of data) {
+          if (row.id && row.name) {
+            clients.push({
+              id: row.id,
+              name: row.name,
+              tenant_id: row.tenant_id || "default",
+            })
+          }
+        }
+        continue
+      } else if (data.id && data.name) {
+        clients.push({
+          id: data.id,
+          name: data.name,
+          tenant_id: data.tenant_id || "default",
+        })
+        continue
+      }
+    } catch {
+      // Not JSON, try other formats
+    }
+
+    // Try parsing table/pipe-delimited format
+    // Format: id | name | tenant_id
+    const parts = line.split("|").map((p) => p.trim())
+    if (parts.length >= 2) {
+      const id = parts[0]
+      const name = parts[1]
+      // Skip header rows
+      if (id && name && id !== "id" && !id.startsWith("-")) {
+        clients.push({
+          id,
+          name,
+          tenant_id: parts[2] || "default",
+        })
+      }
+    }
+  }
+
+  return clients
+}
+
 // Parse command line arguments
 const args = process.argv.slice(2)
 const command = args[0]
@@ -864,6 +1018,9 @@ switch (command) {
     break
   case "status":
     status(args.slice(1))
+    break
+  case "bootstrap-secrets":
+    bootstrapSecrets(args.slice(1))
     break
   case "help":
   case "--help":
