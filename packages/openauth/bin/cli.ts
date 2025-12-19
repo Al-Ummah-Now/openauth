@@ -469,8 +469,9 @@ function checkWrangler() {
 function migrate(args: string[]) {
   const parsed = parseArgsWithValidation(args)
 
-  const modeCount =
-    [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(Boolean).length
+  const modeCount = [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(
+    Boolean,
+  ).length
   if (modeCount > 1) {
     console.error(
       "Error: Cannot specify more than one of --local, --remote, or --preview",
@@ -494,7 +495,7 @@ function migrate(args: string[]) {
       ? " (remote)"
       : parsed.isPreview
         ? " (preview)"
-      : ""
+        : ""
 
   // Get all migration files
   const migrations = getMigrationFiles()
@@ -669,8 +670,9 @@ function migrate(args: string[]) {
 function status(args: string[]) {
   const parsed = parseArgsWithValidation(args)
 
-  const modeCount =
-    [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(Boolean).length
+  const modeCount = [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(
+    Boolean,
+  ).length
   if (modeCount > 1) {
     console.error(
       "Error: Cannot specify more than one of --local, --remote, or --preview",
@@ -694,7 +696,7 @@ function status(args: string[]) {
       ? " (remote)"
       : parsed.isPreview
         ? " (preview)"
-      : ""
+        : ""
 
   console.log(`\nOpenAuth Migration Status - ${dbName}${target}`)
   console.log("=".repeat(50))
@@ -755,8 +757,9 @@ function status(args: string[]) {
 function seed(args: string[]) {
   const parsed = parseArgsWithValidation(args)
 
-  const modeCount =
-    [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(Boolean).length
+  const modeCount = [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(
+    Boolean,
+  ).length
   if (modeCount > 1) {
     console.error(
       "Error: Cannot specify more than one of --local, --remote, or --preview",
@@ -790,7 +793,7 @@ function seed(args: string[]) {
       ? " (remote)"
       : parsed.isPreview
         ? " (preview)"
-      : ""
+        : ""
 
   console.log(`Applying seed data to ${dbName}${target}...`)
   const result = executeSqlFile(dbName, seedMigration.path, options)
@@ -813,8 +816,9 @@ function seed(args: string[]) {
 async function bootstrapSecrets(args: string[]) {
   const parsed = parseArgsWithValidation(args)
 
-  const modeCount =
-    [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(Boolean).length
+  const modeCount = [parsed.isLocal, parsed.isRemote, parsed.isPreview].filter(
+    Boolean,
+  ).length
   if (modeCount > 1) {
     console.error(
       "Error: Cannot specify more than one of --local, --remote, or --preview",
@@ -838,7 +842,7 @@ async function bootstrapSecrets(args: string[]) {
       ? " (remote)"
       : parsed.isPreview
         ? " (preview)"
-      : ""
+        : ""
 
   console.log(`\nOpenAuth Bootstrap Secrets - ${dbName}${target}`)
   console.log("=".repeat(50))
