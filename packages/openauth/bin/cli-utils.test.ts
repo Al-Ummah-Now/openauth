@@ -156,13 +156,13 @@ describe("buildWranglerArgs", () => {
     expect(args).toEqual(["d1", "execute", "mydb", "--remote"])
   })
 
-  test("adds --preview flag", () => {
+  test("adds --preview flag with --remote", () => {
     const args = buildWranglerArgs("mydb", {
       isLocal: false,
       isRemote: false,
       isPreview: true,
     })
-    expect(args).toEqual(["d1", "execute", "mydb", "--preview"])
+    expect(args).toEqual(["d1", "execute", "mydb", "--remote", "--preview"])
   })
 
   test("adds --config flag with path", () => {
@@ -209,6 +209,7 @@ describe("buildWranglerArgs", () => {
       "d1",
       "execute",
       "mydb",
+      "--remote",
       "--preview",
       "--config",
       "./custom.toml",

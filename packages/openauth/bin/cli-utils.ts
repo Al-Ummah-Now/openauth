@@ -73,8 +73,11 @@ export function buildWranglerArgs(
 ): string[] {
   const args = ["d1", "execute", dbName]
   if (options.isLocal) args.push("--local")
-  if (options.isRemote) args.push("--remote")
-  if (options.isPreview) args.push("--preview")
+  if (options.isPreview) {
+    args.push("--remote", "--preview")
+  } else if (options.isRemote) {
+    args.push("--remote")
+  }
   if (options.configFile) args.push("--config", options.configFile)
   return args
 }
