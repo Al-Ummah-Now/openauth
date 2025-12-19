@@ -21,6 +21,10 @@ import {
   type SchemaChange,
 } from "../src/migrations/utils.js"
 import {
+  generateClientSecret,
+  hashClientSecret,
+} from "../src/client/secret-generator.js"
+import {
   calculateChecksum,
   stripJsonComments,
   extractDbNameFromJson,
@@ -383,10 +387,11 @@ function printHelp() {
 OpenAuth CLI
 
 Usage:
-  openauth migrate [database-name] [options]    Apply pending migrations
-  openauth seed [database-name] [options]       Apply seed data only
-  openauth status [database-name] [options]     Show migration status
-  openauth help                                 Show this help message
+  openauth migrate [database-name] [options]           Apply pending migrations
+  openauth seed [database-name] [options]              Apply seed data only
+  openauth status [database-name] [options]            Show migration status
+  openauth bootstrap-secrets [database-name] [options] Generate secrets for seeded clients
+  openauth help                                        Show this help message
 
 Options:
   --local              Apply to local D1 database (for development)
@@ -403,9 +408,14 @@ Examples:
   openauth migrate my-auth-db --remote   # Specify database name
   openauth status --local                # Show which migrations are applied
   openauth seed --local                  # Apply only seed data
+  openauth bootstrap-secrets --local     # Generate secrets for clients without them
 
 Migrations are tracked in the _openauth_migrations table.
 Only pending migrations are applied (safe to run multiple times).
+
+The bootstrap-secrets command generates client secrets for seeded clients
+that don't have secrets configured. This solves the chicken-and-egg problem
+where you need a secret to authenticate, but can't get a secret without auth.
 `)
 }
 
@@ -773,6 +783,170 @@ function seed(args: string[]) {
   console.log("Seed data applied successfully!")
 }
 
+/**
+ * Bootstrap secrets for OAuth clients that don't have one
+ * Solves the chicken-and-egg problem where seeded clients have empty secrets
+ */
+async function bootstrapSecrets(args: string[]) {
+  const parsed = parseArgsWithValidation(args)
+
+  if (parsed.isLocal && parsed.isRemote) {
+    console.error("Error: Cannot specify both --local and --remote")
+    process.exit(1)
+  }
+
+  const dbName = resolveDbName(parsed)
+  checkWrangler()
+
+  const options: WranglerOptions = {
+    isLocal: parsed.isLocal,
+    isRemote: parsed.isRemote,
+    configFile: parsed.configFile,
+  }
+
+  const target = parsed.isLocal
+    ? " (local)"
+    : parsed.isRemote
+      ? " (remote)"
+      : ""
+
+  console.log(`\nOpenAuth Bootstrap Secrets - ${dbName}${target}`)
+  console.log("=".repeat(50))
+
+  // Find clients with empty or null client_secret_hash
+  const findResult = executeSql(
+    dbName,
+    "SELECT id, name, tenant_id FROM oauth_clients WHERE client_secret_hash IS NULL OR client_secret_hash = ''",
+    options,
+  )
+
+  if (!findResult.success) {
+    console.error("Error: Failed to query clients")
+    if (findResult.error) {
+      console.error(findResult.error)
+    }
+    process.exit(1)
+  }
+
+  // Parse the output to get client list
+  const clients = parseClientsFromOutput(findResult.output || "")
+
+  if (clients.length === 0) {
+    console.log("\nNo clients found without secrets.")
+    console.log("All clients already have secrets configured.")
+    return
+  }
+
+  console.log(`\nFound ${clients.length} client(s) without secrets:`)
+  for (const client of clients) {
+    console.log(`  - ${client.name} (${client.id})`)
+  }
+
+  console.log("\nGenerating and applying secrets...\n")
+
+  const generatedSecrets: Array<{
+    id: string
+    name: string
+    secret: string
+  }> = []
+
+  for (const client of clients) {
+    // Generate new secret
+    const secret = generateClientSecret()
+    const hash = await hashClientSecret(secret)
+
+    // Update the client in database
+    const updateSql = `UPDATE oauth_clients SET client_secret_hash = '${hash}', updated_at = ${Date.now()} WHERE id = '${client.id}'`
+    const updateResult = executeSql(dbName, updateSql, options)
+
+    if (!updateResult.success) {
+      console.error(`Error: Failed to update secret for ${client.name}`)
+      if (updateResult.error) {
+        console.error(updateResult.error)
+      }
+      continue
+    }
+
+    generatedSecrets.push({
+      id: client.id,
+      name: client.name,
+      secret,
+    })
+    console.log(`  ✓ ${client.name}`)
+  }
+
+  console.log("\n" + "=".repeat(50))
+  console.log("IMPORTANT: Save these secrets now! They cannot be retrieved later.")
+  console.log("=".repeat(50))
+
+  for (const client of generatedSecrets) {
+    console.log(`\n${client.name}:`)
+    console.log(`  Client ID:     ${client.id}`)
+    console.log(`  Client Secret: ${client.secret}`)
+  }
+
+  console.log("\n" + "=".repeat(50))
+  console.log(`Bootstrap complete! Generated ${generatedSecrets.length} secret(s).`)
+}
+
+/**
+ * Parse clients from wrangler D1 output
+ */
+function parseClientsFromOutput(
+  output: string,
+): Array<{ id: string; name: string; tenant_id: string }> {
+  const clients: Array<{ id: string; name: string; tenant_id: string }> = []
+
+  // D1 output format varies - try to parse JSON or table format
+  const lines = output.trim().split("\n")
+
+  for (const line of lines) {
+    // Try JSON format first
+    try {
+      const data = JSON.parse(line)
+      if (Array.isArray(data)) {
+        for (const row of data) {
+          if (row.id && row.name) {
+            clients.push({
+              id: row.id,
+              name: row.name,
+              tenant_id: row.tenant_id || "default",
+            })
+          }
+        }
+        continue
+      } else if (data.id && data.name) {
+        clients.push({
+          id: data.id,
+          name: data.name,
+          tenant_id: data.tenant_id || "default",
+        })
+        continue
+      }
+    } catch {
+      // Not JSON, try other formats
+    }
+
+    // Try parsing table/pipe-delimited format
+    // Format: id | name | tenant_id
+    const parts = line.split("|").map((p) => p.trim())
+    if (parts.length >= 2) {
+      const id = parts[0]
+      const name = parts[1]
+      // Skip header rows
+      if (id && name && id !== "id" && !id.startsWith("-")) {
+        clients.push({
+          id,
+          name,
+          tenant_id: parts[2] || "default",
+        })
+      }
+    }
+  }
+
+  return clients
+}
+
 // Parse command line arguments
 const args = process.argv.slice(2)
 const command = args[0]
@@ -786,6 +960,9 @@ switch (command) {
     break
   case "status":
     status(args.slice(1))
+    break
+  case "bootstrap-secrets":
+    bootstrapSecrets(args.slice(1))
     break
   case "help":
   case "--help":
