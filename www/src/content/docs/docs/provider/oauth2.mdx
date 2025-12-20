@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `Oauth2Provider`.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -26,19 +21,16 @@ export default issuer({
       clientSecret: "0987654321",
       endpoint: {
         authorization: "https://auth.myserver.com/authorize",
-        token: "https://auth.myserver.com/token",
-      },
-    }),
-  },
+        token: "https://auth.myserver.com/token"
+      }
+    })
+  }
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### Oauth2Provider
-
 <Segment>
 <Section type="signature">
 ```ts
@@ -60,9 +52,10 @@ Oauth2Provider(config)
 - <p>[<code class="key">clientSecret</code>](#oauth2config.clientsecret) <code class="primitive">string</code></p>
 - <p>[<code class="key">endpoint</code>](#oauth2config.endpoint) <code class="primitive">Object</code></p>
   - <p>[<code class="key">authorization</code>](#endpoint.authorization) <code class="primitive">string</code></p>
+  - <p>[<code class="key">jwks?</code>](#endpoint.jwks) <code class="primitive">string</code></p>
   - <p>[<code class="key">token</code>](#endpoint.token) <code class="primitive">string</code></p>
 - <p>[<code class="key">pkce?</code>](#oauth2config.pkce) <code class="primitive">boolean</code></p>
-- <p>[<code class="key">query?</code>](#oauth2config.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code></p>
+- <p>[<code class="key">query?</code>](#oauth2config.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
 - <p>[<code class="key">scopes</code>](#oauth2config.scopes) <code class="primitive">string</code><code class="symbol">[]</code></p>
 </Section>
 </Segment>
@@ -76,13 +69,11 @@ Oauth2Provider(config)
 The client ID.
 
 This is just a string to identify your app.
-
 ```ts
 {
   clientID: "my-client"
 }
 ```
-
 </Segment>
 <NestedTitle id="oauth2config.clientsecret" Tag="h4" parent="Oauth2Config.">clientSecret</NestedTitle>
 <Segment>
@@ -94,13 +85,11 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
-
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
-
 </Segment>
 <NestedTitle id="oauth2config.endpoint" Tag="h4" parent="Oauth2Config.">endpoint</NestedTitle>
 <Segment>
@@ -114,7 +103,8 @@ The URLs of the authorization and token endpoints.
 {
   endpoint: {
     authorization: "https://auth.myserver.com/authorize",
-    token: "https://auth.myserver.com/token"
+    token: "https://auth.myserver.com/token",
+    jwks: "https://auth.myserver.com/auth/keys"
   }
 }
 ```
@@ -127,6 +117,15 @@ The URLs of the authorization and token endpoints.
 </InlineSection>
 </Section>
 The URL of the authorization endpoint.
+</Segment>
+<NestedTitle id="endpoint.jwks" Tag="h5" parent="Oauth2Config.endpoint.">jwks?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The URL of the JWKS endpoint.
 </Segment>
 <NestedTitle id="endpoint.token" Tag="h5" parent="Oauth2Config.endpoint.">token</NestedTitle>
 <Segment>
@@ -155,7 +154,7 @@ Some providers like x.com require this.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 Any additional parameters that you want to pass to the authorization endpoint.

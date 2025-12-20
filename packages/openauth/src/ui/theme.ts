@@ -390,7 +390,7 @@ export interface ThemeProps {
 /**
  * Resolve a localized string value for a given locale.
  *
- * @param value - The localized string (string or Record<locale, string>)
+ * @param value - The localized string (string or locale-to-string record)
  * @param locale - The locale to resolve for
  * @param fallbackLocale - Fallback locale if primary not found (default: "en")
  * @returns The resolved string or undefined

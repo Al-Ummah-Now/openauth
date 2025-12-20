@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the OpenAuth server.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -89,8 +84,8 @@ import { createSubjects } from "@openauthjs/openauth/subject"
 
 const subjects = createSubjects({
   user: object({
-    userID: string(),
-  }),
+    userID: string()
+  })
 })
 ```
 
@@ -115,17 +110,15 @@ Since `issuer` is a Hono app, you can deploy it anywhere Hono supports.
   ```ts title="issuer.ts"
   import { serve } from "@hono/node-server"
 
-serve(app)
+  serve(app)
+  ```
+  </TabItem>
+  <TabItem label="Lambda">
+  ```ts title="issuer.ts"
+  import { handle } from "hono/aws-lambda"
 
-````
-</TabItem>
-<TabItem label="Lambda">
-```ts title="issuer.ts"
-import { handle } from "hono/aws-lambda"
-
-export const handler = handle(app)
-````
-
+  export const handler = handle(app)
+  ```
   </TabItem>
   <TabItem label="Bun">
   ```ts title="issuer.ts"
@@ -160,7 +153,22 @@ Create an OpenAuth server, a Hono app.
 ## IssuerInput
 <Segment>
 <Section type="parameters">
-- <p>[<code class="key">providers</code>](#issuerinput.providers) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="type">Provider</code><code class="symbol">&gt;</code></p>
+- <p>[<code class="key">audit?</code>](#issuerinput.audit) <code class="primitive">Object</code></p>
+  - <p>[<code class="key">hooks?</code>](#audit.hooks) <code class="primitive">Object</code></p>
+    - <p>[<code class="key">onTokenGenerated?</code>](#audit.hooks.ontokengenerated) <code class="primitive">boolean</code></p>
+    - <p>[<code class="key">onTokenRefreshed?</code>](#audit.hooks.ontokenrefreshed) <code class="primitive">boolean</code></p>
+    - <p>[<code class="key">onTokenReused?</code>](#audit.hooks.ontokenreused) <code class="primitive">boolean</code></p>
+    - <p>[<code class="key">onTokenRevoked?</code>](#audit.hooks.ontokenrevoked) <code class="primitive">boolean</code></p>
+  - <p>[<code class="key">service</code>](#audit.service) <code class="type">AuditService</code></p>
+- <p>[<code class="key">clientDb?</code>](#issuerinput.clientdb) <code class="type">D1Database</code></p>
+- <p>[<code class="key">cors?</code>](#issuerinput.cors) <code class="primitive">Object</code></p>
+  - <p>[<code class="key">credentials?</code>](#cors.credentials) <code class="primitive">boolean</code></p>
+  - <p>[<code class="key">headers?</code>](#cors.headers) <code class="primitive">string</code><code class="symbol">[]</code></p>
+  - <p>[<code class="key">maxAge?</code>](#cors.maxage) <code class="primitive">number</code></p>
+  - <p>[<code class="key">methods?</code>](#cors.methods) <code class="primitive">string</code><code class="symbol">[]</code></p>
+  - <p>[<code class="key">origins</code>](#cors.origins) <code class="primitive">string</code><code class="symbol">[]</code></p>
+- <p>[<code class="key">m2m?</code>](#issuerinput.m2m) <code class="type">M2MConfig</code></p>
+- <p>[<code class="key">providers</code>](#issuerinput.providers) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="type">Provider</code><code class="symbol">&gt;</code></p>
 - <p>[<code class="key">storage?</code>](#issuerinput.storage) <code class="type">StorageAdapter</code></p>
 - <p>[<code class="key">subjects</code>](#issuerinput.subjects) [<code class="type">SubjectSchema</code>](/docs/subject#subjectschema)</p>
 - <p>[<code class="key">theme?</code>](#issuerinput.theme) [<code class="type">Theme</code>](#theme)</p>
@@ -170,15 +178,181 @@ Create an OpenAuth server, a Hono app.
   - <p>[<code class="key">retention?</code>](#ttl.retention) <code class="primitive">number</code></p>
   - <p>[<code class="key">reuse?</code>](#ttl.reuse) <code class="primitive">number</code></p>
 - <p>[<code class="key">allow?</code>](#issuerinput.allow) <code class="primitive">(input: <code class="symbol">&lcub; </code><code class="key">audience</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">clientID</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">redirectURI</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol"> &rcub;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code></code></p>
-- <p>[<code class="key">select?</code>](#issuerinput.select) <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
+- <p>[<code class="key">select?</code>](#issuerinput.select) <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
 - <p>[<code class="key">success</code>](#issuerinput.success) <code class="primitive">(response: [<code class="type">OnSuccessResponder</code>](#onsuccessresponder), input: <code class="type">Result</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
 </Section>
+</Segment>
+<NestedTitle id="issuerinput.audit" Tag="h4" parent="IssuerInput.">audit?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+Audit configuration for token usage logging (optional).
+Provides async, non-blocking audit logging to D1.
+```ts
+issuer({
+  audit: {
+    service: new AuditService({ database: env.AUTH_DB }),
+    hooks: {
+      onTokenGenerated: true,
+      onTokenRefreshed: true,
+      onTokenRevoked: true,
+      onTokenReused: true
+    }
+  }
+})
+```
+</Segment>
+<NestedTitle id="audit.hooks" Tag="h5" parent="IssuerInput.audit.">hooks?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="audit.hooks.ontokengenerated" Tag="h5" parent="IssuerInput.audit.hooks.">onTokenGenerated?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="audit.hooks.ontokenrefreshed" Tag="h5" parent="IssuerInput.audit.hooks.">onTokenRefreshed?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="audit.hooks.ontokenreused" Tag="h5" parent="IssuerInput.audit.hooks.">onTokenReused?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="audit.hooks.ontokenrevoked" Tag="h5" parent="IssuerInput.audit.hooks.">onTokenRevoked?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="audit.service" Tag="h5" parent="IssuerInput.audit.">service</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="type">AuditService</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="issuerinput.clientdb" Tag="h4" parent="IssuerInput.">clientDb?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="type">D1Database</code>
+</InlineSection>
+</Section>
+D1 database for client credentials (optional).
+If provided, enables client authentication for confidential clients.
+```ts
+issuer({
+  clientDb: env.AUTH_DB,
+  // ... other config
+})
+```
+</Segment>
+<NestedTitle id="issuerinput.cors" Tag="h4" parent="IssuerInput.">cors?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+CORS configuration for cross-origin requests (optional).
+Applies globally to all endpoints.
+```ts
+issuer({
+  cors: {
+    origins: env.ALLOWED_ORIGINS.split(','),
+    credentials: true
+  }
+})
+```
+</Segment>
+<NestedTitle id="cors.credentials" Tag="h5" parent="IssuerInput.cors.">credentials?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="cors.headers" Tag="h5" parent="IssuerInput.cors.">headers?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code><code class="symbol">[]</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="cors.maxage" Tag="h5" parent="IssuerInput.cors.">maxAge?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="cors.methods" Tag="h5" parent="IssuerInput.cors.">methods?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code><code class="symbol">[]</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="cors.origins" Tag="h5" parent="IssuerInput.cors.">origins</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code><code class="symbol">[]</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="issuerinput.m2m" Tag="h4" parent="IssuerInput.">m2m?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="type">M2MConfig</code>
+</InlineSection>
+</Section>
+M2M (Machine-to-Machine) authentication configuration (optional).
+Enables OAuth 2.0 Client Credentials Grant (RFC 6749 Section 4.4).
+
+Requires `clientDb` to be configured for client authentication.
+```ts
+issuer({
+  clientDb: env.AUTH_DB,
+  m2m: {
+    ttl: 3600, // 1 hour token lifetime
+    includeTenantId: true
+  }
+})
+```
 </Segment>
 <NestedTitle id="issuerinput.providers" Tag="h4" parent="IssuerInput.">providers</NestedTitle>
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="type">Provider</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="type">Provider</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 The providers that you want your OpenAuth server to support.
@@ -186,16 +360,15 @@ The providers that you want your OpenAuth server to support.
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 
 issuer({
-providers: {
-github: GithubProvider()
-}
+  providers: {
+    github: GithubProvider()
+  }
 })
-
-````
+```
 
 
 The key is just a string that you can use to identify the provider. It's passed back to
-the
+the 
 `success`
  callback.
 
@@ -209,8 +382,7 @@ You can also specify multiple providers.
     google: GoogleProvider()
   }
 }
-````
-
+```
 </Segment>
 <NestedTitle id="issuerinput.storage" Tag="h4" parent="IssuerInput.">storage?</NestedTitle>
 <Segment>
@@ -224,11 +396,10 @@ The storage adapter that you want to use.
 import { DynamoStorage } from "@openauthjs/openauth/storage/dynamo"
 
 issuer({
-storage: DynamoStorage()
-// ...
+  storage: DynamoStorage()
+  // ...
 })
-
-````
+```
 </Segment>
 <NestedTitle id="issuerinput.subjects" Tag="h4" parent="IssuerInput.">subjects</NestedTitle>
 <Segment>
@@ -250,8 +421,7 @@ issuer({
   })
   // ...
 })
-````
-
+```
 </Segment>
 <NestedTitle id="issuerinput.theme" Tag="h4" parent="IssuerInput.">theme?</NestedTitle>
 <Segment>
@@ -264,17 +434,18 @@ The theme you want to use for the UI.
 
 This includes the UI the user sees when selecting a provider. And the `PasswordUI` and
 `CodeUI` that are used by the `PasswordProvider` and `CodeProvider`.
-
 ```ts title="issuer.ts"
 import { THEME_SST } from "@openauthjs/openauth/ui/theme"
 
 issuer({
-  theme: THEME_SST,
+  theme: THEME_SST
   // ...
 })
 ```
 
+
 Or define your own.
+
 
 ```ts title="issuer.ts"
 import type { Theme } from "@openauthjs/openauth/ui/theme"
@@ -284,11 +455,10 @@ const MY_THEME: Theme = {
 }
 
 issuer({
-  theme: MY_THEME,
+  theme: MY_THEME
   // ...
 })
 ```
-
 </Segment>
 <NestedTitle id="issuerinput.ttl" Tag="h4" parent="IssuerInput.">ttl?</NestedTitle>
 <Segment>
@@ -374,7 +544,6 @@ By default, it uses the following:
 - Allow if the `redirectURI` is localhost.
 - Compare `redirectURI` to the request's hostname or the `x-forwarded-host` header. If they
   are from the same sub-domain level, then allow.
-
 ```ts
 {
   allow: async (input, req) => {
@@ -383,19 +552,20 @@ By default, it uses the following:
   }
 }
 ```
-
 </Segment>
 <NestedTitle id="issuerinput.select" Tag="h4" parent="IssuerInput.">select?</NestedTitle>
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
+**Type** <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
 </InlineSection>
 </Section>
 
-<InlineSection>**Default** Select()</InlineSection>
-Optionally, configure the UI that's displayed when the user visits the root URL
-of the of the OpenAuth server.
+<InlineSection>
+**Default** Select()
+</InlineSection>
+Optionally, configure the UI that's displayed when the user visits the root URL of the
+of the OpenAuth server.
 
 ```ts title="issuer.ts"
 import { Select } from "@openauthjs/openauth/ui/select"
@@ -404,13 +574,12 @@ issuer({
   select: Select({
     providers: {
       github: { hide: true },
-      google: { display: "Google" },
-    },
-  }),
+      google: { display: "Google" }
+    }
+  })
   // ...
 })
 ```
-
 </Segment>
 <NestedTitle id="issuerinput.success" Tag="h4" parent="IssuerInput.">success</NestedTitle>
 <Segment>
@@ -422,7 +591,6 @@ issuer({
 The success callback that's called when the user completes the flow.
 
 This is called after the user has been redirected back to your app after the OAuth flow.
-
 ```ts
 {
   success: async (ctx, value) => {
@@ -442,7 +610,6 @@ This is called after the user has been redirected back to your app after the OAu
   // ...
 }
 ```
-
 </Segment>
 ## OnSuccessResponder
 <Segment>
@@ -453,10 +620,9 @@ Sets the subject payload in the JWT token and returns the response.
 
 ```ts
 ctx.subject("user", {
-  userID,
+  userID
 })
 ```
-
 </Segment>
 <NestedTitle id="onsuccessresponder.subject" Tag="h4" parent="OnSuccessResponder.">subject</NestedTitle>
 <Segment>
@@ -469,7 +635,6 @@ The `type` is the type of the subject, that was defined in the `subjects` field.
 
 The `properties` are the properties of the subject. This is the shape of the subject that
 you defined in the `subjects` field.
-
 </Segment>
 ## Errors
 <Section type="about">
@@ -484,11 +649,9 @@ if (err instanceof InvalidAuthorizationCodeError) {
   // handle invalid code error
 }
 ```
-
 </Section>
-
+---
 ### InvalidAccessTokenError
-
 <Segment>
 The given access token is invalid.
 </Segment>
@@ -499,6 +662,10 @@ The given authorization code is invalid.
 ### InvalidRefreshTokenError
 <Segment>
 The given refresh token is invalid.
+</Segment>
+### InvalidScopeError
+<Segment>
+The requested scope is not allowed for this client.
 </Segment>
 ### InvalidSubjectError
 <Segment>
@@ -526,6 +693,9 @@ The browser was in an unknown state.
 
 This can happen when certain cookies have expired. Or the browser was switched in the middle
 of the authentication flow.
-
+</Segment>
+### UnsupportedGrantTypeError
+<Segment>
+The grant type is not supported for this client.
 </Segment>
 </div>

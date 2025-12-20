@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference docs for themes.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -24,7 +19,9 @@ export default issuer({
 })
 ```
 
+
 Or define your own.
+
 
 ```ts
 import type { Theme } from "@openauthjs/openauth/ui/theme"
@@ -41,13 +38,10 @@ export default issuer({
   // ...
 })
 ```
-
 </Section>
-
+---
 ## Themes
-
 ### THEME_OPENAUTH
-
 <Segment>
 
 <InlineSection>
@@ -87,6 +81,33 @@ Built-in theme based on [Terminal](https://terminal.shop).
 </InlineSection>
 Built-in theme based on [Vercel](https://vercel.com).
 </Segment>
+## Methods
+### resolveLocalizedString
+<Segment>
+<Section type="signature">
+```ts
+resolveLocalizedString(value,locale,fallbackLocale?)
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">value</code> <code class="primitive">undefined</code><code class="symbol"> | </code>[<code class="type">LocalizedString</code>](#localizedstring)</p>
+The localized string (string or Record<locale, string>)
+- <p><code class="key">locale</code> <code class="primitive">string</code></p>
+The locale to resolve for
+- <p><code class="key">fallbackLocale?</code> <code class="primitive">string</code></p>
+Fallback locale if primary not found (default: "en")
+</Section>
+<InlineSection>
+**Returns** <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">string</code>
+</InlineSection>
+Resolve a localized string value for a given locale.
+```ts
+resolveLocalizedString("Hello", "ar") // "Hello"
+resolveLocalizedString({ en: "Hello", ar: "مرحبا" }, "ar") // "مرحبا"
+resolveLocalizedString({ en: "Hello" }, "ar") // "Hello" (fallback)
+```
+</Segment>
 ## ColorScheme
 <Segment>
 <Section type="parameters">
@@ -119,19 +140,41 @@ The value for dark mode.
 </Section>
 The value for light mode.
 </Segment>
+## LocalizedString
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code><code class="symbol"> | </code><code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+A type for localized string values.
+Can be a simple string or an object with locale keys.
+```ts
+// Simple string (same for all locales)
+title: "My App"
+
+// Localized string
+title: {
+  en: "My App",
+  ar: "تطبيقي"
+}
+```
+</Segment>
 ## Theme
 <Segment>
 <Section type="parameters">
 - <p>[<code class="key">background?</code>](#theme.background) <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">ColorScheme</code>](#colorscheme)</p>
 - <p>[<code class="key">css?</code>](#theme.css) <code class="primitive">string</code></p>
+- <p>[<code class="key">direction?</code>](#theme.direction) <code class="symbol">&ldquo;</code><code class="primitive">ltr</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">rtl</code><code class="symbol">&rdquo;</code></p>
 - <p>[<code class="key">favicon?</code>](#theme.favicon) <code class="primitive">string</code></p>
 - <p>[<code class="key">font?</code>](#theme.font) <code class="primitive">Object</code></p>
   - <p>[<code class="key">family?</code>](#font.family) <code class="primitive">string</code></p>
   - <p>[<code class="key">scale?</code>](#font.scale) <code class="primitive">string</code></p>
+- <p>[<code class="key">locale?</code>](#theme.locale) <code class="primitive">string</code></p>
 - <p>[<code class="key">logo?</code>](#theme.logo) <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">ColorScheme</code>](#colorscheme)</p>
 - <p>[<code class="key">primary</code>](#theme.primary) <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">ColorScheme</code>](#colorscheme)</p>
 - <p>[<code class="key">radius?</code>](#theme.radius) <code class="symbol">&ldquo;</code><code class="primitive">none</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">sm</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">md</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">lg</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">full</code><code class="symbol">&rdquo;</code></p>
-- <p>[<code class="key">title?</code>](#theme.title) <code class="primitive">string</code></p>
+- <p>[<code class="key">title?</code>](#theme.title) [<code class="type">LocalizedString</code>](#localizedstring)</p>
 </Section>
 A type to define your custom theme.
 </Segment>
@@ -145,13 +188,11 @@ A type to define your custom theme.
 The background color of the theme.
 
 Takes a color or both light and dark colors.
-
 ```ts
 {
   background: "#FFF"
 }
 ```
-
 </Segment>
 <NestedTitle id="theme.css" Tag="h4" parent="Theme.">css?</NestedTitle>
 <Segment>
@@ -163,13 +204,29 @@ Takes a color or both light and dark colors.
 Custom CSS that's added to the page in a `<style>` tag.
 
 This can be used to import custom fonts.
-
 ```ts
 {
   css: `@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@100;200;300;400;500;600;700;800;900&display=swap');`
 }
 ```
+</Segment>
+<NestedTitle id="theme.direction" Tag="h4" parent="Theme.">direction?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="symbol">&ldquo;</code><code class="primitive">ltr</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">rtl</code><code class="symbol">&rdquo;</code>
+</InlineSection>
+</Section>
 
+<InlineSection>
+**Default** "ltr"
+</InlineSection>
+The text direction for the UI.
+```ts
+{
+  direction: "rtl"
+}
+```
 </Segment>
 <NestedTitle id="theme.favicon" Tag="h4" parent="Theme.">favicon?</NestedTitle>
 <Segment>
@@ -231,6 +288,25 @@ the UI.
 }
 ```
 </Segment>
+<NestedTitle id="theme.locale" Tag="h4" parent="Theme.">locale?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** "en"
+</InlineSection>
+The locale for the UI. Determines the language of UI text.
+Can also be set via `?lang=` URL parameter.
+```ts
+{
+  locale: "ar"
+}
+```
+</Segment>
 <NestedTitle id="theme.logo" Tag="h4" parent="Theme.">logo?</NestedTitle>
 <Segment>
 <Section type="parameters">
@@ -241,13 +317,11 @@ the UI.
 A URL to the logo of your app.
 
 Takes a single image or both light and dark mode versions.
-
 ```ts
 {
   logo: "https://www.example.com/logo.svg"
 }
 ```
-
 </Segment>
 <NestedTitle id="theme.primary" Tag="h4" parent="Theme.">primary</NestedTitle>
 <Segment>
@@ -259,13 +333,11 @@ Takes a single image or both light and dark mode versions.
 The primary color of the theme.
 
 Takes a color or both light and dark colors.
-
 ```ts
 {
   primary: "#FF5E00"
 }
 ```
-
 </Segment>
 <NestedTitle id="theme.radius" Tag="h4" parent="Theme.">radius?</NestedTitle>
 <Segment>
@@ -285,14 +357,33 @@ The border radius of the UI elements.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">string</code>
+**Type** [<code class="type">LocalizedString</code>](#localizedstring)
 </InlineSection>
 </Section>
 The name of your app. Also used as the title of the page.
+Can be a string or localized per language.
 ```ts
-{
-  title: "Acne"
-}
+// Simple string
+{ title: "Acme" }
+
+// Localized
+{ title: { en: "Acme", ar: "أكمي" } }
 ```
+</Segment>
+## ThemeProps
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">theme?</code>](#themeprops.theme) [<code class="type">Theme</code>](#theme)</p>
+</Section>
+Props for components that accept theme
+</Segment>
+<NestedTitle id="themeprops.theme" Tag="h4" parent="ThemeProps.">theme?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">Theme</code>](#theme)
+</InlineSection>
+</Section>
+Optional theme override. If not provided, falls back to global theme.
 </Segment>
 </div>

@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `GithubProvider`.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -23,18 +18,15 @@ export default issuer({
   providers: {
     github: GithubProvider({
       clientID: "1234567890",
-      clientSecret: "0987654321",
-    }),
-  },
+      clientSecret: "0987654321"
+    })
+  }
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### GithubProvider
-
 <Segment>
 <Section type="signature">
 ```ts
@@ -63,7 +55,7 @@ GithubProvider({
 - <p>[<code class="key">clientID</code>](#githubconfig.clientid) <code class="primitive">string</code></p>
 - <p>[<code class="key">clientSecret</code>](#githubconfig.clientsecret) <code class="primitive">string</code></p>
 - <p>[<code class="key">pkce?</code>](#githubconfig.pkce) <code class="primitive">boolean</code></p>
-- <p>[<code class="key">query?</code>](#githubconfig.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code></p>
+- <p>[<code class="key">query?</code>](#githubconfig.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
 - <p>[<code class="key">scopes</code>](#githubconfig.scopes) <code class="primitive">string</code><code class="symbol">[]</code></p>
 </Section>
 </Segment>
@@ -77,13 +69,11 @@ GithubProvider({
 The client ID.
 
 This is just a string to identify your app.
-
 ```ts
 {
   clientID: "my-client"
 }
 ```
-
 </Segment>
 <NestedTitle id="githubconfig.clientsecret" Tag="h4" parent="GithubConfig.">clientSecret</NestedTitle>
 <Segment>
@@ -95,13 +85,11 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
-
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
-
 </Segment>
 <NestedTitle id="githubconfig.pkce" Tag="h4" parent="GithubConfig.">pkce?</NestedTitle>
 <Segment>
@@ -121,7 +109,7 @@ Some providers like x.com require this.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 Any additional parameters that you want to pass to the authorization endpoint.

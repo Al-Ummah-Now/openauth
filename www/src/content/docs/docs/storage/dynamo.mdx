@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the DynamoDB storage adapter.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -22,7 +17,7 @@ import { DynamoStorage } from "@openauthjs/openauth/storage/dynamo"
 const storage = DynamoStorage({
   table: "my-table",
   pk: "pk",
-  sk: "sk",
+  sk: "sk"
 })
 
 export default issuer({
@@ -30,13 +25,10 @@ export default issuer({
   // ...
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### DynamoStorage
-
 <Segment>
 <Section type="signature">
 ```ts

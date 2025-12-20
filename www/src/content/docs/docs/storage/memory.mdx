@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the Memory storage adapter.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -37,16 +32,13 @@ Optionally, you can persist the store to a file.
 
 ```ts
 MemoryStorage({
-  persist: "./persist.json",
+  persist: "./persist.json"
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### MemoryStorage
-
 <Segment>
 <Section type="signature">
 ```ts

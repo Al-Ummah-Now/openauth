@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `CodeUI`.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -25,22 +20,19 @@ export default issuer({
     code: CodeAdapter(
       CodeUI({
         copy: {
-          code_info: "We'll send a pin code to your email",
+          code_info: "We'll send a pin code to your email"
         },
-        sendCode: (claims, code) => console.log(claims.email, code),
-      }),
-    ),
+        sendCode: (claims, code) => console.log(claims.email, code)
+      })
+    )
   },
   // ...
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### CodeUI
-
 <Segment>
 <Section type="signature">
 ```ts
@@ -53,7 +45,7 @@ CodeUI(props)
 Configure the UI.
 </Section>
 <InlineSection>
-**Returns** <code class="type">CodeProviderOptions</code>
+**Returns** [<code class="type">CodeProviderConfig</code>](/docs/provider/code#codeproviderconfig)
 </InlineSection>
 Creates a UI for the Code provider flow.
 </Segment>
@@ -80,7 +72,7 @@ Creates a UI for the Code provider flow.
   - <p>[<code class="key">email_invalid</code>](#copy.email_invalid) <code class="primitive">string</code></p>
   - <p>[<code class="key">email_placeholder</code>](#copy.email_placeholder) <code class="primitive">string</code></p>
 - <p>[<code class="key">mode?</code>](#codeuioptions.mode) <code class="symbol">&ldquo;</code><code class="primitive">email</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">phone</code><code class="symbol">&rdquo;</code></p>
-- <p>[<code class="key">sendCode</code>](#codeuioptions.sendcode) <code class="primitive">(claims: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>, code: <code class="primitive">string</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">void</code><code class="symbol">&gt;</code></code></p>
+- <p>[<code class="key">sendCode</code>](#codeuioptions.sendcode) <code class="primitive">(claims: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, code: <code class="primitive">string</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">void</code><code class="symbol">&gt;</code></code></p>
 </Section>
 Configure the password UI.
 </Segment>
@@ -240,19 +232,17 @@ The mode to use for the input.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">(claims: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>, code: <code class="primitive">string</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">void</code><code class="symbol">&gt;</code></code>
+**Type** <code class="primitive">(claims: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, code: <code class="primitive">string</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">void</code><code class="symbol">&gt;</code></code>
 </InlineSection>
 </Section>
 Callback to send the pin code to the user.
 
 The `claims` object contains the email or phone number of the user. You can send the code
 using this.
-
 ```ts
-;async (claims, code) => {
+async (claims, code) => {
   // Send the code via the claim
 }
 ```
-
 </Segment>
 </div>

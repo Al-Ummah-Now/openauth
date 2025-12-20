@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `GoogleProvider`.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -25,9 +20,9 @@ export default issuer({
   providers: {
     google: GoogleProvider({
       clientID: "1234567890",
-      clientSecret: "0987654321",
-    }),
-  },
+      clientSecret: "0987654321"
+    })
+  }
 })
 ```
 
@@ -39,18 +34,15 @@ import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 export default issuer({
   providers: {
     google: GoogleOidcProvider({
-      clientID: "1234567890",
-    }),
-  },
+      clientID: "1234567890"
+    })
+  }
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### GoogleOidcProvider
-
 <Segment>
 <Section type="signature">
 ```ts
@@ -68,13 +60,11 @@ The config for the provider.
 Create a Google OIDC provider.
 
 This is useful if you just want to verify the user's email address.
-
 ```ts
 GoogleOidcProvider({
-  clientID: "1234567890",
+  clientID: "1234567890"
 })
 ```
-
 </Segment>
 ### GoogleProvider
 <Segment>
@@ -105,7 +95,7 @@ GoogleProvider({
 - <p>[<code class="key">clientID</code>](#googleconfig.clientid) <code class="primitive">string</code></p>
 - <p>[<code class="key">clientSecret</code>](#googleconfig.clientsecret) <code class="primitive">string</code></p>
 - <p>[<code class="key">pkce?</code>](#googleconfig.pkce) <code class="primitive">boolean</code></p>
-- <p>[<code class="key">query?</code>](#googleconfig.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code></p>
+- <p>[<code class="key">query?</code>](#googleconfig.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
 - <p>[<code class="key">scopes</code>](#googleconfig.scopes) <code class="primitive">string</code><code class="symbol">[]</code></p>
 </Section>
 </Segment>
@@ -119,13 +109,11 @@ GoogleProvider({
 The client ID.
 
 This is just a string to identify your app.
-
 ```ts
 {
   clientID: "my-client"
 }
 ```
-
 </Segment>
 <NestedTitle id="googleconfig.clientsecret" Tag="h4" parent="GoogleConfig.">clientSecret</NestedTitle>
 <Segment>
@@ -137,13 +125,11 @@ This is just a string to identify your app.
 The client secret.
 
 This is a private key that's used to authenticate your app. It should be kept secret.
-
 ```ts
 {
   clientSecret: "0987654321"
 }
 ```
-
 </Segment>
 <NestedTitle id="googleconfig.pkce" Tag="h4" parent="GoogleConfig.">pkce?</NestedTitle>
 <Segment>
@@ -163,7 +149,7 @@ Some providers like x.com require this.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 Any additional parameters that you want to pass to the authorization endpoint.
@@ -194,7 +180,7 @@ A list of OAuth scopes that you want to request.
 <Segment>
 <Section type="parameters">
 - <p>[<code class="key">clientID</code>](#googleoidcconfig.clientid) <code class="primitive">string</code></p>
-- <p>[<code class="key">query?</code>](#googleoidcconfig.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code></p>
+- <p>[<code class="key">query?</code>](#googleoidcconfig.query) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
 - <p>[<code class="key">scopes?</code>](#googleoidcconfig.scopes) <code class="primitive">string</code><code class="symbol">[]</code></p>
 </Section>
 </Segment>
@@ -208,19 +194,17 @@ A list of OAuth scopes that you want to request.
 The client ID.
 
 This is just a string to identify your app.
-
 ```ts
 {
   clientID: "my-client"
 }
 ```
-
 </Segment>
 <NestedTitle id="googleoidcconfig.query" Tag="h4" parent="GoogleOidcConfig.">query?</NestedTitle>
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 Any additional parameters that you want to pass to the authorization endpoint.

@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the `Select` UI.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -24,23 +19,20 @@ export default issuer({
   select: Select({
     providers: {
       github: {
-        hide: true,
+        hide: true
       },
       google: {
-        display: "Google",
-      },
-    },
-  }),
+        display: "Google"
+      }
+    }
+  })
   // ...
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### Select
-
 <Segment>
 <Section type="signature">
 ```ts
@@ -52,13 +44,13 @@ Select(props?)
 - <p><code class="key">props?</code> [<code class="type">SelectProps</code>](#selectprops)</p>
 </Section>
 <InlineSection>
-**Returns** <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">string</code><code class="symbol">&gt;</code>, _req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
+**Returns** <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
 </InlineSection>
 </Segment>
 ## SelectProps
 <Segment>
 <Section type="parameters">
-- <p>[<code class="key">providers?</code>](#selectprops.providers) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">Object</code><code class="symbol">&gt;</code></p>
+- <p>[<code class="key">providers?</code>](#selectprops.providers) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">Object</code><code class="symbol">&gt;</code></p>
   - <p>[<code class="key">display?</code>](#providers[].display) <code class="primitive">string</code></p>
   - <p>[<code class="key">hide?</code>](#providers[].hide) <code class="primitive">boolean</code></p>
 </Section>
@@ -67,7 +59,7 @@ Select(props?)
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">Object</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">Object</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 An object with all the providers and their config; where the key is the provider name.

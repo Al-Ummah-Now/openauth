@@ -4,13 +4,8 @@ editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/
 description: Reference doc for the Cloudflare KV storage adapter.
 ---
 
-import {
-  Segment,
-  Section,
-  NestedTitle,
-  InlineSection,
-} from "toolbeam-docs-theme/components"
-import { Tabs, TabItem } from "@astrojs/starlight/components"
+import { Segment, Section, NestedTitle, InlineSection } from 'toolbeam-docs-theme/components'
+import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 <div class="tsdoc">
 <Section type="about">
@@ -21,21 +16,19 @@ storage adapter.
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
 
 const storage = CloudflareStorage({
-  namespace: "my-namespace",
+  namespace: "my-namespace"
 })
+
 
 export default issuer({
   storage,
   // ...
 })
 ```
-
 </Section>
-
+---
 ## Methods
-
 ### CloudflareStorage
-
 <Segment>
 <Section type="signature">
 ```ts
