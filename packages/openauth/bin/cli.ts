@@ -400,6 +400,7 @@ Options:
   --config, -c <file>  Use a specific wrangler config file
   --no-seed            Skip seed data (migrate only applies schema)
   --force              Force re-run all migrations (ignores tracking)
+  --debug              Show debug output (raw wrangler responses)
 
 Examples:
   openauth migrate                       # Auto-detect from wrangler config
@@ -867,12 +868,23 @@ async function bootstrapSecrets(args: string[]) {
   console.log(`\nOpenAuth Bootstrap Secrets - ${dbName}${target}`)
   console.log("=".repeat(50))
 
+  const sql =
+    "SELECT id, name, tenant_id FROM oauth_clients WHERE client_secret_hash IS NULL OR client_secret_hash = ''"
+
+  if (parsed.debug) {
+    console.log("\n[DEBUG] SQL Query:", sql)
+  }
+
   // Find clients with empty or null client_secret_hash
-  const findResult = executeSql(
-    dbName,
-    "SELECT id, name, tenant_id FROM oauth_clients WHERE client_secret_hash IS NULL OR client_secret_hash = ''",
-    options,
-  )
+  const findResult = executeSql(dbName, sql, options)
+
+  if (parsed.debug) {
+    console.log("[DEBUG] Query success:", findResult.success)
+    console.log("[DEBUG] Raw output:", findResult.output)
+    if (findResult.error) {
+      console.log("[DEBUG] Error:", findResult.error)
+    }
+  }
 
   if (!findResult.success) {
     console.error("Error: Failed to query clients")
@@ -884,6 +896,10 @@ async function bootstrapSecrets(args: string[]) {
 
   // Parse the output to get client list
   const clients = parseClientsFromOutput(findResult.output || "")
+
+  if (parsed.debug) {
+    console.log("[DEBUG] Parsed clients:", JSON.stringify(clients, null, 2))
+  }
 
   if (clients.length === 0) {
     console.log("\nNo clients found without secrets.")

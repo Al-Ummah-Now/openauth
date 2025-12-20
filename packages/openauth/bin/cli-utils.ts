@@ -26,6 +26,7 @@ export interface ParsedArgs {
   configFile?: string
   withSeed: boolean
   force: boolean
+  debug: boolean
 }
 
 export interface WranglerOptions {
@@ -92,6 +93,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     isPreview: false,
     withSeed: true,
     force: false,
+    debug: false,
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -108,6 +110,8 @@ export function parseArgs(args: string[]): ParsedArgs {
       result.withSeed = true
     } else if (arg === "--force") {
       result.force = true
+    } else if (arg === "--debug") {
+      result.debug = true
     } else if (arg === "--config" || arg === "-c") {
       result.configFile = args[++i]
     } else if (!arg.startsWith("-")) {
