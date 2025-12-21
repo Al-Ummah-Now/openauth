@@ -51,11 +51,5 @@
     "aws4fetch": "1.0.20",
     "jose": "5.9.6"
   },
-  "files": [
-    "bin",
-    "src",
-    "dist",
-    "README.md",
-    "CHANGELOG.md"
-  ]
+  "files": ["bin", "src", "dist", "README.md", "CHANGELOG.md"]
 }

@@ -36,7 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - remove duplicate role seeds from schema file
 - add missing user_system record to seed data
 
-
 ## [1.0.13] - 2025-12-17
 
 ### Fixed
