@@ -13,7 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - align enterprise Theme with standard OpenAuth Theme
 
-
 ## [1.0.12] - 2025-12-17
 
 ### Added
