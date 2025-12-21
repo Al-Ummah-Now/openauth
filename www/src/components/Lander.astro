@@ -26,6 +26,8 @@ if (image) {
         rawHtml = image.html;
     }
 }
+
+const base = import.meta.env.BASE_URL || '';
 ---
 <div class="hero">
     <section class="top">
@@ -45,7 +47,7 @@ if (image) {
         <a href="https://www.youtube.com/watch?v=SSjNUuQ06tk" target="_blank">Learn more</a>
       </div>
       <div class="col2">
-      <a href="/docs/">View the docs</a>
+      <a href={`${base}docs/`}>View the docs</a>
       </div>
       <div class="col3">
         <a href={config.social.github.url}>Star on GitHub</a>

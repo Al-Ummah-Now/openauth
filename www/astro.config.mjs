@@ -6,12 +6,12 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import config from "./config"
 
 const url = process.env.SITE_URL || "https://openauth.js.org"
-const base = process.env.BASE_PATH || undefined
+const base = process.env.BASE_PATH || ""
 
 // https://astro.build/config
 export default defineConfig({
   site: url,
-  base: base,
+  base: base || undefined,
   trailingSlash: "always",
   devToolbar: {
     enabled: false,
@@ -26,7 +26,7 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "icon",
-            href: "/favicon.ico",
+            href: `${base}/favicon.ico`,
             sizes: "48x48",
           },
         },
@@ -35,7 +35,7 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "icon",
-            href: "/favicon.svg",
+            href: `${base}/favicon.svg`,
             media: "(prefers-color-scheme: light)",
           },
         },
@@ -43,7 +43,7 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "icon",
-            href: "/favicon-dark.svg",
+            href: `${base}/favicon-dark.svg`,
             media: "(prefers-color-scheme: dark)",
           },
         },
