@@ -1,5 +1,13 @@
 # @al-ummah-now/openauth
 
+## 0.4.4
+
+### Patch Changes
+
+- 872a4cf: update google icon to comply with branding guidelines
+- 4214416: allow auth style autodetection
+- e89f282: add linkedin adapter
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
