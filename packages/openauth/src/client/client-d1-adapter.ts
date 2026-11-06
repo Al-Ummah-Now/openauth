@@ -467,6 +467,11 @@ export class ClientD1Adapter {
     const client = await this.getClientById(clientId)
     if (!client) return null
 
+    // Disabled clients and clients without a stored secret can never be
+    // authenticated with a secret.
+    if (client.enabled === false) return null
+    if (!client.client_secret_hash) return null
+
     // Check current secret
     const currentValid = await verifyClientSecret(
       clientSecret,

@@ -114,8 +114,10 @@ import {
 
 import {
   issuer as createBaseIssuer,
+  normalizeIssuer,
   type OnSuccessResponder,
 } from "../issuer.js"
+import { signingKeys, SIGNING_ALG } from "../keys.js"
 import { getRelativeUrl, isDomainMatch } from "../util.js"
 import {
   OauthError,
@@ -265,6 +267,14 @@ export function createMultiTenantIssuer<
     throw new Error("subjects schema is required")
   }
 
+  // Fixed issuer (if configured). Validated eagerly so misconfiguration fails fast.
+  const configuredIssuer = normalizeIssuer(config.issuer)
+
+  // TTLs in SECONDS (same defaults as the base issuer)
+  const ttlAccess = config.ttl?.access ?? 60 * 60 * 24 * 30 // 30 days
+  const ttlRefresh = config.ttl?.refresh ?? 60 * 60 * 24 * 365 // 1 year
+  const AUTHORIZATION_CODE_TTL = 60 * 10 // 10 minutes
+
   // Session config with defaults
   const sessionConfig = {
     ...DEFAULT_SESSION_CONFIG,
@@ -296,6 +306,8 @@ export function createMultiTenantIssuer<
     providers: config.providers,
     theme: config.theme,
     ttl: config.ttl,
+    issuer: configuredIssuer,
+    pkce: config.pkce,
     clientDb: config.clientDb,
     audit: config.audit,
     error: config.error,
@@ -305,13 +317,13 @@ export function createMultiTenantIssuer<
       const ctx = requestContextMap.get(req)
       if (!ctx?.tenant) {
         // Fallback to default allow check if no tenant context
-        return defaultAllowCheck(input, req)
+        return defaultAllowCheck(input, req, !!configuredIssuer)
       }
 
       if (config.onAllow) {
         return config.onAllow(input, req, ctx.tenant)
       }
-      return defaultAllowCheck(input, req)
+      return defaultAllowCheck(input, req, !!configuredIssuer)
     },
 
     // Success callback intercepts to add enterprise features
@@ -691,6 +703,55 @@ export function createMultiTenantIssuer<
 
     c.set("authorization", authorization)
 
+    // Missing core parameters: let the base issuer produce its standard errors
+    // (no prompt / silent-auth handling without a validated redirect_uri).
+    if (!authorization.redirect_uri || !authorization.client_id) {
+      return baseIssuer.request(c.req.raw)
+    }
+
+    // SECURITY: validate client_id/redirect_uri BEFORE any prompt handling.
+    // prompt=none issues an authorization code (or an error redirect) directly
+    // to redirect_uri without going through the base issuer, so it must pass
+    // the same allow check the base issuer applies.
+    let redirectAllowed = false
+    try {
+      const allowInput = {
+        clientID: authorization.client_id,
+        redirectURI: authorization.redirect_uri,
+        audience: authorization.audience,
+      }
+      redirectAllowed = config.onAllow
+        ? await config.onAllow(allowInput, c.req.raw, tenant)
+        : await defaultAllowCheck(allowInput, c.req.raw, !!configuredIssuer)
+    } catch (err) {
+      console.error("[authorize] allow check failed:", err)
+      redirectAllowed = false
+    }
+    if (!redirectAllowed) {
+      return c.json(
+        {
+          error: "unauthorized_client",
+          error_description:
+            "Client is not authorized to use this redirect_uri",
+        },
+        400,
+      )
+    }
+
+    // PKCE: only S256 is supported
+    const challengeMethod = c.req.query("code_challenge_method")
+    if (challengeMethod && challengeMethod !== "S256") {
+      const url = new URL(authorization.redirect_uri)
+      url.searchParams.set("error", "invalid_request")
+      url.searchParams.set(
+        "error_description",
+        "Unsupported code_challenge_method; only S256 is supported",
+      )
+      if (authorization.state)
+        url.searchParams.set("state", authorization.state)
+      return c.redirect(url.toString(), 302)
+    }
+
     // Update context map with authorization
     requestContextMap.set(c.req.raw, {
       tenant,
@@ -785,12 +846,13 @@ export function createMultiTenantIssuer<
           redirectURI: authorization.redirect_uri,
           clientID: authorization.client_id,
           pkce: authorization.pkce,
+          // TTLs are in SECONDS (Storage.set and generateTokens use seconds)
           ttl: {
-            access: config.ttl?.access ?? 60 * 60 * 24 * 30 * 1000, // 30 days
-            refresh: config.ttl?.refresh ?? 60 * 60 * 24 * 365 * 1000, // 1 year
+            access: ttlAccess,
+            refresh: ttlRefresh,
           },
         },
-        60 * 10 * 1000, // 10 min TTL for code
+        AUTHORIZATION_CODE_TTL,
       )
 
       // Redirect back with code
@@ -902,6 +964,19 @@ export function createMultiTenantIssuer<
       const tenant = getTenant(c)
       const iss = getIssuerUrl(tenant!, c.req.raw)
 
+      // Advertise the algorithm(s) of the keys actually used for signing
+      let signingAlgs: string[] = [SIGNING_ALG]
+      try {
+        const keys = await signingKeys(config.storage)
+        const active = keys.filter(
+          (k) => !k.expired || k.expired.getTime() > Date.now(),
+        )
+        const algs = [...new Set(active.map((k) => k.alg))]
+        if (algs.length > 0) signingAlgs = algs
+      } catch (err) {
+        console.error("Failed to load signing keys for discovery:", err)
+      }
+
       return c.json({
         issuer: iss,
         authorization_endpoint: `${iss}/authorize`,
@@ -919,7 +994,7 @@ export function createMultiTenantIssuer<
           "client_credentials",
         ],
         subject_types_supported: ["public"],
-        id_token_signing_alg_values_supported: ["RS256"],
+        id_token_signing_alg_values_supported: signingAlgs,
         token_endpoint_auth_methods_supported: [
           "client_secret_basic",
           "client_secret_post",
@@ -1003,10 +1078,11 @@ export function createMultiTenantIssuer<
       )
     }
 
+    // Never leak internal error details; they are logged above.
     return c.json(
       {
         error: "server_error",
-        error_description: err.message || "Internal server error",
+        error_description: "Internal server error",
       },
       500,
     )
@@ -1017,6 +1093,9 @@ export function createMultiTenantIssuer<
   // ============================================
 
   function getIssuerUrl(tenant: Tenant, req: Request): string {
+    // A configured issuer always wins so discovery matches the `iss` claim
+    if (configuredIssuer) return configuredIssuer
+
     const url = new URL(req.url)
 
     if (tenant.domain) {
@@ -1055,12 +1134,15 @@ export function createMultiTenantIssuer<
 async function defaultAllowCheck(
   input: { clientID: string; redirectURI: string; audience?: string },
   req: Request,
+  ignoreForwardedHost = false,
 ): Promise<boolean> {
   const redir = new URL(input.redirectURI).hostname
   if (redir === "localhost" || redir === "127.0.0.1") {
     return true
   }
-  const forwarded = req.headers.get("x-forwarded-host")
+  const forwarded = ignoreForwardedHost
+    ? undefined
+    : req.headers.get("x-forwarded-host")
   const host = forwarded
     ? new URL(`https://${forwarded}`).hostname
     : new URL(req.url).hostname
