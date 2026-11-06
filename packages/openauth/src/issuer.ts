@@ -1951,7 +1951,9 @@ export function normalizeIssuer(value?: string): string | undefined {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Error(`Invalid issuer URL: ${value}`)
   }
-  return trimmed.replace(/\/+$/, "")
+  let end = trimmed.length
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47 /* "/" */) end--
+  return trimmed.slice(0, end)
 }
 
 function decodeURIComponentSafe(value: string): string {
