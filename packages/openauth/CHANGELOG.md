@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-11-06
+
+### Fixed
+
+- security): harden client auth, PKCE, issuer pinning, refresh binding (#13)
+
+
 ## [1.0.16] - 2026-01-08
 
 ## [1.0.15] - 2025-12-21
@@ -464,7 +471,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.16...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.17...HEAD
+[1.0.17]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.16...v1.0.17
 [1.0.16]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.15...v1.0.16
 [1.0.15]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.14...v1.0.15
 [1.0.14]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.13...v1.0.14
