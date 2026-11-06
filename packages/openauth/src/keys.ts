@@ -11,6 +11,9 @@ import {
 import { Storage, StorageAdapter } from "./storage/storage.js"
 
 const signingAlg = "ES256"
+
+/** JWS algorithm used for newly generated signing keys. */
+export const SIGNING_ALG = signingAlg
 const encryptionAlg = "RSA-OAEP-512"
 
 /**

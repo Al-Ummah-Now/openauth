@@ -29,12 +29,37 @@ export async function generatePKCE(length: number = 64) {
   }
 }
 
+/**
+ * Constant-time string comparison (length is not secret here: both inputs
+ * are base64url-encoded SHA-256 digests).
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder()
+  const ab = encoder.encode(a)
+  const bb = encoder.encode(b)
+  let diff = ab.length ^ bb.length
+  const len = Math.max(ab.length, bb.length)
+  for (let i = 0; i < len; i++) {
+    diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0)
+  }
+  return diff === 0
+}
+
+/**
+ * Validate a PKCE code_verifier against the stored code_challenge.
+ *
+ * SECURITY: only the `S256` method is accepted (the only method advertised in
+ * discovery). `plain` and any other method are rejected. The comparison is
+ * constant-time.
+ */
 export async function validatePKCE(
   verifier: string,
   challenge: string,
-  method: "S256" | "plain" = "S256",
-) {
-  const generatedChallenge = await generateChallenge(verifier, method)
-  // timing safe equals?
-  return generatedChallenge === challenge
+  method: string = "S256",
+): Promise<boolean> {
+  if (method !== "S256") return false
+  if (typeof verifier !== "string" || typeof challenge !== "string")
+    return false
+  const generatedChallenge = await generateChallenge(verifier, "S256")
+  return timingSafeEqual(generatedChallenge, challenge)
 }

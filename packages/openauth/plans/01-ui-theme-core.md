@@ -456,9 +456,7 @@ import { THEME_SST } from "@openauthjs/openauth/ui/theme"
 
 export default issuer({
   theme: THEME_SST, // ← Still works exactly as before
-  providers: {
-    /* ... */
-  },
+  providers: {/* ... */},
   // ...
 })
 ```
@@ -480,9 +478,7 @@ import { createMultiTenantIssuer } from "@openauthjs/openauth/enterprise"
 
 const { app } = createMultiTenantIssuer({
   tenantService,
-  providers: {
-    /* ... */
-  },
+  providers: {/* ... */},
   // Theme is automatically resolved from tenant.branding
 })
 ```

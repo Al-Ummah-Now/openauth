@@ -58,9 +58,7 @@ describe("Regular Issuer - Theme Support", () => {
     const auth = issuer({
       theme: THEME_SST,
       storage: MemoryStorage(),
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
       // ...
     })
@@ -77,9 +75,7 @@ describe("Regular Issuer - Theme Support", () => {
   test("uses default theme when no theme specified", async () => {
     const auth = issuer({
       storage: MemoryStorage(),
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -100,9 +96,7 @@ describe("Regular Issuer - Theme Support", () => {
     const auth = issuer({
       theme: customTheme,
       storage: MemoryStorage(),
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -118,9 +112,7 @@ describe("Regular Issuer - Theme Support", () => {
     const auth = issuer({
       theme: THEME_TERMINAL,
       storage: MemoryStorage(),
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -166,9 +158,7 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // Default theme
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -197,9 +187,7 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // Default theme
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -222,9 +210,7 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       storage,
       sessionSecret,
       // No theme specified in config
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -252,9 +238,7 @@ describe("Multi-Tenant Issuer - Theme Resolution", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -373,9 +357,7 @@ describe("Theme Concurrency - Race Condition Tests", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -420,9 +402,7 @@ describe("Theme Concurrency - Race Condition Tests", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -653,9 +633,7 @@ describe("Theme Migration Scenarios", () => {
       sessionService,
       storage,
       sessionSecret,
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -666,9 +644,7 @@ describe("Theme Migration Scenarios", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // NEW: Default theme
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -696,9 +672,7 @@ describe("Theme Migration Scenarios", () => {
       storage,
       sessionSecret,
       theme: THEME_SST, // Default theme
-      providers: {
-        /* ... */
-      },
+      providers: {/* ... */},
       subjects,
     })
 
@@ -1065,18 +1039,8 @@ console.log("Resolved theme:", resolved)
 
 ```typescript
 // Ensure middleware is applied AFTER tenant resolution
-app.use(
-  "*",
-  createTenantResolver({
-    /* ... */
-  }),
-)
-app.use(
-  "*",
-  createTenantThemeMiddleware({
-    /* ... */
-  }),
-)
+app.use("*", createTenantResolver({/* ... */}))
+app.use("*", createTenantThemeMiddleware({/* ... */}))
 ```
 
 ## Appendix A: Test Data Fixtures

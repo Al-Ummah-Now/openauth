@@ -295,9 +295,7 @@ async success(ctx, value, req) {
 const app = multiTenantIssuer({
   tenantService,
   storage: baseStorage,
-  providers: {
-    /* ... */
-  },
+  providers: {/* ... */},
   async allow(input, req, tenant) {
     // Tenant-aware client validation
   },

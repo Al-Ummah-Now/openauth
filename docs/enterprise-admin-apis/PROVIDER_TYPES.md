@@ -427,8 +427,7 @@ interface OAuthError {
 
 ```typescript
 type PasswordLoginError =
-  | { type: "invalid_password" }
-  | { type: "invalid_email" }
+  { type: "invalid_password" } | { type: "invalid_email" }
 
 type PasswordRegisterError =
   | { type: "invalid_code" }

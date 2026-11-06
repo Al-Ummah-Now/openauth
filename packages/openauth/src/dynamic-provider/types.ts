@@ -39,10 +39,7 @@ export type ProviderType =
  * Provider category for UI organization
  */
 export type ProviderCategory =
-  | "social"
-  | "enterprise"
-  | "passwordless"
-  | "password"
+  "social" | "enterprise" | "passwordless" | "password"
 
 /**
  * Raw database record for identity provider
