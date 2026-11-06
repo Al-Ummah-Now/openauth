@@ -9,13 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.16] - 2026-01-08
 
-
 ## [1.0.15] - 2025-12-21
 
 ### Fixed
 
 - apply base path to docs links for fork deployments
-
 
 ## [1.0.14] - 2025-12-21
 

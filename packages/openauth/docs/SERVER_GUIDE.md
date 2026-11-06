@@ -1479,10 +1479,11 @@ Each provider exposes routes under `/{provider}/`:
 | `/{provider}/callback`  | GET    | OAuth callback      |
 
 For Password provider:
-| Endpoint | Method | Description |
-|----------|--------|-------------|
+
+| Endpoint             | Method   | Description       |
+| -------------------- | -------- | ----------------- |
 | `/password/register` | GET/POST | User registration |
-| `/password/change` | GET/POST | Password reset |
+| `/password/change`   | GET/POST | Password reset    |
 
 ---
 

@@ -78,10 +78,7 @@ export type ProviderType =
   | "custom_oauth2"
 
 export type ProviderCategory =
-  | "social"
-  | "enterprise"
-  | "passwordless"
-  | "password"
+  "social" | "enterprise" | "passwordless" | "password"
 
 export interface IdentityProviderRecord {
   id: string

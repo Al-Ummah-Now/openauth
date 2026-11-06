@@ -564,8 +564,7 @@ const authorization = await getAuthorization(ctx)
 
 // The enterprise code does this:
 const authorization = ctx.get("authorization") as
-  | EnterpriseAuthorizationState
-  | undefined
+  EnterpriseAuthorizationState | undefined
 
 // ❌ This will be undefined after provider redirect because
 // it's not stored in an encrypted cookie
@@ -959,8 +958,7 @@ const authorization = await getAuthorization(ctx)
 ```typescript
 // State is in context but not validated from encrypted cookie
 const authorization = ctx.get("authorization") as
-  | EnterpriseAuthorizationState
-  | undefined
+  EnterpriseAuthorizationState | undefined
 
 // ❌ No validation that state came from encrypted cookie
 // ❌ State could be spoofed since it's just in context
