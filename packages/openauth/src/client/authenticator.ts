@@ -14,6 +14,14 @@ export interface ClientAuthenticatorOptions {
   adapter: ClientD1Adapter
 }
 
+export interface ValidateClientOptions {
+  /**
+   * Accept public clients (no stored secret) authenticating by client_id only.
+   * Defaults to `false`: a client without a secret hash is rejected.
+   */
+  allowPublicClient?: boolean
+}
+
 export class ClientAuthenticator {
   private adapter: ClientD1Adapter
 
@@ -26,11 +34,18 @@ export class ClientAuthenticator {
    *
    * Supports two client types per OAuth 2.0 spec:
    * - Confidential clients: Have client_secret_hash, require secret validation
-   * - Public clients: No client_secret_hash, authenticate by client_id only
+   * - Public clients: No client_secret_hash, authenticate by client_id only.
+   *   SECURITY: public clients are only accepted when the caller explicitly
+   *   opts in with `allowPublicClient: true` AND no secret was supplied.
+   *   A client without a stored secret can never be "authenticated" by
+   *   presenting an arbitrary secret.
+   *
+   * Disabled clients (`enabled === false`) are always rejected.
    */
   async validateClient(
     clientId: string,
     clientSecret?: string,
+    options: ValidateClientOptions = {},
   ): Promise<{ valid: boolean; isPublicClient: boolean }> {
     try {
       // Get client from database (no tenant required for auth)
@@ -39,13 +54,21 @@ export class ClientAuthenticator {
         return { valid: false, isPublicClient: false }
       }
 
+      // Disabled clients must never authenticate
+      if (client.enabled === false) {
+        return { valid: false, isPublicClient: false }
+      }
+
       // ============================================
       // PATH 1: PUBLIC CLIENT (no secret hash stored)
       // ============================================
-      // Public clients (SPAs, mobile apps) cannot securely store secrets.
-      // They authenticate by client_id only per RFC 7009.
       if (!client.client_secret_hash) {
-        return { valid: true, isPublicClient: true }
+        // Only allowed when the endpoint explicitly permits public clients
+        // and the caller did not try to present a secret.
+        if (options.allowPublicClient && !clientSecret) {
+          return { valid: true, isPublicClient: true }
+        }
+        return { valid: false, isPublicClient: true }
       }
 
       // ============================================
@@ -72,19 +95,23 @@ export class ClientAuthenticator {
    * Get client if credentials are valid
    *
    * Returns the client for:
-   * - Public clients: When client_id exists (no secret needed)
+   * - Public clients: only when `allowPublicClient` is set and no secret given
    * - Confidential clients: When client_id + client_secret are valid
    */
   async authenticateClient(
     clientId: string,
     clientSecret?: string,
+    options: ValidateClientOptions = {},
   ): Promise<{ client: OAuthClient | null; isPublicClient: boolean }> {
-    const result = await this.validateClient(clientId, clientSecret)
+    const result = await this.validateClient(clientId, clientSecret, options)
     if (!result.valid) {
-      return { client: null, isPublicClient: false }
+      return { client: null, isPublicClient: result.isPublicClient }
     }
 
     const client = await this.adapter.getClientById(clientId)
+    if (!client || client.enabled === false) {
+      return { client: null, isPublicClient: result.isPublicClient }
+    }
     return { client, isPublicClient: result.isPublicClient }
   }
 }
