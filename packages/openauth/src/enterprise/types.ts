@@ -155,7 +155,31 @@ export interface EnterpriseIssuerConfig<
   theme?: Theme
 
   /**
-   * TTL configuration for access and refresh tokens
+   * Fixed issuer URL (e.g. `https://auth.example.com`).
+   *
+   * When set, it is used as the `iss` claim of every token, in discovery
+   * documents (`/.well-known/openid-configuration`,
+   * `/.well-known/oauth-authorization-server`) and when verifying tokens.
+   * Request-derived values (Host, X-Forwarded-Host/Proto/Port) are then
+   * ignored for the issuer and for the default redirect_uri allow check.
+   *
+   * When not set, the issuer is derived from the request (legacy behaviour).
+   */
+  issuer?: string
+
+  /**
+   * PKCE policy (only `S256` is ever accepted). See `IssuerInput.pkce`.
+   */
+  pkce?: {
+    /**
+     * Require PKCE for clients registered in `clientDb` without a secret.
+     * @default false
+     */
+    requireForPublicClients?: boolean
+  }
+
+  /**
+   * TTL configuration for access and refresh tokens (in seconds)
    */
   ttl?: {
     access?: number

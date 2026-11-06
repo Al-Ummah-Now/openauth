@@ -321,6 +321,32 @@ export interface IssuerInput<
    */
   theme?: Theme
   /**
+   * Fixed issuer URL, e.g. `https://auth.example.com`.
+   *
+   * When set, it is used as the `iss` claim of issued tokens, in the
+   * `/.well-known/oauth-authorization-server` document and when verifying
+   * tokens. Request-derived values (Host, `X-Forwarded-Host`,
+   * `X-Forwarded-Proto`, `X-Forwarded-Port`) are then ignored for the issuer
+   * and for the default redirect_uri allow check.
+   *
+   * When not set, the issuer is derived from the request URL and forwarded
+   * headers (legacy behaviour).
+   */
+  issuer?: string
+  /**
+   * PKCE policy. Only `S256` is ever accepted.
+   */
+  pkce?: {
+    /**
+     * Require PKCE on `/authorize` (response_type=code) for clients that are
+     * registered in `clientDb` without a client secret (public clients).
+     * Confidential clients and clients not registered in `clientDb` are not
+     * affected.
+     * @default false
+     */
+    requireForPublicClients?: boolean
+  }
+  /**
    * Set the TTL, in seconds, for access and refresh tokens.
    *
    * @example
@@ -557,6 +583,7 @@ export function issuer<
         },
       })
     }
+  const configuredIssuer = normalizeIssuer(input.issuer)
   const ttlAccess = input.ttl?.access ?? DEFAULT_ACCESS_TOKEN_TTL
   const ttlRefresh = input.ttl?.refresh ?? DEFAULT_REFRESH_TOKEN_TTL
   const ttlRefreshReuse = input.ttl?.reuse ?? DEFAULT_REFRESH_REUSE_WINDOW
@@ -574,7 +601,10 @@ export function issuer<
         if (redir === "localhost" || redir === "127.0.0.1") {
           return true
         }
-        const forwarded = req.headers.get("x-forwarded-host")
+        // When a fixed issuer is configured, never trust X-Forwarded-Host
+        const forwarded = configuredIssuer
+          ? undefined
+          : req.headers.get("x-forwarded-host")
         const host = forwarded
           ? new URL(`https://${forwarded}`).hostname
           : new URL(req.url).hostname
@@ -608,8 +638,9 @@ export function issuer<
 
   // Initialize client authentication if clientDb is provided
   let clientAuthenticator: ClientAuthenticator | undefined
+  let clientAdapter: ClientD1Adapter | undefined
   if (input.clientDb) {
-    const clientAdapter = new ClientD1Adapter(input.clientDb)
+    clientAdapter = new ClientD1Adapter(input.clientDb)
     clientAuthenticator = new ClientAuthenticator({
       adapter: clientAdapter,
     })
@@ -849,6 +880,7 @@ export function issuer<
   }
 
   function issuer(ctx: Context) {
+    if (configuredIssuer) return configuredIssuer
     return new URL(getRelativeUrl(ctx, "/")).origin
   }
 
@@ -1070,6 +1102,24 @@ export function issuer<
             {
               error: "invalid_grant",
               error_description: "Refresh token has been used or expired",
+            },
+            400,
+          )
+        }
+        // SECURITY: if the caller identifies itself (client_id in the form or
+        // HTTP Basic auth), it must be the client the token was issued to.
+        // Callers that send no client_id keep working (legacy behaviour).
+        // Checked before any reuse bookkeeping so a mismatched request does
+        // not consume the token.
+        const presentedClientIds = getPresentedClientIds(c, form)
+        if (
+          presentedClientIds.length > 0 &&
+          presentedClientIds.some((id) => id !== payload.clientID)
+        ) {
+          return c.json(
+            {
+              error: "invalid_grant",
+              error_description: "Refresh token was not issued to this client",
             },
             400,
           )
@@ -1340,6 +1390,28 @@ export function issuer<
       ))
     )
       throw new UnauthorizedClientError(client_id, redirect_uri)
+    // PKCE: only S256 is supported (and advertised). Reject other methods
+    // up-front instead of failing later at the token endpoint.
+    if (code_challenge_method && code_challenge_method !== "S256") {
+      throw new OauthError(
+        "invalid_request",
+        "Unsupported code_challenge_method; only S256 is supported",
+      )
+    }
+    if (
+      input.pkce?.requireForPublicClients &&
+      response_type === "code" &&
+      !code_challenge &&
+      clientAdapter
+    ) {
+      const registered = await clientAdapter.getClientById(client_id)
+      if (registered && !registered.client_secret_hash) {
+        throw new OauthError(
+          "invalid_request",
+          "PKCE (code_challenge with S256) is required for public clients",
+        )
+      }
+    }
     await auth.set(c, "authorization", AUTHORIZATION_COOKIE_TTL, authorization)
     if (provider) return c.redirect(`/${provider}/authorize`)
     const providers = Object.keys(input.providers)
@@ -1414,6 +1486,33 @@ export function issuer<
       error_description: "Invalid token",
     })
   })
+
+  /**
+   * Collect the client_id values a token request identifies itself with
+   * (form `client_id` and/or the username of HTTP Basic auth).
+   */
+  function getPresentedClientIds(c: Context, form: FormData): string[] {
+    const ids: string[] = []
+    const formClientId = form.get("client_id")?.toString()
+    if (formClientId) ids.push(formClientId)
+    const authHeader = c.req.header("Authorization")
+    if (authHeader) {
+      const [type, credentials] = authHeader.split(" ")
+      if (type === "Basic" && credentials) {
+        try {
+          const decoded = atob(credentials)
+          const colonIndex = decoded.indexOf(":")
+          const id =
+            colonIndex === -1 ? decoded : decoded.substring(0, colonIndex)
+          if (id) ids.push(decodeURIComponentSafe(id))
+        } catch {
+          // Malformed header: treat as an unknown client
+          ids.push("")
+        }
+      }
+    }
+    return ids
+  }
 
   /**
    * Helper function to extract and validate client credentials from request.
@@ -1714,31 +1813,20 @@ export function issuer<
     // in the case of a public client, or valid client credentials,
     // in the case of a confidential client."
 
+    // SECURITY: clients without a stored secret (public clients) are
+    // rejected; a valid client_secret is required.
     const authResult = await clientAuthenticator.authenticateClient(
       credentials.clientId!,
-      credentials.clientSecret, // May be undefined for public clients
+      credentials.clientSecret,
     )
 
     if (!authResult.client) {
       return c.json(
         {
           error: "invalid_client",
-          error_description: authResult.isPublicClient
-            ? "Unknown client"
-            : "Client authentication failed",
+          error_description: "Client authentication failed",
         },
         401,
-      )
-    }
-
-    // Log which authentication path was used
-    if (authResult.isPublicClient) {
-      // PUBLIC CLIENT PATH: Authenticated by client_id only
-      console.debug(`Token revocation: Public client ${credentials.clientId}`)
-    } else {
-      // CONFIDENTIAL CLIENT PATH: Authenticated with client_secret
-      console.debug(
-        `Token revocation: Confidential client ${credentials.clientId}`,
       )
     }
 
@@ -1837,14 +1925,41 @@ export function issuer<
     }
     const authorization = await getAuthorization(c)
     const url = new URL(authorization.redirect_uri)
+    // Never leak internal error details to the client; they are logged above.
     const oauth =
       err instanceof OauthError
         ? err
-        : new OauthError("server_error", err.message)
+        : new OauthError("server_error", "Internal server error")
     url.searchParams.set("error", oauth.error)
     url.searchParams.set("error_description", oauth.description)
     return c.redirect(url.toString())
   })
 
   return app
+}
+
+/**
+ * Normalize a configured issuer URL: validates it and strips trailing slashes.
+ * Returns undefined when not configured.
+ */
+export function normalizeIssuer(value?: string): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  // Throws on invalid URLs so misconfiguration fails fast
+  const url = new URL(trimmed)
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`Invalid issuer URL: ${value}`)
+  }
+  let end = trimmed.length
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47 /* "/" */) end--
+  return trimmed.slice(0, end)
+}
+
+function decodeURIComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }

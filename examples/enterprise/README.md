@@ -416,10 +416,11 @@ Standard OAuth 2.0 and OpenID Connect endpoints:
 | GET    | `/session/check`            | Silent session check    |
 
 **Admin:**
-| Method | Endpoint | Description |
-|--------|-----------------------------------|--------------------------------|
-| POST | `/admin/sessions/revoke-user` | Revoke all sessions for user |
-| POST | `/admin/sessions/revoke` | Revoke specific session |
+
+| Method | Endpoint                      | Description                  |
+| ------ | ----------------------------- | ---------------------------- |
+| POST   | `/admin/sessions/revoke-user` | Revoke all sessions for user |
+| POST   | `/admin/sessions/revoke`      | Revoke specific session      |
 
 ### RBAC Endpoints
 
@@ -431,18 +432,19 @@ Standard OAuth 2.0 and OpenID Connect endpoints:
 | GET    | `/rbac/roles`       | Get user roles             |
 
 **Admin:**
-| Method | Endpoint | Description |
-|--------|---------------------------------------------|------------------------------|
-| POST | `/rbac/admin/apps` | Create app |
-| GET | `/rbac/admin/apps` | List apps |
-| POST | `/rbac/admin/roles` | Create role |
-| GET | `/rbac/admin/roles` | List roles |
-| POST | `/rbac/admin/permissions` | Create permission |
-| GET | `/rbac/admin/permissions` | List permissions |
-| POST | `/rbac/admin/users/:userId/roles` | Assign role to user |
-| DELETE | `/rbac/admin/users/:userId/roles/:roleId` | Remove role from user |
-| POST | `/rbac/admin/roles/:roleId/permissions` | Assign permission to role |
-| DELETE | `/rbac/admin/roles/:roleId/permissions/:permissionId` | Remove permission |
+
+| Method | Endpoint                                              | Description               |
+| ------ | ----------------------------------------------------- | ------------------------- |
+| POST   | `/rbac/admin/apps`                                    | Create app                |
+| GET    | `/rbac/admin/apps`                                    | List apps                 |
+| POST   | `/rbac/admin/roles`                                   | Create role               |
+| GET    | `/rbac/admin/roles`                                   | List roles                |
+| POST   | `/rbac/admin/permissions`                             | Create permission         |
+| GET    | `/rbac/admin/permissions`                             | List permissions          |
+| POST   | `/rbac/admin/users/:userId/roles`                     | Assign role to user       |
+| DELETE | `/rbac/admin/users/:userId/roles/:roleId`             | Remove role from user     |
+| POST   | `/rbac/admin/roles/:roleId/permissions`               | Assign permission to role |
+| DELETE | `/rbac/admin/roles/:roleId/permissions/:permissionId` | Remove permission         |
 
 ### Tenant Management
 

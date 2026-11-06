@@ -238,8 +238,7 @@ export function requireSession(
 export function requireActiveAccount(
   c: Context<{ Variables: SessionMiddlewareVariables }>,
 ):
-  | { browserSession: BrowserSession; activeAccount: AccountSession }
-  | Response {
+  { browserSession: BrowserSession; activeAccount: AccountSession } | Response {
   const browserSession = c.get("browserSession")
   const activeAccount = c.get("activeAccount")
 
