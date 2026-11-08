@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.28] - 2026-11-08
+
+### Added
+
+- OIDC auth_time (and iat) on access tokens, kept across refreshes (#20)
+
+
 ## [1.0.27] - 2026-11-08
 
 ## [1.0.26] - 2026-11-08
@@ -514,7 +521,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.27...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.28...HEAD
+[1.0.28]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.27...v1.0.28
 [1.0.27]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.26...v1.0.27
 [1.0.26]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.25...v1.0.26
 [1.0.25]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.24...v1.0.25
