@@ -318,6 +318,22 @@ export interface EnterpriseIssuerConfig<
    * ```
    */
   error?(error: UnknownStateError, req: Request): Promise<Response>
+
+  /**
+   * Where the friendly "Start sign-in again" page links when the flow's
+   * client is unknown. See `IssuerInput.restart`.
+   */
+  restart?: {
+    fallbackUrl?: string
+  }
+
+  /**
+   * Single sign-on across clients: when the browser already has an active
+   * signed-in account, `/authorize` without `prompt` completes silently
+   * (no sign-in form). `prompt=login` and `max_age` still force a sign-in.
+   * @default true
+   */
+  singleSignOn?: boolean
 }
 
 /**
