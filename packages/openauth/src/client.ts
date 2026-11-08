@@ -148,6 +148,17 @@ export interface ClientInput {
    * want the client to use it too.
    */
   fetch?: FetchLike
+  /**
+   * How long, in milliseconds, the issuer's discovery document and JWKS are
+   * cached before they are fetched again. The cache is shared by every client
+   * in the same process or isolate, keyed by issuer, so creating a client per
+   * request does not re-fetch them. A token signed with a key that is not in
+   * the cached JWKS, or whose signature the cached key rejects, triggers one
+   * early re-fetch (key rotation), at most once every 30 seconds.
+   *
+   * @default 600000 (10 minutes)
+   */
+  cacheTTL?: number
 }
 
 export interface AuthorizeOptions {
@@ -539,38 +550,136 @@ export interface Client {
   ): Promise<VerifyResult<T> | VerifyError>
 }
 
+type JWKSGetKey = ReturnType<typeof createLocalJWKSet>
+
+interface CacheEntry<T> {
+  value?: T
+  fetchedAt: number
+  expiresAt: number
+  inflight?: Promise<T>
+}
+
+const DEFAULT_CACHE_TTL = 10 * 60 * 1000
+/** Minimum gap between JWKS re-fetches forced by a token the cached keys reject. */
+const JWKS_FORCED_REFETCH_GAP = 30 * 1000
+
+/**
+ * Discovery documents and JWKS, shared by every client in this process or
+ * isolate and keyed by issuer. Servers that build a client per request (the
+ * common pattern) would otherwise fetch both on every `verify`.
+ */
+const discoveryCache = new Map<string, CacheEntry<WellKnown>>()
+const jwksCache = new Map<string, CacheEntry<JWKSGetKey>>()
+
+/**
+ * Clear the shared discovery and JWKS cache. Mostly useful in tests.
+ */
+export function clearClientCache() {
+  discoveryCache.clear()
+  jwksCache.clear()
+}
+
+/**
+ * Return the cached value for `key`, fetching it when it is missing or older
+ * than its TTL (or when `force` is set). Concurrent callers share one fetch.
+ * A failed refresh falls back to the previous value when there is one.
+ */
+async function cached<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  ttl: number,
+  load: () => Promise<T>,
+  force = false,
+): Promise<T> {
+  const now = Date.now()
+  const entry = cache.get(key)
+  if (entry?.inflight) return entry.inflight
+  if (entry?.value !== undefined && !force && now < entry.expiresAt)
+    return entry.value
+  const inflight = load().then(
+    (value) => {
+      cache.set(key, {
+        value,
+        fetchedAt: Date.now(),
+        expiresAt: Date.now() + ttl,
+      })
+      return value
+    },
+    (err) => {
+      const prev = cache.get(key)
+      if (prev?.value !== undefined) {
+        // Serve the stale value; retry after a short back-off, not every call.
+        cache.set(key, {
+          value: prev.value,
+          fetchedAt: prev.fetchedAt,
+          expiresAt: Date.now() + Math.min(ttl, JWKS_FORCED_REFETCH_GAP),
+        })
+        return prev.value
+      }
+      cache.delete(key)
+      throw err
+    },
+  )
+  cache.set(key, {
+    value: entry?.value,
+    fetchedAt: entry?.fetchedAt ?? 0,
+    expiresAt: entry?.expiresAt ?? 0,
+    inflight,
+  })
+  return inflight
+}
+
+async function fetchJSON(f: FetchLike, url: string) {
+  const response = await f(url)
+  if (!response.ok)
+    throw new Error(
+      `Failed to fetch ${url}: ${(response as { status?: number }).status}`,
+    )
+  return response.json()
+}
+
 /**
  * Create an OpenAuth client.
  *
  * @param input - Configure the client.
  */
 export function createClient(input: ClientInput): Client {
-  const jwksCache = new Map<string, ReturnType<typeof createLocalJWKSet>>()
-  const issuerCache = new Map<string, WellKnown>()
   const issuer = input.issuer || process.env.OPENAUTH_ISSUER
   if (!issuer) throw new Error("No issuer")
-  const f = input.fetch ?? fetch
+  const f: FetchLike = input.fetch ?? fetch
+  const ttl = input.cacheTTL ?? DEFAULT_CACHE_TTL
 
   async function getIssuer() {
-    const cached = issuerCache.get(issuer!)
-    if (cached) return cached
-    const wellKnown = (await (f || fetch)(
-      `${issuer}/.well-known/oauth-authorization-server`,
-    ).then((r) => r.json())) as WellKnown
-    issuerCache.set(issuer!, wellKnown)
-    return wellKnown
+    return cached(discoveryCache, issuer!, ttl, () =>
+      fetchJSON(f, `${issuer}/.well-known/oauth-authorization-server`),
+    ) as Promise<WellKnown>
   }
 
-  async function getJWKS() {
-    const wk = await getIssuer()
-    const cached = jwksCache.get(issuer!)
-    if (cached) return cached
-    const keyset = (await (f || fetch)(wk.jwks_uri).then((r) =>
-      r.json(),
-    )) as JSONWebKeySet
-    const result = createLocalJWKSet(keyset)
-    jwksCache.set(issuer!, result)
-    return result
+  async function getJWKS(force = false) {
+    return cached(
+      jwksCache,
+      issuer!,
+      ttl,
+      async () => {
+        const wk = await getIssuer()
+        const keyset = (await fetchJSON(f, wk.jwks_uri)) as JSONWebKeySet
+        return createLocalJWKSet(keyset)
+      },
+      force,
+    )
+  }
+
+  /**
+   * Re-fetch the JWKS early when a token's key is not (or no longer) the one
+   * we cached. At most once per JWKS_FORCED_REFETCH_GAP, so bad tokens cannot
+   * turn into a fetch per request.
+   */
+  async function refetchJWKSForUnknownKey() {
+    const entry = jwksCache.get(issuer!)
+    const elapsed = entry ? Date.now() - entry.fetchedAt : Infinity
+    // elapsed < 0: the clock moved back (tests, VM resume); do not trust it.
+    if (elapsed >= 0 && elapsed < JWKS_FORCED_REFETCH_GAP) return undefined
+    return getJWKS(true)
   }
 
   const result = {
@@ -701,13 +810,26 @@ export function createClient(input: ClientInput): Client {
     ): Promise<VerifyResult<T> | VerifyError> {
       const jwks = await getJWKS()
       try {
-        const result = await jwtVerify<{
+        type Claims = {
           mode: "access"
           type: keyof T
           properties: v1.InferInput<T[keyof T]>
-        }>(token, jwks, {
-          issuer,
-        })
+        }
+        let result: Awaited<ReturnType<typeof jwtVerify<Claims>>>
+        try {
+          result = await jwtVerify<Claims>(token, jwks, { issuer })
+        } catch (e) {
+          // A key we do not have, or (keys here share one fixed kid) a
+          // signature our cached key rejects: the server may have rotated.
+          if (
+            !(e instanceof errors.JWKSNoMatchingKey) &&
+            !(e instanceof errors.JWSSignatureVerificationFailed)
+          )
+            throw e
+          const fresh = await refetchJWKSForUnknownKey()
+          if (!fresh) throw e
+          result = await jwtVerify<Claims>(token, fresh, { issuer })
+        }
         const validated = await subjects[result.payload.type][
           "~standard"
         ].validate(result.payload.properties)
