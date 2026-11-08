@@ -128,9 +128,18 @@ export async function handlePromptParameter(
   browserSession: BrowserSession | null,
   authorization: EnterpriseAuthorizationState,
   activeAccount: AccountSession | null = null,
+  options: { singleSignOn?: boolean } = {},
 ): Promise<PromptHandlerResult> {
-  // No prompt specified - proceed normally
-  if (!prompt) {
+  // Single sign-on: with no prompt (or prompt=consent), a browser that is
+  // already signed in completes the authorization silently, so signing in to
+  // one app signs the user in to the others. prompt=login and max_age still
+  // force a fresh sign-in.
+  const singleSignOn = options.singleSignOn ?? true
+  if (!prompt || prompt === "consent") {
+    if (singleSignOn) {
+      const account = activeSessionAccount(browserSession, activeAccount)
+      if (account) return { proceed: true, silentAuth: account }
+    }
     return { proceed: true }
   }
 
@@ -149,14 +158,23 @@ export async function handlePromptParameter(
         authorization,
       )
 
-    case "consent":
-      // Consent is typically handled later in the flow
-      return { proceed: true }
-
     default:
       // Unknown prompt value - proceed normally
       return { proceed: true }
   }
+}
+
+/**
+ * The browser's active account when it can be used for a silent sign-in.
+ */
+function activeSessionAccount(
+  browserSession: BrowserSession | null,
+  activeAccount: AccountSession | null,
+): AccountSession | null {
+  if (!browserSession || !activeAccount) return null
+  if (browserSession.active_user_id !== activeAccount.user_id) return null
+  if (Date.now() > activeAccount.expires_at) return null
+  return activeAccount
 }
 
 /**
@@ -241,12 +259,13 @@ async function handlePromptSelectAccount(
   // Get all accounts in the session
   const accounts = await sessionService.listAccounts(browserSession.id)
 
-  // No accounts or single account - proceed normally
-  if (accounts.length <= 1) {
+  // No signed-in account: nothing to pick from, sign in
+  if (accounts.length === 0) {
     return { proceed: true }
   }
 
-  // Multiple accounts - return account picker response
+  // One or more accounts: let the user pick (or use another account), as
+  // prompt=select_account requires, instead of showing the sign-in form
   // The account picker UI will be rendered by the issuer
   const pickerAccounts: AccountPickerAccount[] = accounts.map((account) => ({
     userId: account.user_id,

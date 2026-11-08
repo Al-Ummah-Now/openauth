@@ -318,6 +318,40 @@ export interface EnterpriseIssuerConfig<
    * ```
    */
   error?(error: UnknownStateError, req: Request): Promise<Response>
+
+  /**
+   * Where the friendly "Start sign-in again" page links when the flow's
+   * client is unknown. See `IssuerInput.restart`.
+   */
+  restart?: {
+    fallbackUrl?: string
+  }
+
+  /**
+   * Single sign-on across clients: when the browser already has an active
+   * signed-in account, `/authorize` without `prompt` completes silently
+   * (no sign-in form). `prompt=login` and `max_age` still force a sign-in.
+   * @default true
+   */
+  singleSignOn?: boolean
+
+  /**
+   * Check `/authorize` against the client registry (`clientDb`): the client
+   * must exist in the tenant, be enabled, allow `authorization_code`, and have
+   * registered the exact `redirect_uri` (full string, query included, as
+   * OAuth 2.1 requires; register each variant such as `?locale=en`).
+   *
+   * - `"enforce"`: reject with a clear en/ar error page (HTTP 400). The user
+   *   is never redirected to an unverified redirect_uri.
+   * - `"report"`: log the problem and continue (for rolling out).
+   *
+   * Requires `clientDb`. Unset: no registry check (domain allow check only).
+   */
+  clientRegistry?: {
+    mode: "enforce" | "report"
+    /** Where the error page's button goes. Defaults to `restart.fallbackUrl`. */
+    homeUrl?: string
+  }
 }
 
 /**

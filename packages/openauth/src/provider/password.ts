@@ -37,7 +37,6 @@
  *
  * @packageDocumentation
  */
-import { UnknownStateError } from "../error.js"
 import { Storage } from "../storage/storage.js"
 import { Provider } from "./provider.js"
 import { generateUnbiasedDigits, timingSafeCompare } from "../random.js"
@@ -362,10 +361,16 @@ export function PasswordProvider(
             const state: PasswordChangeState = {
               type: "update",
               email,
-              redirect: getRelativeUrl(c, "./authorize"),
+              redirect: withFlowParams(
+                getRelativeUrl(c, "./authorize"),
+                c.req.url,
+              ),
             }
             await ctx.set(c, "provider", 60 * 60 * 24, state)
-            const changeUrl = getRelativeUrl(c, "./change")
+            const changeUrl = withFlowParams(
+              getRelativeUrl(c, "./change"),
+              c.req.url,
+            )
             return c.redirect(changeUrl, 302)
           }
         }
@@ -399,7 +404,11 @@ export function PasswordProvider(
         const fd = await c.req.formData()
         const email = fd.get("email")?.toString()?.toLowerCase()
         const action = fd.get("action")?.toString()
-        const provider = await ctx.get<PasswordRegisterState>(c, "provider")
+        // No state (stale tab, expired or cleared cookie): restart the
+        // registration form instead of failing.
+        const provider: PasswordRegisterState = (await ctx.get<
+          PasswordRegisterState | undefined
+        >(c, "provider")) ?? { type: "start" }
 
         async function transition(
           next: PasswordRegisterState,
@@ -502,7 +511,8 @@ export function PasswordProvider(
 
       routes.get("/change", async (c) => {
         let redirect =
-          c.req.query("redirect_uri") || getRelativeUrl(c, "./authorize")
+          c.req.query("redirect_uri") ||
+          withFlowParams(getRelativeUrl(c, "./authorize"), c.req.url)
         const state: PasswordChangeState = {
           type: "start",
           redirect,
@@ -514,8 +524,14 @@ export function PasswordProvider(
       routes.post("/change", async (c) => {
         const fd = await c.req.formData()
         const action = fd.get("action")?.toString()
-        const provider = await ctx.get<PasswordChangeState>(c, "provider")
-        if (!provider) throw new UnknownStateError()
+        // No state (stale tab, expired or cleared cookie): restart the
+        // change-password form instead of failing.
+        const provider: PasswordChangeState = (await ctx.get<
+          PasswordChangeState | undefined
+        >(c, "provider")) ?? {
+          type: "start",
+          redirect: withFlowParams(getRelativeUrl(c, "./authorize"), c.req.url),
+        }
 
         async function transition(
           next: PasswordChangeState,
@@ -695,6 +711,7 @@ export function PBKDF2Hasher(opts?: { iterations?: number }): PasswordHasher<{
 }
 import { timingSafeEqual, randomBytes, scrypt } from "node:crypto"
 import { getRelativeUrl } from "../util.js"
+import { withFlowParams } from "../flow.js"
 
 /**
  * @internal
