@@ -23,6 +23,8 @@ const A = { id: "client-a", redirect: "https://a.example.com/cb" }
 const B = { id: "client-b", redirect: "https://b.example.com/cb" }
 
 let storage: StorageAdapter
+let currentRoles: string[]
+let successCalls: Array<{ provider: string; email: string }>
 
 async function createApp(singleSignOn?: boolean) {
   const tenantService = new TenantServiceImpl(storage)
@@ -40,8 +42,17 @@ async function createApp(singleSignOn?: boolean) {
         PasswordUI({ sendCode: async () => undefined }),
       ),
     },
-    onSuccess: async (ctx, value) =>
-      ctx.subject("user", { email: (value as any).email, id: "user-1" } as any),
+    onSuccess: async (ctx, value) => {
+      successCalls.push({
+        provider: (value as any).provider,
+        email: (value as any).email,
+      })
+      return ctx.subject("user", {
+        email: (value as any).email,
+        id: "user-1",
+        roles: [...currentRoles],
+      } as any)
+    },
   })
   return app
 }
@@ -101,6 +112,8 @@ function expectSignInForm(res: Response) {
 
 beforeEach(async () => {
   storage = MemoryStorage()
+  currentRoles = ["Member"]
+  successCalls = []
   await Storage.set(
     storage,
     ["email", EMAIL, "password"],
@@ -195,5 +208,21 @@ describe("single sign-on", () => {
       redirect: "https://evil.example.com/cb",
     })
     expect(res.headers.get("location") ?? "").not.toContain("code=")
+  })
+
+  test("silent sign-on recomputes claims for the target client (no claim reuse)", async () => {
+    const browser = new Browser(await createApp())
+    const toA = await browser.signIn(A)
+    expect((await codePayload(toA)).properties.roles).toEqual(["Member"])
+
+    // A role is revoked/granted after the first sign-in
+    currentRoles = ["Viewer"]
+    const res = await browser.authorize(B)
+    const toB = new URL(res.headers.get("location")!)
+    const b = await codePayload(toB)
+    expect(b.clientID).toBe(B.id)
+    expect(b.properties.roles).toEqual(["Viewer"])
+    // The app's success hook ran again, as a session sign-in
+    expect(successCalls.at(-1)).toEqual({ provider: "session", email: EMAIL })
   })
 })
