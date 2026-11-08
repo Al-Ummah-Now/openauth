@@ -116,6 +116,7 @@ import {
   issuer as createBaseIssuer,
   normalizeIssuer,
   type OnSuccessResponder,
+  unknownStateResponse,
 } from "../issuer.js"
 import { signingKeys, SIGNING_ALG } from "../keys.js"
 import { getRelativeUrl, isDomainMatch } from "../util.js"
@@ -130,6 +131,10 @@ import {
   resolveLocalizedString,
 } from "../ui/theme.js"
 import type { Theme } from "../ui/theme.js"
+import { ClientD1Adapter } from "../client/client-d1-adapter.js"
+import { ClientErrorPage } from "../ui/client-error.js"
+import type { ClientErrorReason } from "../ui/client-error.js"
+import type { D1Database } from "@cloudflare/workers-types"
 
 // ============================================
 // THEME RESOLUTION MIDDLEWARE
@@ -300,6 +305,207 @@ export function createMultiTenantIssuer<
   // CREATE BASE ISSUER WITH WRAPPED SUCCESS
   // ============================================
 
+  /** Mirrors the base issuer's PKCE policy for codes issued here. */
+  async function pkceRequiredButMissing(
+    authorization: EnterpriseAuthorizationState,
+  ): Promise<boolean> {
+    if (!config.pkce?.requireForPublicClients || authorization.pkce)
+      return false
+    if (!config.clientDb) return false
+    const adapter = new ClientD1Adapter(config.clientDb)
+    const registered = await adapter.getClientById(authorization.client_id)
+    return !!registered && !registered.client_secret_hash
+  }
+
+  // Wraps every successful authentication (provider sign-ins and silent
+  // single sign-on) with tenant, session and RBAC enrichment.
+  async function enterpriseSuccess(
+    responder: OnSuccessResponder<SubjectPayload<Subjects>>,
+    value: any,
+    req: Request,
+  ): Promise<Response> {
+    const ctx = requestContextMap.get(req)
+    if (!ctx?.tenant) {
+      // No enterprise context - delegate directly to base
+      throw new Error("Enterprise context not found for request")
+    }
+
+    const tenant = ctx.tenant
+    let browserSession = ctx.browserSession
+    const authorization = ctx.authorization
+
+    // Track if we need to set a session cookie
+    let sessionCookieHeader: string | null = null
+
+    // Create browser session if one doesn't exist
+    if (!browserSession) {
+      browserSession = await config.sessionService.createBrowserSession({
+        tenantId: tenant.id,
+        userAgent: req.headers.get("User-Agent") || "unknown",
+        ipAddress:
+          req.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ||
+          "unknown",
+      })
+      // Generate the cookie header to add to the response
+      sessionCookieHeader = await createSessionCookieHeader(
+        browserSession,
+        config.sessionSecret,
+        sessionConfig.cookieName,
+      )
+    }
+
+    // Get or create browser session reference
+    let session = browserSession
+
+    // Enrich with RBAC claims if service available
+    let rbacClaims: RBACClaims = { roles: [], permissions: [] }
+    if (config.rbacService && (value as any).userID) {
+      rbacClaims = await config.rbacService.enrichTokenClaims({
+        userId: (value as any).userID,
+        clientId: authorization?.client_id || "default",
+        tenantId: tenant.id,
+      })
+    }
+
+    // Build enterprise auth result
+    const enterpriseResult: EnterpriseAuthResult = {
+      ...(value as Record<string, unknown>),
+      provider: value.provider as string,
+      tenantId: tenant.id,
+      roles: rbacClaims.roles,
+      permissions: rbacClaims.permissions,
+    }
+
+    // Create enhanced success context that wraps the base responder
+    const enterpriseCtx: EnterpriseSuccessContext<SubjectPayload<Subjects>> = {
+      async subject(type, properties, opts) {
+        // Enrich properties with enterprise data
+        const baseProperties =
+          typeof properties === "object" && properties !== null
+            ? properties
+            : {}
+
+        // Merge roles from both sources:
+        // - baseProperties.roles: from app's onSuccess (e.g., database lookup)
+        // - rbacClaims.roles: from RBAC service (if userID was available)
+        // This ensures app-provided roles aren't overwritten by empty RBAC claims
+        const baseRoles = Array.isArray((baseProperties as any).roles)
+          ? (baseProperties as any).roles
+          : []
+        const basePermissions = Array.isArray(
+          (baseProperties as any).permissions,
+        )
+          ? (baseProperties as any).permissions
+          : []
+
+        // Combine and deduplicate
+        const mergedRoles = [...new Set([...baseRoles, ...rbacClaims.roles])]
+        const mergedPermissions = [
+          ...new Set([...basePermissions, ...rbacClaims.permissions]),
+        ]
+
+        const enrichedProperties = {
+          ...baseProperties,
+          tenantId: tenant.id,
+          roles: mergedRoles,
+          permissions: mergedPermissions,
+        }
+
+        // Add account to session after successful auth
+        // Extract userId from properties (different providers may use different keys)
+        const userId =
+          (baseProperties as any).userId ||
+          (baseProperties as any).userID ||
+          (baseProperties as any).id ||
+          (baseProperties as any).sub
+        if (session && userId) {
+          try {
+            // Generate a session-specific refresh token
+            // This is separate from the OAuth refresh token managed by base issuer
+            const sessionRefreshToken = crypto.randomUUID()
+
+            await config.sessionService.addAccountToSession({
+              browserSessionId: session.id,
+              userId: String(userId),
+              subjectType: type as string,
+              subjectProperties: enrichedProperties,
+              refreshToken: sessionRefreshToken,
+              clientId: authorization?.client_id || "default",
+              ttl: sessionConfig.sessionLifetimeSeconds,
+            })
+          } catch (err) {
+            // Log but don't fail the auth flow
+            console.error("Failed to add account to session:", err)
+          }
+        }
+
+        // Delegate to base responder for actual token generation
+        const response = await responder.subject(
+          type as any,
+          enrichedProperties as any,
+          opts,
+        )
+
+        // Add session cookie if we created a new session
+        if (sessionCookieHeader) {
+          const headers = new Headers(response.headers)
+          headers.append("Set-Cookie", sessionCookieHeader)
+          return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+          })
+        }
+
+        return response
+      },
+    }
+
+    // Call user's success callback or default
+    if (config.onSuccess) {
+      const response = await config.onSuccess(
+        enterpriseCtx,
+        enterpriseResult,
+        tenant,
+      )
+      // Add session cookie if we created a new session
+      if (sessionCookieHeader) {
+        const headers = new Headers(response.headers)
+        headers.append("Set-Cookie", sessionCookieHeader)
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        })
+      }
+      return response
+    }
+
+    // Default: use base subject method with enriched properties
+    const defaultType = (value as any).type || "user"
+    const defaultProperties = (value as any).properties || value
+
+    const response = await enterpriseCtx.subject(defaultType, {
+      ...defaultProperties,
+      tenantId: tenant.id,
+      roles: rbacClaims.roles,
+      permissions: rbacClaims.permissions,
+    })
+
+    // Add session cookie if we created a new session
+    if (sessionCookieHeader) {
+      const headers = new Headers(response.headers)
+      headers.append("Set-Cookie", sessionCookieHeader)
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      })
+    }
+
+    return response
+  }
+
   const baseIssuer = createBaseIssuer({
     subjects: config.subjects,
     storage: config.storage,
@@ -311,6 +517,7 @@ export function createMultiTenantIssuer<
     clientDb: config.clientDb,
     audit: config.audit,
     error: config.error,
+    restart: config.restart,
 
     // Allow check delegates to enterprise onAllow with tenant context
     allow: async (input, req) => {
@@ -327,191 +534,8 @@ export function createMultiTenantIssuer<
     },
 
     // Success callback intercepts to add enterprise features
-    success: async (responder, value, req) => {
-      const ctx = requestContextMap.get(req)
-      if (!ctx?.tenant) {
-        // No enterprise context - delegate directly to base
-        throw new Error("Enterprise context not found for request")
-      }
-
-      const tenant = ctx.tenant
-      let browserSession = ctx.browserSession
-      const authorization = ctx.authorization
-
-      // Track if we need to set a session cookie
-      let sessionCookieHeader: string | null = null
-
-      // Create browser session if one doesn't exist
-      if (!browserSession) {
-        browserSession = await config.sessionService.createBrowserSession({
-          tenantId: tenant.id,
-          userAgent: req.headers.get("User-Agent") || "unknown",
-          ipAddress:
-            req.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ||
-            "unknown",
-        })
-        // Generate the cookie header to add to the response
-        sessionCookieHeader = await createSessionCookieHeader(
-          browserSession,
-          config.sessionSecret,
-          sessionConfig.cookieName,
-        )
-      }
-
-      // Get or create browser session reference
-      let session = browserSession
-
-      // Enrich with RBAC claims if service available
-      let rbacClaims: RBACClaims = { roles: [], permissions: [] }
-      if (config.rbacService && (value as any).userID) {
-        rbacClaims = await config.rbacService.enrichTokenClaims({
-          userId: (value as any).userID,
-          clientId: authorization?.client_id || "default",
-          tenantId: tenant.id,
-        })
-      }
-
-      // Build enterprise auth result
-      const enterpriseResult: EnterpriseAuthResult = {
-        ...(value as Record<string, unknown>),
-        provider: value.provider as string,
-        tenantId: tenant.id,
-        roles: rbacClaims.roles,
-        permissions: rbacClaims.permissions,
-      }
-
-      // Create enhanced success context that wraps the base responder
-      const enterpriseCtx: EnterpriseSuccessContext<SubjectPayload<Subjects>> =
-        {
-          async subject(type, properties, opts) {
-            // Enrich properties with enterprise data
-            const baseProperties =
-              typeof properties === "object" && properties !== null
-                ? properties
-                : {}
-
-            // Merge roles from both sources:
-            // - baseProperties.roles: from app's onSuccess (e.g., database lookup)
-            // - rbacClaims.roles: from RBAC service (if userID was available)
-            // This ensures app-provided roles aren't overwritten by empty RBAC claims
-            const baseRoles = Array.isArray((baseProperties as any).roles)
-              ? (baseProperties as any).roles
-              : []
-            const basePermissions = Array.isArray(
-              (baseProperties as any).permissions,
-            )
-              ? (baseProperties as any).permissions
-              : []
-
-            // Combine and deduplicate
-            const mergedRoles = [
-              ...new Set([...baseRoles, ...rbacClaims.roles]),
-            ]
-            const mergedPermissions = [
-              ...new Set([...basePermissions, ...rbacClaims.permissions]),
-            ]
-
-            const enrichedProperties = {
-              ...baseProperties,
-              tenantId: tenant.id,
-              roles: mergedRoles,
-              permissions: mergedPermissions,
-            }
-
-            // Add account to session after successful auth
-            // Extract userId from properties (different providers may use different keys)
-            const userId =
-              (baseProperties as any).userId ||
-              (baseProperties as any).userID ||
-              (baseProperties as any).id ||
-              (baseProperties as any).sub
-            if (session && userId) {
-              try {
-                // Generate a session-specific refresh token
-                // This is separate from the OAuth refresh token managed by base issuer
-                const sessionRefreshToken = crypto.randomUUID()
-
-                await config.sessionService.addAccountToSession({
-                  browserSessionId: session.id,
-                  userId: String(userId),
-                  subjectType: type as string,
-                  subjectProperties: enrichedProperties,
-                  refreshToken: sessionRefreshToken,
-                  clientId: authorization?.client_id || "default",
-                  ttl: sessionConfig.sessionLifetimeSeconds,
-                })
-              } catch (err) {
-                // Log but don't fail the auth flow
-                console.error("Failed to add account to session:", err)
-              }
-            }
-
-            // Delegate to base responder for actual token generation
-            const response = await responder.subject(
-              type as any,
-              enrichedProperties as any,
-              opts,
-            )
-
-            // Add session cookie if we created a new session
-            if (sessionCookieHeader) {
-              const headers = new Headers(response.headers)
-              headers.append("Set-Cookie", sessionCookieHeader)
-              return new Response(response.body, {
-                status: response.status,
-                statusText: response.statusText,
-                headers,
-              })
-            }
-
-            return response
-          },
-        }
-
-      // Call user's success callback or default
-      if (config.onSuccess) {
-        const response = await config.onSuccess(
-          enterpriseCtx,
-          enterpriseResult,
-          tenant,
-        )
-        // Add session cookie if we created a new session
-        if (sessionCookieHeader) {
-          const headers = new Headers(response.headers)
-          headers.append("Set-Cookie", sessionCookieHeader)
-          return new Response(response.body, {
-            status: response.status,
-            statusText: response.statusText,
-            headers,
-          })
-        }
-        return response
-      }
-
-      // Default: use base subject method with enriched properties
-      const defaultType = (value as any).type || "user"
-      const defaultProperties = (value as any).properties || value
-
-      const response = await enterpriseCtx.subject(defaultType, {
-        ...defaultProperties,
-        tenantId: tenant.id,
-        roles: rbacClaims.roles,
-        permissions: rbacClaims.permissions,
-      })
-
-      // Add session cookie if we created a new session
-      if (sessionCookieHeader) {
-        const headers = new Headers(response.headers)
-        headers.append("Set-Cookie", sessionCookieHeader)
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
-        })
-      }
-
-      return response
-    },
+    success: (responder, value, req) =>
+      enterpriseSuccess(responder, value, req),
 
     // Provider selection UI (inherits from base)
     select: config.select,
@@ -606,7 +630,14 @@ export function createMultiTenantIssuer<
 
   app.use("*", async (ctx, next) => {
     const tenant = getTenant(ctx)
-    const browserSession = ctx.get("browserSession") as BrowserSession | null
+    let browserSession = ctx.get("browserSession") as BrowserSession | null
+    // The cookie names its own tenant. A session from another tenant must
+    // never be used here (silent sign-on, account picker, success hook).
+    if (browserSession && tenant && browserSession.tenant_id !== tenant.id) {
+      browserSession = null
+      ctx.set("browserSession", null)
+      ctx.set("activeAccount", null)
+    }
     const authorization = ctx.get("authorization") as
       EnterpriseAuthorizationState | undefined
 
@@ -737,6 +768,35 @@ export function createMultiTenantIssuer<
       )
     }
 
+    // Client registry: the client and its exact redirect_uri must be registered
+    if (config.clientRegistry && config.clientDb) {
+      const reason = await registryProblem(
+        config.clientDb,
+        tenant.id,
+        authorization.client_id,
+        authorization.redirect_uri,
+      )
+      if (reason) {
+        console.warn(
+          JSON.stringify({
+            event: "authorize_client_rejected",
+            mode: config.clientRegistry.mode,
+            reason,
+            client_id: authorization.client_id,
+            redirect_uri: authorization.redirect_uri,
+            tenant: tenant.id,
+          }),
+        )
+        if (config.clientRegistry.mode === "enforce") {
+          return ClientErrorPage(c.req.raw, {
+            reason,
+            homeUrl:
+              config.clientRegistry.homeUrl ?? config.restart?.fallbackUrl,
+          })
+        }
+      }
+    }
+
     // PKCE: only S256 is supported
     const challengeMethod = c.req.query("code_challenge_method")
     if (challengeMethod && challengeMethod !== "S256") {
@@ -797,6 +857,7 @@ export function createMultiTenantIssuer<
       browserSession,
       authorization,
       effectiveActiveAccount,
+      { singleSignOn: config.singleSignOn },
     )
 
     // Debug: Log prompt result
@@ -828,37 +889,53 @@ export function createMultiTenantIssuer<
       }
     }
 
-    // Handle silent auth (prompt=none with authenticated user)
-    // Issue authorization code directly without going through provider flow
-    if (promptResult.silentAuth && !promptResult.forceReauth) {
+    // Silent sign-in (prompt=none, or single sign-on with an active account).
+    // The claims are NOT copied from the session: the normal success pipeline
+    // (app onSuccess + RBAC enrichment) runs again for THIS client, so roles
+    // and permissions are computed for the client that receives the code and
+    // reflect the current state. Only the code issuance is done here.
+    if (
+      promptResult.silentAuth &&
+      !promptResult.forceReauth &&
+      authorization.response_type === "code" &&
+      !(await pkceRequiredButMissing(authorization))
+    ) {
       const account = promptResult.silentAuth
-      const code = crypto.randomUUID()
-
-      // Store authorization code (same as base issuer)
-      await Storage.set(
-        config.storage,
-        ["oauth:code", code],
-        {
-          type: account.subject_type,
-          properties: account.subject_properties,
-          subject: account.user_id,
-          redirectURI: authorization.redirect_uri,
-          clientID: authorization.client_id,
-          pkce: authorization.pkce,
-          // TTLs are in SECONDS (Storage.set and generateTokens use seconds)
-          ttl: {
-            access: ttlAccess,
-            refresh: ttlRefresh,
-          },
+      const identity = sessionIdentity(account.subject_properties)
+      const silentResponder: OnSuccessResponder<SubjectPayload<Subjects>> = {
+        async subject(type, properties, opts) {
+          const code = crypto.randomUUID()
+          await Storage.set(
+            config.storage,
+            ["oauth:code", code],
+            {
+              type,
+              properties,
+              // Same derivation as the base issuer: one `sub` per user.
+              subject:
+                opts?.subject ?? (await resolveSubject(type, properties)),
+              redirectURI: authorization.redirect_uri,
+              clientID: authorization.client_id,
+              pkce: authorization.pkce,
+              // TTLs are in SECONDS (Storage.set and generateTokens use seconds)
+              ttl: {
+                access: opts?.ttl?.access ?? ttlAccess,
+                refresh: opts?.ttl?.refresh ?? ttlRefresh,
+              },
+            },
+            AUTHORIZATION_CODE_TTL,
+          )
+          const location = new URL(authorization.redirect_uri)
+          location.searchParams.set("code", code)
+          location.searchParams.set("state", authorization.state || "")
+          return c.redirect(location.toString(), 302)
         },
-        AUTHORIZATION_CODE_TTL,
+      }
+      return enterpriseSuccess(
+        silentResponder,
+        { provider: "session", ...identity },
+        c.req.raw,
       )
-
-      // Redirect back with code
-      const location = new URL(authorization.redirect_uri)
-      location.searchParams.set("code", code)
-      location.searchParams.set("state", authorization.state || "")
-      return c.redirect(location.toString(), 302)
     }
 
     // Delegate to base issuer for actual authorization
@@ -1045,13 +1122,10 @@ export function createMultiTenantIssuer<
     console.error("Enterprise issuer error:", err)
 
     if (err instanceof UnknownStateError) {
-      return c.json(
-        {
-          error: "invalid_state",
-          error_description: err.message,
-        },
-        400,
-      )
+      // Never show the technical error: render the friendly restart page.
+      return config.error
+        ? config.error(err, c.req.raw)
+        : unknownStateResponse(err, c.req.raw, config.restart?.fallbackUrl)
     }
 
     if (err instanceof OauthError) {
@@ -1085,7 +1159,6 @@ export function createMultiTenantIssuer<
       500,
     )
   })
-
   // ============================================
   // HELPER FUNCTIONS
   // ============================================
@@ -1125,6 +1198,26 @@ export function createMultiTenantIssuer<
 // ============================================
 // INTERNAL HELPERS
 // ============================================
+
+/**
+ * Why `/authorize` must not proceed for this client, or null when it may.
+ * redirect_uri matching is exact (full string), per OAuth 2.1.
+ */
+export async function registryProblem(
+  db: D1Database,
+  tenantId: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<ClientErrorReason | null> {
+  const client = await new ClientD1Adapter(db).getClientById(clientId)
+  if (!client || client.tenant_id !== tenantId) return "unknown_client"
+  if (!client.enabled) return "client_disabled"
+  if (!client.grant_types.includes("authorization_code"))
+    return "client_not_allowed"
+  if (!client.redirect_uris.includes(redirectUri))
+    return "redirect_uri_not_registered"
+  return null
+}
 
 /**
  * Default client allow check
@@ -1548,4 +1641,33 @@ function renderAccountPicker(
 `
 
   return ctx.html(html)
+}
+
+/**
+ * The subject the base issuer derives for (type, properties): see
+ * `resolveSubject` in ../issuer.ts. Must stay identical to it.
+ */
+async function resolveSubject(type: string, properties: unknown) {
+  const data = new TextEncoder().encode(JSON.stringify(properties))
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-1", data))
+  const hex = Array.from(hash)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+  return `${type}:${hex.slice(0, 16)}`
+}
+
+/**
+ * The identity part of a session account's properties (what a provider would
+ * report), without claims that must be recomputed per client.
+ */
+function sessionIdentity(properties: unknown): Record<string, unknown> {
+  const source =
+    properties && typeof properties === "object"
+      ? (properties as Record<string, unknown>)
+      : {}
+  const { roles, permissions, tenantId, ...identity } = source
+  void roles
+  void permissions
+  void tenantId
+  return identity
 }
