@@ -9,13 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.22] - 2026-11-08
 
-
 ## [1.0.21] - 2026-11-08
 
 ### Fixed
 
 - client): share discovery and JWKS across clients, with a TTL (#16)
-
 
 ## [1.0.20] - 2026-11-08
 

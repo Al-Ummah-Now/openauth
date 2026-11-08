@@ -200,6 +200,7 @@ import { compactDecrypt, CompactEncrypt, jwtVerify, SignJWT } from "jose"
 import { Storage, StorageAdapter } from "./storage/storage.js"
 import { encryptionKeys, legacySigningKeys, signingKeys } from "./keys.js"
 import { validatePKCE } from "./pkce.js"
+import { clientRequiresPkce } from "./client/native.js"
 import { Select } from "./ui/select.js"
 import { setTheme, Theme } from "./ui/theme.js"
 import { RestartPage } from "./ui/restart.js"
@@ -627,7 +628,11 @@ export function issuer<
     () =>
       input.allow ??
       (async (input: any, req: Request) => {
-        const redir = new URL(input.redirectURI).hostname
+        const parsed = new URL(input.redirectURI)
+        // The domain rule only applies to web redirects
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
+          return false
+        const redir = parsed.hostname
         if (redir === "localhost" || redir === "127.0.0.1") {
           return true
         }
@@ -1624,17 +1629,13 @@ export function issuer<
         "Unsupported code_challenge_method; only S256 is supported",
       )
     }
-    if (
-      input.pkce?.requireForPublicClients &&
-      response_type === "code" &&
-      !code_challenge &&
-      clientAdapter
-    ) {
+    // PKCE policy: issuer-wide for public clients, or per client (native apps)
+    if (response_type === "code" && !code_challenge && clientAdapter) {
       const registered = await clientAdapter.getClientById(client_id)
-      if (registered && !registered.client_secret_hash) {
+      if (clientRequiresPkce(registered, input.pkce)) {
         throw new OauthError(
           "invalid_request",
-          "PKCE (code_challenge with S256) is required for public clients",
+          "PKCE (code_challenge with S256) is required for this client",
         )
       }
     }
@@ -2178,6 +2179,8 @@ export function issuer<
         : new OauthError("server_error", "Internal server error")
     url.searchParams.set("error", oauth.error)
     url.searchParams.set("error_description", oauth.description)
+    // RFC 6749 §4.1.2.1: echo state so the client can match the error to its request
+    if (authorization.state) url.searchParams.set("state", authorization.state)
     return c.redirect(url.toString())
   })
 
