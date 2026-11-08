@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.25] - 2026-11-08
+
+### Fixed
+
+- security): fork PRs must not trigger package publish; pin actions; SECURITY.md (#17)
+
+
 ## [1.0.24] - 2026-11-08
 
 ## [1.0.23] - 2026-11-08
@@ -500,7 +507,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.24...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.25...HEAD
+[1.0.25]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.24...v1.0.25
 [1.0.24]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.23...v1.0.24
 [1.0.23]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.22...v1.0.23
 [1.0.22]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.21...v1.0.22
