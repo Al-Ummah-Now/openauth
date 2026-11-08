@@ -176,6 +176,11 @@ export interface AuthorizationState {
     challenge: string
     method: "S256"
   }
+  /**
+   * The flow id this authorization belongs to (see `flow.ts`). Set on the
+   * legacy `authorization` cookie so it is only used by its own tab.
+   */
+  flow?: string
 }
 
 /**
@@ -197,6 +202,23 @@ import { encryptionKeys, legacySigningKeys, signingKeys } from "./keys.js"
 import { validatePKCE } from "./pkce.js"
 import { Select } from "./ui/select.js"
 import { setTheme, Theme } from "./ui/theme.js"
+import { RestartPage } from "./ui/restart.js"
+import {
+  FLOW_BIND_COOKIE,
+  FLOW_COMPLETED_TTL,
+  FLOW_PARAM,
+  FLOW_RECORD_VERSION,
+  type FlowRecord,
+  bindingHash,
+  flowKey,
+  isBindSecret,
+  isFlowId,
+  localeHintFor,
+  newBindSecret,
+  newFlowId,
+  restartUrlFor,
+} from "./flow.js"
+import { timingSafeCompare } from "./random.js"
 import { getRelativeUrl, isDomainMatch, lazy } from "./util.js"
 import { DynamoStorage } from "./storage/dynamo.js"
 import { MemoryStorage } from "./storage/memory.js"
@@ -439,9 +461,19 @@ export interface IssuerInput<
     req: Request,
   ): Promise<Response>
   /**
-   * @internal
+   * Render the response for an unrecoverable sign-in state. Defaults to a
+   * friendly, localized "Start sign-in again" page (see `restart`).
    */
   error?(error: UnknownStateError, req: Request): Promise<Response>
+  /**
+   * The friendly page shown when a sign-in can't be resumed links back to the
+   * app that started it (origin of the flow's redirect_uri). When that client
+   * is unknown (e.g. a bookmarked `/password/authorize`), it links here.
+   */
+  restart?: {
+    /** e.g. `https://app.example.com`. Defaults to `/`. */
+    fallbackUrl?: string
+  }
   /**
    * Override the logic for whether a client request is allowed to call the issuer.
    *
@@ -575,13 +607,8 @@ export function issuer<
 
   const error =
     input.error ??
-    function (err) {
-      return new Response(err.message, {
-        status: 400,
-        headers: {
-          "Content-Type": "text/plain",
-        },
-      })
+    async function (err: UnknownStateError, req: Request) {
+      return unknownStateResponse(err, req, input.restart?.fallbackUrl)
     }
   const configuredIssuer = normalizeIssuer(input.issuer)
   const ttlAccess = input.ttl?.access ?? DEFAULT_ACCESS_TOKEN_TTL
@@ -627,6 +654,7 @@ export function issuer<
     throw new Error(
       "Store is not configured. Either set the `storage` option or set `OPENAUTH_STORAGE` environment variable.",
     )
+  const flowStorage: StorageAdapter = storage
   const allSigning = lazy(() =>
     Promise.all([signingKeys(storage), legacySigningKeys(storage)]).then(
       ([a, b]) => [...a, ...b],
@@ -681,7 +709,7 @@ export function issuer<
                 refresh_token: tokens.refresh,
                 state: authorization.state || "",
               }).toString()
-              await auth.unset(ctx, "authorization")
+              await finishFlow(ctx)
               return ctx.redirect(location.toString(), 302)
             }
             if (authorization.response_type === "code") {
@@ -706,7 +734,7 @@ export function issuer<
               const location = new URL(authorization.redirect_uri)
               location.searchParams.set("code", code)
               location.searchParams.set("state", authorization.state || "")
-              await auth.unset(ctx, "authorization")
+              await finishFlow(ctx)
               return ctx.redirect(location.toString(), 302)
             }
             throw new OauthError(
@@ -730,6 +758,8 @@ export function issuer<
       )
     },
     async set(ctx, key, maxAge, value) {
+      // The cookie is always written: providers whose callback comes back
+      // without the flow id (OAuth redirects) still read it from there.
       setCookie(ctx, key, await encrypt(value), {
         maxAge,
         httpOnly: true,
@@ -737,8 +767,23 @@ export function issuer<
           ? { secure: true, sameSite: "None" }
           : {}),
       })
+      if (key === "authorization") return
+      // Inside a flow, provider state is also kept per flow so tabs don't
+      // overwrite each other's register / change-password progress.
+      const flow = await loadFlow(ctx)
+      if (flow?.record && flow.bound && !flow.record.completedAt) {
+        flow.record.provider = { ...flow.record.provider, [key]: value }
+        await saveFlow(flow.id, flow.record)
+      }
     },
     async get(ctx: Context, key: string) {
+      if (key !== "authorization") {
+        const flow = await loadFlow(ctx)
+        // In a live flow, provider state comes only from that flow: the
+        // shared cookie may hold another tab's progress.
+        if (flow?.record && flow.bound && !flow.record.completedAt)
+          return flow.record.provider?.[key] as any
+      }
       const raw = getCookie(ctx, key)
       if (!raw) return
       return decrypt(raw).catch((ex) => {
@@ -747,6 +792,12 @@ export function issuer<
     },
     async unset(ctx: Context, key: string) {
       deleteCookie(ctx, key)
+      if (key === "authorization") return
+      const flow = await loadFlow(ctx)
+      if (flow?.record && flow.bound && flow.record.provider?.[key]) {
+        delete flow.record.provider[key]
+        await saveFlow(flow.id, flow.record)
+      }
     },
     async invalidate(subject: string) {
       // Resolve the scan in case modifications interfere with iteration
@@ -760,11 +811,138 @@ export function issuer<
     storage,
   }
 
+  type LoadedFlow = {
+    id: string
+    record?: FlowRecord<AuthorizationState>
+    /** The record is bound to this browser's `oa_flow_bind` cookie. */
+    bound: boolean
+  }
+
+  /** The flow named by `?auth_flow=`, loaded once per request. */
+  async function loadFlow(ctx: Context): Promise<LoadedFlow | undefined> {
+    const cached = ctx.get("oauthFlow") as LoadedFlow | null | undefined
+    if (cached !== undefined) return cached ?? undefined
+    const id = ctx.req.query(FLOW_PARAM)
+    let result: LoadedFlow | undefined
+    if (id) {
+      result = { id, bound: false }
+      if (isFlowId(id)) {
+        const record = await Storage.get<FlowRecord<AuthorizationState>>(
+          flowStorage,
+          flowKey(id),
+        )
+        if (record && record.v === FLOW_RECORD_VERSION) {
+          result.record = record
+          const secret = getCookie(ctx, FLOW_BIND_COOKIE)
+          result.bound =
+            isBindSecret(secret) &&
+            timingSafeCompare(await bindingHash(secret), record.binding)
+        }
+      }
+    }
+    ctx.set("oauthFlow", result ?? null)
+    return result
+  }
+
+  async function saveFlow(id: string, record: FlowRecord<AuthorizationState>) {
+    const ttl = Math.max(60, Math.ceil((record.expiresAt - Date.now()) / 1000))
+    await Storage.set(flowStorage, flowKey(id), record, ttl)
+  }
+
+  function flowError(
+    reason: UnknownStateError["reason"],
+    authorization?: AuthorizationState,
+  ) {
+    return new UnknownStateError({
+      reason,
+      restartUrl: restartUrlFor(authorization?.redirect_uri),
+      locale: localeHintFor(authorization?.redirect_uri),
+    })
+  }
+
   async function getAuthorization(ctx: Context) {
+    const flow = await loadFlow(ctx)
+    if (flow) {
+      // A flow id in the URL pins this request to that flow: never fall back
+      // to another tab's authorization.
+      if (flow.record && flow.bound) {
+        if (flow.record.completedAt)
+          throw flowError("completed", flow.record.authorization)
+        return flow.record.authorization
+      }
+      // Storage may lag right after /authorize: accept the legacy cookie, but
+      // only when it was written for this same flow (it is browser-bound).
+      const cookie = (await auth.get(ctx, "authorization")) as
+        | AuthorizationState
+        | undefined
+      if (cookie?.flow && cookie.flow === flow.id) return cookie
+      throw flowError(
+        flow.record ? "mismatch" : "expired",
+        flow.record?.authorization,
+      )
+    }
     const match =
       (await auth.get(ctx, "authorization")) || ctx.get("authorization")
-    if (!match) throw new UnknownStateError()
+    if (!match) throw new UnknownStateError({ reason: "missing" })
     return match as AuthorizationState
+  }
+
+  /**
+   * Called once a code/token was issued. Marks the flow completed (kept for a
+   * while so a resubmitted form sends the user back to the app instead of
+   * failing) and removes the legacy cookie only when it belongs to this flow.
+   */
+  async function finishFlow(ctx: Context) {
+    const flow = await loadFlow(ctx)
+    if (!flow) {
+      deleteCookie(ctx, "authorization")
+      return
+    }
+    if (flow.record && flow.bound) {
+      const now = Date.now()
+      flow.record = {
+        ...flow.record,
+        completedAt: now,
+        provider: undefined,
+        expiresAt: now + FLOW_COMPLETED_TTL * 1000,
+      }
+      ctx.set("oauthFlow", flow)
+      await saveFlow(flow.id, flow.record)
+    }
+    const cookie = (await auth.get(ctx, "authorization")) as
+      | AuthorizationState
+      | undefined
+    if (cookie?.flow === flow.id) deleteCookie(ctx, "authorization")
+  }
+
+  /** Start a flow for a validated authorization; returns its id. */
+  async function startFlow(c: Context, authorization: AuthorizationState) {
+    const https = c.req.url.startsWith("https://")
+    const cookieOptions = {
+      httpOnly: true,
+      path: "/",
+      maxAge: AUTHORIZATION_COOKIE_TTL,
+      ...(https ? { secure: true, sameSite: "None" as const } : {}),
+    }
+    let secret = getCookie(c, FLOW_BIND_COOKIE)
+    if (!isBindSecret(secret)) secret = newBindSecret()
+    // Re-set on every /authorize so the binding outlives every open flow.
+    setCookie(c, FLOW_BIND_COOKIE, secret, cookieOptions)
+    const id = newFlowId()
+    const now = Date.now()
+    await Storage.set(
+      flowStorage,
+      flowKey(id),
+      {
+        v: FLOW_RECORD_VERSION,
+        authorization,
+        binding: await bindingHash(secret),
+        createdAt: now,
+        expiresAt: now + AUTHORIZATION_COOKIE_TTL * 1000,
+      } satisfies FlowRecord<AuthorizationState>,
+      AUTHORIZATION_COOKIE_TTL,
+    )
+    return id
   }
 
   async function encrypt(value: any) {
@@ -1412,10 +1590,21 @@ export function issuer<
         )
       }
     }
-    await auth.set(c, "authorization", AUTHORIZATION_COOKIE_TTL, authorization)
-    if (provider) return c.redirect(`/${provider}/authorize`)
+    const flowId = await startFlow(c, authorization)
+    await auth.set(c, "authorization", AUTHORIZATION_COOKIE_TTL, {
+      ...authorization,
+      flow: flowId,
+    })
+    const flowQuery = new URLSearchParams({ [FLOW_PARAM]: flowId })
+    const lang = c.req.query("lang")
+    if (lang) flowQuery.set("lang", lang)
+    if (provider) return c.redirect(`/${provider}/authorize?${flowQuery}`)
     const providers = Object.keys(input.providers)
-    if (providers.length === 1) return c.redirect(`/${providers[0]}/authorize`)
+    if (providers.length === 1)
+      return c.redirect(`/${providers[0]}/authorize?${flowQuery}`)
+    // The selection page links to /{provider}/authorize: let it see the flow.
+    const selectUrl = new URL(c.req.url)
+    selectUrl.searchParams.set(FLOW_PARAM, flowId)
     return auth.forward(
       c,
       await select()(
@@ -1425,7 +1614,7 @@ export function issuer<
             value.type,
           ]),
         ),
-        c.req.raw,
+        new Request(selectUrl.toString(), c.req.raw),
       ),
     )
   })
@@ -1923,7 +2112,16 @@ export function issuer<
     if (err instanceof UnknownStateError) {
       return auth.forward(c, await error(err, c.req.raw))
     }
-    const authorization = await getAuthorization(c)
+    let authorization: AuthorizationState
+    try {
+      authorization = await getAuthorization(c)
+    } catch (stateErr) {
+      // No flow to report the error to: show the friendly restart page
+      // instead of letting a second error escape.
+      if (stateErr instanceof UnknownStateError)
+        return auth.forward(c, await error(stateErr, c.req.raw))
+      throw stateErr
+    }
     const url = new URL(authorization.redirect_uri)
     // Never leak internal error details to the client; they are logged above.
     const oauth =
@@ -1936,6 +2134,26 @@ export function issuer<
   })
 
   return app
+}
+
+/**
+ * The response for an unrecoverable sign-in state: a completed flow sends the
+ * user back to the app (they are signed in); anything else renders the
+ * friendly, localized restart page.
+ */
+export function unknownStateResponse(
+  err: UnknownStateError,
+  req: Request,
+  fallbackUrl?: string,
+): Response {
+  const restartUrl = err.restartUrl || fallbackUrl
+  if (err.reason === "completed" && restartUrl) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: restartUrl, "Cache-Control": "no-store" },
+    })
+  }
+  return RestartPage(req, { restartUrl, locale: err.locale })
 }
 
 /**

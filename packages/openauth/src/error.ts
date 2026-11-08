@@ -78,12 +78,43 @@ export class UnauthorizedClientError extends OauthError {
  * of the authentication flow.
  */
 export class UnknownStateError extends Error {
-  constructor() {
+  /**
+   * Why the state could not be resolved:
+   *
+   * - `missing`: no flow id and no authorization cookie (direct link, cookies cleared).
+   * - `expired`: the flow id is unknown or expired.
+   * - `mismatch`: the flow belongs to another browser.
+   * - `completed`: the flow already finished (back button / resubmitted form).
+   */
+  public readonly reason: UnknownStateReason
+  /**
+   * Where to send the user to start over: the home page of the flow's client
+   * when it is known, otherwise undefined (the issuer's fallback is used).
+   */
+  public readonly restartUrl?: string
+  /**
+   * Locale hint taken from the flow's redirect_uri (`locale` / `lang` param).
+   */
+  public readonly locale?: string
+  constructor(input?: {
+    reason?: UnknownStateReason
+    restartUrl?: string
+    locale?: string
+  }) {
     super(
       "The browser was in an unknown state. This could be because certain cookies expired or the browser was switched in the middle of an authentication flow.",
     )
+    this.reason = input?.reason ?? "missing"
+    this.restartUrl = input?.restartUrl
+    this.locale = input?.locale
   }
 }
+
+export type UnknownStateReason =
+  | "missing"
+  | "expired"
+  | "mismatch"
+  | "completed"
 
 /**
  * The given subject is invalid.

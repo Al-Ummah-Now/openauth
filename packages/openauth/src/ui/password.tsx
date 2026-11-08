@@ -31,6 +31,7 @@ import {
   PasswordRegisterError,
 } from "../provider/password.js"
 import { Layout } from "./base.js"
+import { withFlowParams } from "../flow.js"
 import "./form.js"
 import { FormAlert } from "./form.js"
 import type { Theme } from "./theme.js"
@@ -156,12 +157,10 @@ const DEFAULT_COPY = {
    */
   button_continue: "Continue",
 } satisfies {
-  [
-    key in `error_${
-      | PasswordLoginError["type"]
-      | PasswordRegisterError["type"]
-      | PasswordChangeError["type"]}`
-  ]: string
+  [key in `error_${
+    | PasswordLoginError["type"]
+    | PasswordRegisterError["type"]
+    | PasswordChangeError["type"]}`]: string
 } & Record<string, string>
 
 type PasswordUICopy = typeof DEFAULT_COPY
@@ -169,10 +168,8 @@ type PasswordUICopy = typeof DEFAULT_COPY
 /**
  * Configure the password UI.
  */
-export interface PasswordUIOptions extends Pick<
-  PasswordConfig,
-  "sendCode" | "validatePassword"
-> {
+export interface PasswordUIOptions
+  extends Pick<PasswordConfig, "sendCode" | "validatePassword"> {
   /**
    * Custom copy for the UI.
    */
@@ -247,11 +244,14 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
             <div data-component="form-footer">
               <span>
                 {copy.register_prompt}{" "}
-                <a data-component="link" href="register">
+                <a
+                  data-component="link"
+                  href={withFlowParams("register", req.url)}
+                >
                   {copy.register}
                 </a>
               </span>
-              <a data-component="link" href="change">
+              <a data-component="link" href={withFlowParams("change", req.url)}>
                 {copy.change_prompt}
               </a>
             </div>
@@ -359,7 +359,10 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
                 <div data-component="form-footer">
                   <span>
                     {copy.login_prompt}{" "}
-                    <a data-component="link" href="authorize">
+                    <a
+                      data-component="link"
+                      href={withFlowParams("authorize", req.url)}
+                    >
                       {copy.login}
                     </a>
                   </span>
@@ -508,7 +511,10 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
                 <div data-component="form-footer">
                   <span>
                     {copy.code_return}{" "}
-                    <a data-component="link" href="authorize">
+                    <a
+                      data-component="link"
+                      href={withFlowParams("authorize", req.url)}
+                    >
                       {copy.login.toLowerCase()}
                     </a>
                   </span>
