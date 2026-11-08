@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.27] - 2026-11-08
+
+
 ## [1.0.26] - 2026-11-08
 
 ### Added
@@ -513,7 +516,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.26...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.27...HEAD
+[1.0.27]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.26...v1.0.27
 [1.0.26]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.25...v1.0.26
 [1.0.25]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.24...v1.0.25
 [1.0.24]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.23...v1.0.24
