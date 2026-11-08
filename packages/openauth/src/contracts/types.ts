@@ -85,6 +85,12 @@ export interface SessionService {
     refreshToken: string
     clientId: string
     ttl: number
+    /**
+     * When the user authenticated (ms); defaults to now. Silent SSO passes the
+     * existing session's time so it is not refreshed without a real sign-in
+     * (it feeds OIDC auth_time).
+     */
+    authenticatedAt?: number
   }): Promise<AccountSession>
 
   getAccountSession(

@@ -331,6 +331,11 @@ export function createMultiTenantIssuer<
     responder: OnSuccessResponder<SubjectPayload<Subjects>>,
     value: any,
     req: Request,
+    /**
+     * Silent SSO: when the account session was really authenticated. Kept on
+     * the session so a chain of silent sign-ons can't refresh auth_time.
+     */
+    silentAuthenticatedAt?: number,
   ): Promise<Response> {
     const ctx = requestContextMap.get(req)
     if (!ctx?.tenant) {
@@ -440,6 +445,9 @@ export function createMultiTenantIssuer<
               refreshToken: sessionRefreshToken,
               clientId: authorization?.client_id || "default",
               ttl: sessionConfig.sessionLifetimeSeconds,
+              ...(silentAuthenticatedAt !== undefined
+                ? { authenticatedAt: silentAuthenticatedAt }
+                : {}),
             })
           } catch (err) {
             // Log but don't fail the auth flow
@@ -948,6 +956,10 @@ export function createMultiTenantIssuer<
                 access: opts?.ttl?.access ?? ttlAccess,
                 refresh: opts?.ttl?.refresh ?? ttlRefresh,
               },
+              // Silent SSO: the user did not sign in now. auth_time is when
+              // this account session was authenticated, so "sign in again"
+              // checks can't be satisfied without a real sign-in.
+              authTime: account.authenticated_at,
             },
             AUTHORIZATION_CODE_TTL,
           )
@@ -961,6 +973,7 @@ export function createMultiTenantIssuer<
         silentResponder,
         { provider: "session", ...identity },
         c.req.raw,
+        account.authenticated_at,
       )
     }
 

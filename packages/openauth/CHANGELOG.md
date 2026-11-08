@@ -9,13 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.27] - 2026-11-08
 
-
 ## [1.0.26] - 2026-11-08
 
 ### Added
 
 - device authorization grant (RFC 8628) with a bilingual activation page (#19)
-
 
 ## [1.0.25] - 2026-11-08
 

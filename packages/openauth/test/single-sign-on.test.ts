@@ -5,7 +5,7 @@
  * client (web, profile, admin) showed the sign-in form again, and
  * prompt=select_account with one account also fell through to the form.
  */
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, setSystemTime, test } from "bun:test"
 import { object, string } from "valibot"
 import { createMultiTenantIssuer } from "../src/enterprise/issuer.js"
 import { TenantServiceImpl } from "../src/tenant/service.js"
@@ -208,6 +208,34 @@ describe("single sign-on", () => {
       redirect: "https://evil.example.com/cb",
     })
     expect(res.headers.get("location") ?? "").not.toContain("code=")
+  })
+
+  test("silent sign-on keeps the original sign-in time (auth_time), not now", async () => {
+    const t0 = new Date("2026-03-01T10:00:00Z")
+    setSystemTime(t0)
+    try {
+      const browser = new Browser(await createApp())
+      const toA = await browser.signIn(A)
+      expect((await codePayload(toA)).authTime).toBe(t0.getTime())
+
+      setSystemTime(new Date(t0.getTime() + 3_600_000))
+      const res = await browser.authorize(B)
+      const b = await codePayload(new URL(res.headers.get("location")!))
+      expect(b.clientID).toBe(B.id)
+      expect(b.authTime).toBe(t0.getTime())
+
+      // A chain of silent sign-ons can't launder a stale sign-in into a fresh one
+      setSystemTime(new Date(t0.getTime() + 7_200_000))
+      const hop2 = await browser.authorize(A)
+      const a2 = await codePayload(new URL(hop2.headers.get("location")!))
+      expect(a2.authTime).toBe(t0.getTime())
+
+      // prompt=login is a real sign-in: a fresh auth_time
+      const again = await browser.authorize(B, "&prompt=login")
+      expectSignInForm(again)
+    } finally {
+      setSystemTime()
+    }
   })
 
   test("silent sign-on recomputes claims for the target client (no claim reuse)", async () => {

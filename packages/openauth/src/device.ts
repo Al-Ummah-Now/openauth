@@ -69,6 +69,8 @@ export interface DeviceGrant {
   subject: string
   clientID: string
   ttl: { access: number; refresh: number }
+  /** When the approving user authenticated (ms) */
+  authTime?: number
 }
 
 export interface DeviceRecord {
@@ -537,6 +539,7 @@ export function registerDeviceFlow(
       subject: payload.subject,
       clientID: payload.clientID,
       ttl: payload.ttl,
+      authTime: payload.authTime,
     }
     await Storage.set(
       storage,
