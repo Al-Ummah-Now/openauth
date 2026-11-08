@@ -54,6 +54,11 @@ export interface Translations {
   input_code: string
   input_repeat: string
 
+  // Restart (unknown state) page
+  restart_title: string
+  restart_description: string
+  restart_button: string
+
   // Code UI
   email_placeholder: string
   email_invalid: string
@@ -82,6 +87,10 @@ export interface Translations {
 export const en: Translations = {
   // Common
   button_continue: "Continue",
+  restart_title: "Let's start your sign-in again",
+  restart_description:
+    "This sign-in page is no longer active. This happens when it was open for a long time, opened from a bookmark or the back button, or used in another tab.",
+  restart_button: "Start sign-in again",
 
   // Password UI
   error_email_taken: "There is already an account with this email.",
@@ -137,6 +146,10 @@ export const en: Translations = {
 export const ar: Translations = {
   // Common
   button_continue: "متابعة",
+  restart_title: "لنبدأ تسجيل الدخول من جديد",
+  restart_description:
+    "صفحة تسجيل الدخول هذه لم تعد صالحة. يحدث ذلك إذا بقيت مفتوحة لفترة طويلة، أو فُتحت من إشارة مرجعية أو بزر الرجوع، أو استُخدمت في علامة تبويب أخرى.",
+  restart_button: "ابدأ تسجيل الدخول من جديد",
 
   // Password UI
   error_email_taken: "يوجد حساب مسجل بهذا البريد الإلكتروني.",
