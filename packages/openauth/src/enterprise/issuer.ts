@@ -948,6 +948,10 @@ export function createMultiTenantIssuer<
                 access: opts?.ttl?.access ?? ttlAccess,
                 refresh: opts?.ttl?.refresh ?? ttlRefresh,
               },
+              // Silent SSO: the user did not sign in now. auth_time is when
+              // this account session was authenticated, so "sign in again"
+              // checks can't be satisfied without a real sign-in.
+              authTime: account.authenticated_at,
             },
             AUTHORIZATION_CODE_TTL,
           )
