@@ -132,6 +132,11 @@ import {
 } from "../ui/theme.js"
 import type { Theme } from "../ui/theme.js"
 import { ClientD1Adapter } from "../client/client-d1-adapter.js"
+import {
+  clientRequiresPkce,
+  isAllowedRedirectScheme,
+  redirectUriMatches,
+} from "../client/native.js"
 import { ClientErrorPage } from "../ui/client-error.js"
 import type { ClientErrorReason } from "../ui/client-error.js"
 import type { D1Database } from "@cloudflare/workers-types"
@@ -309,12 +314,10 @@ export function createMultiTenantIssuer<
   async function pkceRequiredButMissing(
     authorization: EnterpriseAuthorizationState,
   ): Promise<boolean> {
-    if (!config.pkce?.requireForPublicClients || authorization.pkce)
-      return false
-    if (!config.clientDb) return false
+    if (authorization.pkce || !config.clientDb) return false
     const adapter = new ClientD1Adapter(config.clientDb)
     const registered = await adapter.getClientById(authorization.client_id)
-    return !!registered && !registered.client_secret_hash
+    return clientRequiresPkce(registered, config.pkce)
   }
 
   // Wraps every successful authentication (provider sign-ins and silent
@@ -527,10 +530,18 @@ export function createMultiTenantIssuer<
         return defaultAllowCheck(input, req, !!configuredIssuer)
       }
 
-      if (config.onAllow) {
-        return config.onAllow(input, req, ctx.tenant)
-      }
-      return defaultAllowCheck(input, req, !!configuredIssuer)
+      const allowed = config.onAllow
+        ? await config.onAllow(input, req, ctx.tenant)
+        : await defaultAllowCheck(input, req, !!configuredIssuer)
+      if (allowed) return true
+      return config.clientRegistry && config.clientDb
+        ? registeredRedirectAllowed(
+            config.clientDb,
+            ctx.tenant.id,
+            input.clientID,
+            input.redirectURI,
+          )
+        : false
     },
 
     // Success callback intercepts to add enterprise features
@@ -639,7 +650,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       requestContextMap.set(ctx.req.raw, {
@@ -753,6 +765,14 @@ export function createMultiTenantIssuer<
       redirectAllowed = config.onAllow
         ? await config.onAllow(allowInput, c.req.raw, tenant)
         : await defaultAllowCheck(allowInput, c.req.raw, !!configuredIssuer)
+      if (!redirectAllowed && config.clientRegistry && config.clientDb) {
+        redirectAllowed = await registeredRedirectAllowed(
+          config.clientDb,
+          tenant.id,
+          authorization.client_id,
+          authorization.redirect_uri,
+        )
+      }
     } catch (err) {
       console.error("[authorize] allow check failed:", err)
       redirectAllowed = false
@@ -1130,7 +1150,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1214,9 +1235,24 @@ export async function registryProblem(
   if (!client.enabled) return "client_disabled"
   if (!client.grant_types.includes("authorization_code"))
     return "client_not_allowed"
-  if (!client.redirect_uris.includes(redirectUri))
+  if (!redirectUriMatches(client.redirect_uris, redirectUri))
     return "redirect_uri_not_registered"
   return null
+}
+
+/**
+ * With the client registry on, a redirect URI registered for the client is
+ * allowed even off the issuer's domain (native apps: private-use schemes and
+ * loopback redirects, RFC 8252), as long as its scheme is a safe one.
+ */
+export async function registeredRedirectAllowed(
+  db: D1Database,
+  tenantId: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<boolean> {
+  if (!isAllowedRedirectScheme(redirectUri)) return false
+  return (await registryProblem(db, tenantId, clientId, redirectUri)) === null
 }
 
 /**
@@ -1227,7 +1263,10 @@ async function defaultAllowCheck(
   req: Request,
   ignoreForwardedHost = false,
 ): Promise<boolean> {
-  const redir = new URL(input.redirectURI).hostname
+  const parsed = new URL(input.redirectURI)
+  // The domain rule only applies to web redirects; other schemes need registration.
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false
+  const redir = parsed.hostname
   if (redir === "localhost" || redir === "127.0.0.1") {
     return true
   }
