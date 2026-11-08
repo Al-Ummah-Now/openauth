@@ -58,6 +58,9 @@ export interface Translations {
   restart_title: string
   restart_description: string
   restart_button: string
+  client_error_title: string
+  client_error_description: string
+  client_error_button: string
 
   // Code UI
   email_placeholder: string
@@ -91,6 +94,10 @@ export const en: Translations = {
   restart_description:
     "This sign-in page is no longer active. This happens when it was open for a long time, opened from a bookmark or the back button, or used in another tab.",
   restart_button: "Start sign-in again",
+  client_error_title: "This app can't sign you in here",
+  client_error_description:
+    "The app that sent you here isn't set up to use this sign-in page. Please go back and try again. If it keeps happening, contact support.",
+  client_error_button: "Go to the home page",
 
   // Password UI
   error_email_taken: "There is already an account with this email.",
@@ -150,6 +157,10 @@ export const ar: Translations = {
   restart_description:
     "صفحة تسجيل الدخول هذه لم تعد صالحة. يحدث ذلك إذا بقيت مفتوحة لفترة طويلة، أو فُتحت من إشارة مرجعية أو بزر الرجوع، أو استُخدمت في علامة تبويب أخرى.",
   restart_button: "ابدأ تسجيل الدخول من جديد",
+  client_error_title: "لا يمكن لهذا التطبيق تسجيل دخولك هنا",
+  client_error_description:
+    "التطبيق الذي أرسلك إلى هنا غير مُعدّ لاستخدام صفحة تسجيل الدخول هذه. يُرجى الرجوع والمحاولة مرة أخرى، وإذا تكرر ذلك فتواصل مع الدعم.",
+  client_error_button: "الذهاب إلى الصفحة الرئيسية",
 
   // Password UI
   error_email_taken: "يوجد حساب مسجل بهذا البريد الإلكتروني.",

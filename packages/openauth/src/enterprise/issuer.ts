@@ -132,6 +132,9 @@ import {
 } from "../ui/theme.js"
 import type { Theme } from "../ui/theme.js"
 import { ClientD1Adapter } from "../client/client-d1-adapter.js"
+import { ClientErrorPage } from "../ui/client-error.js"
+import type { ClientErrorReason } from "../ui/client-error.js"
+import type { D1Database } from "@cloudflare/workers-types"
 
 // ============================================
 // THEME RESOLUTION MIDDLEWARE
@@ -636,7 +639,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       requestContextMap.set(ctx.req.raw, {
@@ -763,6 +767,35 @@ export function createMultiTenantIssuer<
         },
         400,
       )
+    }
+
+    // Client registry: the client and its exact redirect_uri must be registered
+    if (config.clientRegistry && config.clientDb) {
+      const reason = await registryProblem(
+        config.clientDb,
+        tenant.id,
+        authorization.client_id,
+        authorization.redirect_uri,
+      )
+      if (reason) {
+        console.warn(
+          JSON.stringify({
+            event: "authorize_client_rejected",
+            mode: config.clientRegistry.mode,
+            reason,
+            client_id: authorization.client_id,
+            redirect_uri: authorization.redirect_uri,
+            tenant: tenant.id,
+          }),
+        )
+        if (config.clientRegistry.mode === "enforce") {
+          return ClientErrorPage(c.req.raw, {
+            reason,
+            homeUrl:
+              config.clientRegistry.homeUrl ?? config.restart?.fallbackUrl,
+          })
+        }
+      }
     }
 
     // PKCE: only S256 is supported
@@ -1098,7 +1131,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1166,6 +1200,26 @@ export function createMultiTenantIssuer<
 // ============================================
 // INTERNAL HELPERS
 // ============================================
+
+/**
+ * Why `/authorize` must not proceed for this client, or null when it may.
+ * redirect_uri matching is exact (full string), per OAuth 2.1.
+ */
+export async function registryProblem(
+  db: D1Database,
+  tenantId: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<ClientErrorReason | null> {
+  const client = await new ClientD1Adapter(db).getClientById(clientId)
+  if (!client || client.tenant_id !== tenantId) return "unknown_client"
+  if (!client.enabled) return "client_disabled"
+  if (!client.grant_types.includes("authorization_code"))
+    return "client_not_allowed"
+  if (!client.redirect_uris.includes(redirectUri))
+    return "redirect_uri_not_registered"
+  return null
+}
 
 /**
  * Default client allow check

@@ -334,6 +334,24 @@ export interface EnterpriseIssuerConfig<
    * @default true
    */
   singleSignOn?: boolean
+
+  /**
+   * Check `/authorize` against the client registry (`clientDb`): the client
+   * must exist in the tenant, be enabled, allow `authorization_code`, and have
+   * registered the exact `redirect_uri` (full string, query included, as
+   * OAuth 2.1 requires; register each variant such as `?locale=en`).
+   *
+   * - `"enforce"`: reject with a clear en/ar error page (HTTP 400). The user
+   *   is never redirected to an unverified redirect_uri.
+   * - `"report"`: log the problem and continue (for rolling out).
+   *
+   * Requires `clientDb`. Unset: no registry check (domain allow check only).
+   */
+  clientRegistry?: {
+    mode: "enforce" | "report"
+    /** Where the error page's button goes. Defaults to `restart.fallbackUrl`. */
+    homeUrl?: string
+  }
 }
 
 /**
