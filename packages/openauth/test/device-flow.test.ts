@@ -358,9 +358,8 @@ describe("user codes", () => {
 describe("through the enterprise issuer (client registry on)", () => {
   const ENT = "auth.example.com"
   async function enterprise() {
-    const { createMultiTenantIssuer } = await import(
-      "../src/enterprise/issuer.js"
-    )
+    const { createMultiTenantIssuer } =
+      await import("../src/enterprise/issuer.js")
     const { TenantServiceImpl } = await import("../src/tenant/service.js")
     const { SessionServiceImpl } = await import("../src/session/service.js")
     const { PasswordProvider } = await import("../src/provider/password.js")

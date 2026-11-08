@@ -9,13 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.24] - 2026-11-08
 
-
 ## [1.0.23] - 2026-11-08
 
 ### Added
 
 - native app clients (RFC 8252): per-client PKCE, private-use schemes, loopback ports (#18)
-
 
 ## [1.0.22] - 2026-11-08
 
