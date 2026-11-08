@@ -201,6 +201,12 @@ import { Storage, StorageAdapter } from "./storage/storage.js"
 import { encryptionKeys, legacySigningKeys, signingKeys } from "./keys.js"
 import { validatePKCE } from "./pkce.js"
 import { clientRequiresPkce } from "./client/native.js"
+import {
+  DEVICE_CODE_GRANT,
+  deviceDiscovery,
+  registerDeviceFlow,
+  type DeviceFlowOptions,
+} from "./device.js"
 import { Select } from "./ui/select.js"
 import { setTheme, Theme } from "./ui/theme.js"
 import { RestartPage } from "./ui/restart.js"
@@ -359,6 +365,13 @@ export interface IssuerInput<
    * headers (legacy behaviour).
    */
   issuer?: string
+  /**
+   * Enable the device authorization grant (RFC 8628) for clients registered
+   * in `clientDb` with the `urn:ietf:params:oauth:grant-type:device_code`
+   * grant. Adds `/device_authorization`, `/activate` (en/ar) and the grant
+   * on `/token`. Requires `clientDb`.
+   */
+  device?: DeviceFlowOptions
   /**
    * PKCE policy. Only `S256` is ever accepted.
    */
@@ -1121,6 +1134,21 @@ export function issuer<
     }
   }>().use(logger())
 
+  // Device authorization grant (RFC 8628), see device.ts
+  const deviceToken =
+    input.device && clientAdapter
+      ? registerDeviceFlow(
+          app,
+          {
+            storage,
+            clients: clientAdapter,
+            issuer,
+            generateTokens: (c, grant) => generateTokens(c, grant),
+          },
+          input.device,
+        )
+      : undefined
+
   // Apply global CORS if configured
   if (input.cors) {
     app.use(
@@ -1196,7 +1224,9 @@ export function issuer<
           "authorization_code",
           "refresh_token",
           "client_credentials",
+          ...(deviceToken ? [DEVICE_CODE_GRANT] : []),
         ],
+        ...(deviceToken ? deviceDiscovery(iss, input.device!) : {}),
       })
     },
   )
@@ -1212,6 +1242,10 @@ export function issuer<
     async (c) => {
       const form = await c.req.formData()
       const grantType = form.get("grant_type")
+
+      if (grantType === DEVICE_CODE_GRANT && deviceToken) {
+        return deviceToken(c, form)
+      }
 
       if (grantType === "authorization_code") {
         const code = form.get("code")
