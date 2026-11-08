@@ -627,7 +627,14 @@ export function createMultiTenantIssuer<
 
   app.use("*", async (ctx, next) => {
     const tenant = getTenant(ctx)
-    const browserSession = ctx.get("browserSession") as BrowserSession | null
+    let browserSession = ctx.get("browserSession") as BrowserSession | null
+    // The cookie names its own tenant. A session from another tenant must
+    // never be used here (silent sign-on, account picker, success hook).
+    if (browserSession && tenant && browserSession.tenant_id !== tenant.id) {
+      browserSession = null
+      ctx.set("browserSession", null)
+      ctx.set("activeAccount", null)
+    }
     const authorization = ctx.get("authorization") as
       EnterpriseAuthorizationState | undefined
 

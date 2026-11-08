@@ -226,3 +226,44 @@ describe("single sign-on", () => {
     expect(successCalls.at(-1)).toEqual({ provider: "session", email: EMAIL })
   })
 })
+
+describe("single sign-on is per tenant", () => {
+  test("a session from another tenant is ignored (no silent code, no picker)", async () => {
+    const OTHER = "other.example.com"
+    const tenantService = new TenantServiceImpl(storage)
+    await tenantService.createTenant({ id: "default", name: "Default" })
+    await tenantService.createTenant({ id: "other", name: "Other" })
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService: new SessionServiceImpl(storage),
+      storage,
+      sessionSecret: new Uint8Array(32).fill(3),
+      subjects: createSubjects({ user: object({ email: string() }) }),
+      tenantResolver: {
+        customDomains: new Map([
+          [HOST, "default"],
+          [OTHER, "other"],
+        ]),
+      },
+      providers: {
+        password: PasswordProvider(
+          PasswordUI({ sendCode: async () => undefined }),
+        ),
+      },
+      onSuccess: async (ctx, value) =>
+        ctx.subject("user", { email: (value as any).email, id: "u" } as any),
+    })
+    const browser = new Browser(app)
+    await browser.signIn(A)
+    const cookie = [...browser.jar].map(([k, v]) => `${k}=${v}`).join("; ")
+    const q = `client_id=${B.id}&response_type=code&state=s&redirect_uri=${encodeURIComponent(B.redirect)}`
+    for (const extra of ["", "&prompt=none", "&prompt=select_account"]) {
+      const res = await app.request(`https://${OTHER}/authorize?${q}${extra}`, {
+        headers: { host: OTHER, cookie },
+      })
+      const location = res.headers.get("location") ?? ""
+      expect(location).not.toContain("code=")
+      if (res.status === 200) expect(await res.text()).not.toContain(EMAIL)
+    }
+  })
+})
