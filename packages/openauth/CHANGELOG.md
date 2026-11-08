@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.26] - 2026-11-08
+
+### Added
+
+- device authorization grant (RFC 8628) with a bilingual activation page (#19)
+
+
 ## [1.0.25] - 2026-11-08
 
 ### Fixed
@@ -506,7 +513,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.25...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.26...HEAD
+[1.0.26]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.25...v1.0.26
 [1.0.25]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.24...v1.0.25
 [1.0.24]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.23...v1.0.24
 [1.0.23]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.22...v1.0.23
