@@ -19,6 +19,8 @@ import { PasswordProvider, ScryptHasher } from "../src/provider/password.js"
 import { PasswordUI } from "../src/ui/password.js"
 import { FLOW_BIND_COOKIE, FLOW_PARAM, flowKey } from "../src/flow.js"
 import type { Provider } from "../src/provider/provider.js"
+import { CodeProvider } from "../src/provider/code.js"
+import { CodeUI } from "../src/ui/code.js"
 
 const subjects = createSubjects({ user: object({ email: string() }) })
 const ISSUER = "https://auth.example.com"
@@ -44,6 +46,27 @@ function boomProvider(): Provider<{ email: string }> {
   }
 }
 
+/** OAuth-like provider: the callback comes back WITHOUT ?auth_flow=. */
+function redirectProvider(): Provider<{ email: string }> {
+  return {
+    type: "redirect",
+    init(routes, ctx) {
+      routes.get("/authorize", async (c) => {
+        await ctx.set(c, "provider", 600, { state: "upstream-state" })
+        return c.redirect("https://idp.example.com/authorize")
+      })
+      routes.get("/callback", async (c) => {
+        const state = await ctx.get<{ state: string } | undefined>(
+          c,
+          "provider",
+        )
+        if (state?.state !== "upstream-state") return c.text("bad state", 400)
+        return ctx.success(c, { email: EMAIL })
+      })
+    },
+  }
+}
+
 function createAuth() {
   return issuer({
     storage,
@@ -59,6 +82,8 @@ function createAuth() {
         }),
       ),
       boom: boomProvider(),
+      redirect: redirectProvider(),
+      code: CodeProvider(CodeUI({ sendCode: async () => undefined })),
     },
     success: async (ctx, value) => ctx.subject("user", { email: value.email }),
   })
@@ -426,5 +451,79 @@ describe("enterprise issuer", () => {
     expect(a.headers.get("location")).toStartWith("https://a.example.com/cb")
     const b = await browser.post(tabB, login)
     expect(b.headers.get("location")).toStartWith("https://b.example.com/cb")
+  })
+})
+
+describe("review follow-ups", () => {
+  test("an OAuth callback without the flow id completes its own flow's client", async () => {
+    const browser = new Browser(createAuth())
+    const startA = await browser.get(
+      `/authorize?client_id=client-a&response_type=code&provider=redirect&state=client-a-state&redirect_uri=${encodeURIComponent(APP_A)}`,
+    )
+    const tabA = startA.headers.get("location")!
+    await browser.get(tabA) // sets the provider state for flow A
+    // Tab B starts a sign-in for another client (rewrites `authorization`)
+    await browser.get(
+      `/authorize?client_id=client-b&response_type=code&state=client-b-state&redirect_uri=${encodeURIComponent(APP_B)}`,
+    )
+    const callback = await browser.get("/redirect/callback?code=upstream")
+    expect(callback.status).toBe(302)
+    const to = new URL(callback.headers.get("location")!)
+    expect(to.origin + to.pathname).toBe("https://a.example.com/cb")
+    expect(to.searchParams.get("state")).toBe("client-a-state")
+    // The flow is now completed: going back is recognised
+    const record = await Storage.get<any>(storage, flowKey(flowIdOf(tabA)))
+    expect(record.completedAt).toBeNumber()
+  })
+
+  test("provider state in the flow record is encrypted", async () => {
+    const browser = new Browser(createAuth())
+    const tab = await browser.startSignIn("client-a", APP_A)
+    const register = tab.replace("/password/authorize", "/password/register")
+    await browser.get(register)
+    await browser.post(register, {
+      action: "register",
+      email: "sealed@example.com",
+      password: "pw-123456",
+      repeat: "pw-123456",
+    })
+    const record = await Storage.get<any>(storage, flowKey(flowIdOf(tab)))
+    const sealed = record.provider.provider
+    expect(typeof sealed).toBe("string")
+    expect(sealed).not.toContain(codes["sealed@example.com"])
+    expect(JSON.stringify(record)).not.toContain("sealed@example.com")
+  })
+
+  test("a lagging flow record falls back to this flow's provider cookie", async () => {
+    const browser = new Browser(createAuth())
+    const tab = await browser.startSignIn("client-a", APP_A)
+    const register = tab.replace("/password/authorize", "/password/register")
+    await browser.get(register)
+    await browser.post(register, {
+      action: "register",
+      email: "lag@example.com",
+      password: "pw-123456",
+      repeat: "pw-123456",
+    })
+    // Simulate a stale read: the record without the latest provider state
+    const key = flowKey(flowIdOf(tab))
+    const record = await Storage.get<any>(storage, key)
+    await Storage.set(storage, key, { ...record, provider: undefined }, 600)
+    const done = await browser.post(register, {
+      action: "verify",
+      code: codes["lag@example.com"],
+    })
+    expect(done.status).toBe(302)
+    expect(done.headers.get("location")).toStartWith("https://a.example.com/cb")
+  })
+
+  test("a stale code-provider form restarts instead of a 500", async () => {
+    const browser = new Browser(createAuth())
+    const res = await browser.post("/code/authorize", {
+      action: "verify",
+      code: "1",
+    })
+    expect(res.status).toBeLessThan(500)
+    expect(await res.text()).not.toContain(UNKNOWN_STATE_TEXT)
   })
 })

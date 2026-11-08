@@ -799,6 +799,7 @@ export function createMultiTenantIssuer<
       browserSession,
       authorization,
       effectiveActiveAccount,
+      { singleSignOn: config.singleSignOn },
     )
 
     // Debug: Log prompt result
@@ -843,7 +844,12 @@ export function createMultiTenantIssuer<
         {
           type: account.subject_type,
           properties: account.subject_properties,
-          subject: account.user_id,
+          // Same subject as the interactive sign-in that created this
+          // account session, so every client sees one `sub` per user.
+          subject: await resolveSubject(
+            account.subject_type,
+            account.subject_properties,
+          ),
           redirectURI: authorization.redirect_uri,
           clientID: authorization.client_id,
           pkce: authorization.pkce,
@@ -1084,7 +1090,6 @@ export function createMultiTenantIssuer<
       500,
     )
   })
-
   // ============================================
   // HELPER FUNCTIONS
   // ============================================
@@ -1547,4 +1552,17 @@ function renderAccountPicker(
 `
 
   return ctx.html(html)
+}
+
+/**
+ * The subject the base issuer derives for (type, properties): see
+ * `resolveSubject` in ../issuer.ts. Must stay identical to it.
+ */
+async function resolveSubject(type: string, properties: unknown) {
+  const data = new TextEncoder().encode(JSON.stringify(properties))
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-1", data))
+  const hex = Array.from(hash)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+  return `${type}:${hex.slice(0, 16)}`
 }

@@ -219,6 +219,9 @@ import {
   restartUrlFor,
 } from "./flow.js"
 import { timingSafeCompare } from "./random.js"
+
+/** Key in a provider-state cookie naming the flow it was written for. */
+const PROVIDER_FLOW_TAG = "__oaflow"
 import { getRelativeUrl, isDomainMatch, lazy } from "./util.js"
 import { DynamoStorage } from "./storage/dynamo.js"
 import { MemoryStorage } from "./storage/memory.js"
@@ -758,37 +761,82 @@ export function issuer<
       )
     },
     async set(ctx, key, maxAge, value) {
-      // The cookie is always written: providers whose callback comes back
-      // without the flow id (OAuth redirects) still read it from there.
-      setCookie(ctx, key, await encrypt(value), {
+      const cookieOptions = {
         maxAge,
         httpOnly: true,
         ...(ctx.req.url.startsWith("https://")
-          ? { secure: true, sameSite: "None" }
+          ? { secure: true, sameSite: "None" as const }
           : {}),
-      })
-      if (key === "authorization") return
-      // Inside a flow, provider state is also kept per flow so tabs don't
-      // overwrite each other's register / change-password progress.
+      }
+      if (key === "authorization") {
+        setCookie(ctx, key, await encrypt(value), cookieOptions)
+        return
+      }
       const flow = await loadFlow(ctx)
       if (flow?.record && flow.bound && !flow.record.completedAt) {
-        flow.record.provider = { ...flow.record.provider, [key]: value }
+        // Inside a live flow, provider state is kept per flow (encrypted, so
+        // codes and password hashes are never readable in storage) and the
+        // cookie is tagged with the flow: an OAuth callback, which comes back
+        // without ?auth_flow=, recovers its own flow from it, and the cookie
+        // can stand in for a storage read that lags behind.
+        const sealed = await encrypt(value)
+        flow.record.provider = { ...flow.record.provider, [key]: sealed }
+        setCookie(
+          ctx,
+          key,
+          await encrypt({ [PROVIDER_FLOW_TAG]: flow.id, v: value }),
+          cookieOptions,
+        )
         await saveFlow(flow.id, flow.record)
+        return
       }
+      setCookie(ctx, key, await encrypt(value), cookieOptions)
     },
     async get(ctx: Context, key: string) {
-      if (key !== "authorization") {
-        const flow = await loadFlow(ctx)
-        // In a live flow, provider state comes only from that flow: the
-        // shared cookie may hold another tab's progress.
-        if (flow?.record && flow.bound && !flow.record.completedAt)
-          return flow.record.provider?.[key] as any
-      }
       const raw = getCookie(ctx, key)
-      if (!raw) return
-      return decrypt(raw).catch((ex) => {
-        console.error("failed to decrypt", key, ex)
-      })
+      const decoded = raw
+        ? await decrypt(raw).catch((ex) => {
+            console.error("failed to decrypt", key, ex)
+          })
+        : undefined
+      if (key === "authorization") return decoded
+      const tagged =
+        decoded &&
+        typeof decoded === "object" &&
+        typeof decoded[PROVIDER_FLOW_TAG] === "string"
+      const cookieFlow: string | undefined = tagged
+        ? decoded[PROVIDER_FLOW_TAG]
+        : undefined
+      const cookieValue = tagged ? decoded.v : decoded
+
+      // A callback without ?auth_flow= (OAuth redirect): adopt the flow the
+      // provider state was written for, so the code goes to that flow's client.
+      if (!ctx.req.query(FLOW_PARAM) && cookieFlow && isFlowId(cookieFlow)) {
+        if (ctx.get("oauthFlowId") !== cookieFlow) {
+          ctx.set("oauthFlowId", cookieFlow)
+          ctx.set("oauthFlow", undefined)
+        }
+      }
+
+      const flow = await loadFlow(ctx)
+      if (flow?.record && flow.bound && !flow.record.completedAt) {
+        const sealed = flow.record.provider?.[key]
+        if (typeof sealed === "string") {
+          const value = await decrypt(sealed).catch(() => undefined)
+          if (value !== undefined) return value
+        }
+        // Storage lag: the cookie of this same flow is just as good.
+        if (cookieFlow === flow.id) return cookieValue
+        // Never use another tab's progress.
+        return undefined
+      }
+      if (flow) {
+        // Flow id present but no usable record (lag / expired): only this
+        // flow's cookie, or a legacy untagged cookie.
+        if (cookieFlow) return cookieFlow === flow.id ? cookieValue : undefined
+        return cookieValue
+      }
+      return cookieValue
     },
     async unset(ctx: Context, key: string) {
       deleteCookie(ctx, key)
@@ -822,7 +870,9 @@ export function issuer<
   async function loadFlow(ctx: Context): Promise<LoadedFlow | undefined> {
     const cached = ctx.get("oauthFlow") as LoadedFlow | null | undefined
     if (cached !== undefined) return cached ?? undefined
-    const id = ctx.req.query(FLOW_PARAM)
+    const id =
+      ctx.req.query(FLOW_PARAM) ||
+      (ctx.get("oauthFlowId") as string | undefined)
     let result: LoadedFlow | undefined
     if (id) {
       result = { id, bound: false }

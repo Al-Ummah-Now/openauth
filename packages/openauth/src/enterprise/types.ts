@@ -326,6 +326,14 @@ export interface EnterpriseIssuerConfig<
   restart?: {
     fallbackUrl?: string
   }
+
+  /**
+   * Single sign-on across clients: when the browser already has an active
+   * signed-in account, `/authorize` without `prompt` completes silently
+   * (no sign-in form). `prompt=login` and `max_age` still force a sign-in.
+   * @default true
+   */
+  singleSignOn?: boolean
 }
 
 /**
