@@ -137,6 +137,11 @@ import {
   isAllowedRedirectScheme,
   redirectUriMatches,
 } from "../client/native.js"
+import {
+  DEVICE_CALLBACK_PATH,
+  DEVICE_CODE_GRANT,
+  deviceDiscovery,
+} from "../device.js"
 import { ClientErrorPage } from "../ui/client-error.js"
 import type { ClientErrorReason } from "../ui/client-error.js"
 import type { D1Database } from "@cloudflare/workers-types"
@@ -518,6 +523,7 @@ export function createMultiTenantIssuer<
     issuer: configuredIssuer,
     pkce: config.pkce,
     clientDb: config.clientDb,
+    device: config.device,
     audit: config.audit,
     error: config.error,
     restart: config.restart,
@@ -650,7 +656,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       requestContextMap.set(ctx.req.raw, {
@@ -794,6 +801,7 @@ export function createMultiTenantIssuer<
         tenant.id,
         authorization.client_id,
         authorization.redirect_uri,
+        config.device ? getIssuerUrl(tenant, c.req.raw) : undefined,
       )
       if (reason) {
         console.warn(
@@ -1087,7 +1095,9 @@ export function createMultiTenantIssuer<
           "refresh_token",
           "implicit",
           "client_credentials",
+          ...(config.device ? [DEVICE_CODE_GRANT] : []),
         ],
+        ...(config.device ? deviceDiscovery(iss, config.device) : {}),
         subject_types_supported: ["public"],
         id_token_signing_alg_values_supported: signingAlgs,
         token_endpoint_auth_methods_supported: [
@@ -1149,7 +1159,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1227,10 +1238,18 @@ export async function registryProblem(
   tenantId: string,
   clientId: string,
   redirectUri: string,
+  /** Set when the device flow is on: its own callback is allowed for device-grant clients. */
+  deviceIssuer?: string,
 ): Promise<ClientErrorReason | null> {
   const client = await new ClientD1Adapter(db).getClientById(clientId)
   if (!client || client.tenant_id !== tenantId) return "unknown_client"
   if (!client.enabled) return "client_disabled"
+  if (
+    deviceIssuer &&
+    redirectUri === `${deviceIssuer}${DEVICE_CALLBACK_PATH}` &&
+    client.grant_types.includes(DEVICE_CODE_GRANT)
+  )
+    return null
   if (!client.grant_types.includes("authorization_code"))
     return "client_not_allowed"
   if (!redirectUriMatches(client.redirect_uris, redirectUri))
