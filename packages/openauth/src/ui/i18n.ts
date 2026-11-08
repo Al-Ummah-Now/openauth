@@ -62,6 +62,24 @@ export interface Translations {
   client_error_description: string
   client_error_button: string
 
+  // Device activation (RFC 8628)
+  device_title: string
+  device_description: string
+  device_code_label: string
+  device_code_invalid: string
+  device_rate_limited: string
+  device_confirm_title: string
+  device_confirm_description: string
+  device_confirm_warning: string
+  device_approve: string
+  device_deny: string
+  device_done_title: string
+  device_done_description: string
+  device_denied_title: string
+  device_denied_description: string
+  device_failed_title: string
+  device_failed_description: string
+
   // Code UI
   email_placeholder: string
   email_invalid: string
@@ -98,6 +116,29 @@ export const en: Translations = {
   client_error_description:
     "The app that sent you here isn't set up to use this sign-in page. Please go back and try again. If it keeps happening, contact support.",
   client_error_button: "Go to the home page",
+  device_title: "Sign in on your device",
+  device_description:
+    "Enter the code shown on your TV or other device to sign it in to your account.",
+  device_code_label: "Device code",
+  device_code_invalid:
+    "That code isn't valid or has expired. Check the code on your device and try again.",
+  device_rate_limited: "Too many attempts. Please wait a minute and try again.",
+  device_confirm_title: "Sign in on {app}?",
+  device_confirm_description:
+    "Make sure this code matches the one shown on your device:",
+  device_confirm_warning:
+    "Only continue if you started this sign-in yourself. Never enter a code someone else gave you.",
+  device_approve: "Yes, sign in",
+  device_deny: "No, cancel",
+  device_done_title: "Your device is signed in",
+  device_done_description:
+    "You can go back to your device now. You can close this page.",
+  device_denied_title: "Sign-in cancelled",
+  device_denied_description:
+    "Your device was not signed in. You can close this page.",
+  device_failed_title: "We couldn't sign in your device",
+  device_failed_description:
+    "The code may have expired. Start the sign-in again on your device to get a new code.",
 
   // Password UI
   error_email_taken: "There is already an account with this email.",
@@ -161,6 +202,28 @@ export const ar: Translations = {
   client_error_description:
     "التطبيق الذي أرسلك إلى هنا غير مُعدّ لاستخدام صفحة تسجيل الدخول هذه. يُرجى الرجوع والمحاولة مرة أخرى، وإذا تكرر ذلك فتواصل مع الدعم.",
   client_error_button: "الذهاب إلى الصفحة الرئيسية",
+  device_title: "تسجيل الدخول على جهازك",
+  device_description:
+    "أدخل الرمز الظاهر على التلفاز أو الجهاز الآخر لتسجيل دخوله إلى حسابك.",
+  device_code_label: "رمز الجهاز",
+  device_code_invalid:
+    "هذا الرمز غير صالح أو انتهت صلاحيته. تحقق من الرمز على جهازك وحاول مرة أخرى.",
+  device_rate_limited:
+    "محاولات كثيرة جدًا. يُرجى الانتظار دقيقة ثم المحاولة مرة أخرى.",
+  device_confirm_title: "تسجيل الدخول على {app}؟",
+  device_confirm_description:
+    "تأكد من أن هذا الرمز يطابق الرمز الظاهر على جهازك:",
+  device_confirm_warning:
+    "تابع فقط إذا كنت أنت من بدأ تسجيل الدخول هذا. لا تُدخل أبدًا رمزًا أعطاك إياه شخص آخر.",
+  device_approve: "نعم، سجّل الدخول",
+  device_deny: "لا، إلغاء",
+  device_done_title: "تم تسجيل دخول جهازك",
+  device_done_description: "يمكنك الآن العودة إلى جهازك وإغلاق هذه الصفحة.",
+  device_denied_title: "تم إلغاء تسجيل الدخول",
+  device_denied_description: "لم يتم تسجيل دخول جهازك. يمكنك إغلاق هذه الصفحة.",
+  device_failed_title: "تعذّر تسجيل دخول جهازك",
+  device_failed_description:
+    "ربما انتهت صلاحية الرمز. ابدأ تسجيل الدخول من جديد على جهازك للحصول على رمز جديد.",
 
   // Password UI
   error_email_taken: "يوجد حساب مسجل بهذا البريد الإلكتروني.",
