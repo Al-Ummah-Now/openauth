@@ -116,16 +116,26 @@ export interface PasswordConfig {
   /**
    * Callback to send the confirmation pin code to the user.
    *
+   * Return a `PasswordSendCodeError` (instead of throwing) when the code could
+   * not be delivered. The provider then re-renders the current screen with a
+   * `code_send_failed` error so the user can fix the address and try again.
+   * Anything thrown still propagates to the issuer's error handler.
+   *
    * @example
    * ```ts
    * {
    *   sendCode: async (email, code) => {
    *     // Send an email with the code
+   *     const ok = await sendEmail(email, code)
+   *     if (!ok) return { type: "code_send_failed" }
    *   }
    * }
    * ```
    */
-  sendCode: (email: string, code: string) => Promise<void>
+  sendCode: (
+    email: string,
+    code: string,
+  ) => Promise<void | PasswordSendCodeError>
   /**
    * Callback to validate the password on sign up and password reset.
    *
@@ -204,6 +214,7 @@ export type PasswordRegisterState =
  * | `invalid_code` | The code is invalid. |
  * | `invalid_password` | The password is invalid. |
  * | `password_mismatch` | The passwords do not match. |
+ * | `code_send_failed` | The confirmation code could not be sent to the email. |
  */
 export type PasswordRegisterError =
   | {
@@ -225,6 +236,15 @@ export type PasswordRegisterError =
       type: "validation_error"
       message?: string
     }
+  | PasswordSendCodeError
+
+/**
+ * Returned by `sendCode` when the confirmation code could not be delivered
+ * (e.g. the email service rejected the address or is unavailable).
+ */
+export type PasswordSendCodeError = {
+  type: "code_send_failed"
+}
 
 /**
  * The state of the password change flow.
@@ -261,6 +281,7 @@ export type PasswordChangeState =
  * | `invalid_code` | The code is invalid. |
  * | `invalid_password` | The password is invalid. |
  * | `password_mismatch` | The passwords do not match. |
+ * | `code_send_failed` | The confirmation code could not be sent to the email. |
  */
 export type PasswordChangeError =
   | {
@@ -279,6 +300,7 @@ export type PasswordChangeError =
       type: "validation_error"
       message: string
     }
+  | PasswordSendCodeError
 
 /**
  * The errors that can happen on the login screen.
@@ -432,7 +454,8 @@ export function PasswordProvider(
           ])
           if (existing) return transition(provider, { type: "email_taken" })
           const code = generate()
-          await config.sendCode(email, code)
+          const sendError = await config.sendCode(email, code)
+          if (sendError) return transition(provider, sendError)
           return transition({
             type: "code",
             code,
@@ -443,7 +466,8 @@ export function PasswordProvider(
 
         if (action === "register" && provider.type === "code") {
           const code = generate()
-          await config.sendCode(provider.email, code)
+          const sendError = await config.sendCode(provider.email, code)
+          if (sendError) return transition(provider, sendError)
           return transition({
             type: "code",
             code,
@@ -509,7 +533,12 @@ export function PasswordProvider(
               { type: "invalid_email" },
             )
           const code = generate()
-          await config.sendCode(email, code)
+          const sendError = await config.sendCode(email, code)
+          if (sendError)
+            return transition(
+              { type: "start", redirect: provider.redirect },
+              sendError,
+            )
 
           return transition({
             type: "code",

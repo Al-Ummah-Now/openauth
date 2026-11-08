@@ -36,6 +36,7 @@ export interface Translations {
   error_invalid_password: string
   error_password_mismatch: string
   error_validation_error: string
+  error_code_send_failed: string
   register_title: string
   register_description: string
   login_title: string
@@ -89,6 +90,8 @@ export const en: Translations = {
   error_invalid_password: "Password is incorrect.",
   error_password_mismatch: "Passwords do not match.",
   error_validation_error: "Password does not meet requirements.",
+  error_code_send_failed:
+    "We couldn't send the code to this email. Check the address and try again.",
   register_title: "Welcome to the app",
   register_description: "Sign in with your email",
   login_title: "Welcome to the app",
@@ -142,6 +145,8 @@ export const ar: Translations = {
   error_invalid_password: "كلمة المرور غير صحيحة.",
   error_password_mismatch: "كلمتا المرور غير متطابقتين.",
   error_validation_error: "كلمة المرور لا تستوفي المتطلبات.",
+  error_code_send_failed:
+    "تعذّر إرسال الرمز إلى هذا البريد الإلكتروني. تحقق من العنوان وحاول مرة أخرى.",
   register_title: "مرحباً بك في التطبيق",
   register_description: "سجل دخولك بالبريد الإلكتروني",
   login_title: "مرحباً بك في التطبيق",
