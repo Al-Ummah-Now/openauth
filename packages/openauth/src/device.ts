@@ -176,29 +176,50 @@ async function peekRateLimit(
   return ((await Storage.get<number>(storage, key)) ?? 0) >= limit
 }
 
-/** The network an address belongs to: IPv4 /24, IPv6 /48, else the value itself. */
-export function networkOf(ip: string): string {
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip))
-    return ip.split(".").slice(0, 3).join(".") + ".0/24"
-  if (ip.includes(":")) {
-    const [head, tail = ""] = ip.toLowerCase().split("::")
-    const left = head ? head.split(":") : []
-    const right = tail ? tail.split(":") : []
-    const groups = ip.includes("::")
-      ? [
-          ...left,
-          ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"),
-          ...right,
-        ]
-      : left
-    return (
-      groups
-        .slice(0, 3)
-        .map((g) => g || "0")
-        .join(":") + "::/48"
+/**
+ * The network an address belongs to: IPv4 /24, IPv6 /48, else the value itself.
+ * IPv6 is fully normalized (expanded, lowercase, no leading zeros) so different
+ * spellings of one network share a bucket; IPv4-mapped/embedded forms count as
+ * their IPv4 address.
+ */
+export function networkOf(raw: string): string {
+  const ip = raw.trim().toLowerCase().replace(/%.*$/, "")
+  const v4 = (s: string) => {
+    const parts = s.split(".")
+    if (
+      parts.length !== 4 ||
+      !parts.every((p) => /^\d{1,3}$/.test(p) && +p < 256)
     )
+      return null
+    return parts.slice(0, 3).map(Number).join(".") + ".0/24"
   }
-  return ip
+  const asV4 = v4(ip)
+  if (asV4) return asV4
+  if (!ip.includes(":")) return ip
+  // Trailing dotted IPv4 (::ffff:1.2.3.4, ::1.2.3.4) is that IPv4 address
+  const embedded = ip.match(/:(\d{1,3}(?:\.\d{1,3}){3})$/)
+  if (embedded) {
+    const net = v4(embedded[1])
+    if (net) return net
+  }
+  const halves = ip.split("::")
+  if (halves.length > 2) return ip
+  const left = halves[0] ? halves[0].split(":") : []
+  const right = halves[1] ? halves[1].split(":") : []
+  const fill = halves.length === 2 ? 8 - left.length - right.length : 0
+  const groups = [...left, ...Array(Math.max(0, fill)).fill("0"), ...right]
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g)))
+    return ip
+  const n = groups.map((g) => parseInt(g, 16))
+  // IPv4-mapped written in hex (::ffff:102:304)
+  if (n.slice(0, 5).every((x) => x === 0) && n[5] === 0xffff)
+    return `${n[6] >> 8}.${n[6] & 255}.${n[7] >> 8}.0/24`
+  return (
+    n
+      .slice(0, 3)
+      .map((x) => x.toString(16))
+      .join(":") + "::/48"
+  )
 }
 
 // ---------------------------------------------------------------------------
