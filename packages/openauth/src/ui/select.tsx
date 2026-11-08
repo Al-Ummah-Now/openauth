@@ -25,6 +25,7 @@
 /** @jsxImportSource hono/jsx */
 
 import { Layout } from "./base.js"
+import { withFlowParams } from "../flow.js"
 import { ICON_GITHUB, ICON_GOOGLE } from "./icon.js"
 import type { Theme } from "./theme.js"
 import { getLocaleFromRequest, getTranslations, type Locale } from "./i18n.js"
@@ -106,7 +107,7 @@ export function Select(props?: SelectProps) {
             const icon = ICON[key]
             return (
               <a
-                href={`/${key}/authorize`}
+                href={withFlowParams(`/${key}/authorize`, req.url)}
                 data-component="button"
                 data-color="ghost"
               >

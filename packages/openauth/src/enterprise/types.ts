@@ -318,6 +318,14 @@ export interface EnterpriseIssuerConfig<
    * ```
    */
   error?(error: UnknownStateError, req: Request): Promise<Response>
+
+  /**
+   * Where the friendly "Start sign-in again" page links when the flow's
+   * client is unknown. See `IssuerInput.restart`.
+   */
+  restart?: {
+    fallbackUrl?: string
+  }
 }
 
 /**

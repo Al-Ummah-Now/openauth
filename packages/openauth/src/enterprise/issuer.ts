@@ -116,6 +116,7 @@ import {
   issuer as createBaseIssuer,
   normalizeIssuer,
   type OnSuccessResponder,
+  unknownStateResponse,
 } from "../issuer.js"
 import { signingKeys, SIGNING_ALG } from "../keys.js"
 import { getRelativeUrl, isDomainMatch } from "../util.js"
@@ -311,6 +312,7 @@ export function createMultiTenantIssuer<
     clientDb: config.clientDb,
     audit: config.audit,
     error: config.error,
+    restart: config.restart,
 
     // Allow check delegates to enterprise onAllow with tenant context
     allow: async (input, req) => {
@@ -1045,13 +1047,10 @@ export function createMultiTenantIssuer<
     console.error("Enterprise issuer error:", err)
 
     if (err instanceof UnknownStateError) {
-      return c.json(
-        {
-          error: "invalid_state",
-          error_description: err.message,
-        },
-        400,
-      )
+      // Never show the technical error: render the friendly restart page.
+      return config.error
+        ? config.error(err, c.req.raw)
+        : unknownStateResponse(err, c.req.raw, config.restart?.fallbackUrl)
     }
 
     if (err instanceof OauthError) {
