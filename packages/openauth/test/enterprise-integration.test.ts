@@ -314,7 +314,7 @@ describe("Session Integration - handlePromptParameter", () => {
     expect(ctx.get("showAccountPicker")).toBeUndefined()
   })
 
-  test("prompt=select_account proceeds if only one account", async () => {
+  test("prompt=select_account shows the picker for a single account (no sign-in form)", async () => {
     const ctx = createMockContext()
 
     const result = await handlePromptParameter(
@@ -325,8 +325,8 @@ describe("Session Integration - handlePromptParameter", () => {
       authorization,
     )
 
-    expect(result.proceed).toBe(true)
-    expect(ctx.get("showAccountPicker")).toBeUndefined()
+    expect(result.proceed).toBe(false)
+    expect(ctx.get("showAccountPicker")).toBe(true)
   })
 
   test("prompt=select_account shows picker if multiple accounts", async () => {

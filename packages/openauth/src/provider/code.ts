@@ -169,7 +169,10 @@ export function CodeProvider<
       routes.post("/authorize", async (c) => {
         const code = generate()
         const fd = await c.req.formData()
-        const state = await ctx.get<CodeProviderState>(c, "provider")
+        // Missing state (stale tab, expired cookie): start over.
+        const state: CodeProviderState = (await ctx.get<
+          CodeProviderState | undefined
+        >(c, "provider")) ?? { type: "start" }
         const action = fd.get("action")?.toString()
 
         if (action === "request" || action === "resend") {
@@ -216,6 +219,8 @@ export function CodeProvider<
             await ctx.success(c, { claims: state.claims as Claims }),
           )
         }
+        // Unknown action or a form from a stale step: start over.
+        return transition(c, { type: "start" }, fd)
       })
     },
   }
