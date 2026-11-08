@@ -274,6 +274,12 @@ export class D1SessionAdapter {
     refreshToken: string
     clientId: string
     ttl: number
+    /**
+     * When the user authenticated (ms); defaults to now. Silent SSO passes the
+     * existing session's time so it is not refreshed without a real sign-in
+     * (it feeds OIDC auth_time).
+     */
+    authenticatedAt?: number
   }): Promise<AccountSession> {
     const id = crypto.randomUUID()
     const now = Date.now()
@@ -291,7 +297,7 @@ export class D1SessionAdapter {
         id,
         params.browserSessionId,
         params.userId,
-        now,
+        params.authenticatedAt ?? now,
         expiresAt,
         params.subjectType,
         JSON.stringify(params.subjectProperties),
@@ -305,7 +311,7 @@ export class D1SessionAdapter {
       browser_session_id: params.browserSessionId,
       user_id: params.userId,
       is_active: false,
-      authenticated_at: now,
+      authenticated_at: params.authenticatedAt ?? now,
       expires_at: expiresAt,
       subject_type: params.subjectType,
       subject_properties: params.subjectProperties,

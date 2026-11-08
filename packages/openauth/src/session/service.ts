@@ -314,6 +314,12 @@ export class SessionServiceImpl implements SessionService {
     refreshToken: string
     clientId: string
     ttl: number
+    /**
+     * When the user authenticated (ms); defaults to now. Silent SSO passes the
+     * existing session's time so it is not refreshed without a real sign-in
+     * (it feeds OIDC auth_time).
+     */
+    authenticatedAt?: number
   }): Promise<AccountSession> {
     // Get browser session to find tenant ID and check account limit
     // We need to scan to find the session since we don't have tenant ID
@@ -338,7 +344,7 @@ export class SessionServiceImpl implements SessionService {
       const now = Date.now()
       const updatedAccount: AccountSession = {
         ...existingAccount,
-        authenticated_at: now,
+        authenticated_at: params.authenticatedAt ?? now,
         expires_at: now + params.ttl * 1000,
         refresh_token: params.refreshToken,
         subject_properties: params.subjectProperties,
@@ -396,7 +402,7 @@ export class SessionServiceImpl implements SessionService {
       browser_session_id: params.browserSessionId,
       user_id: params.userId,
       is_active: true,
-      authenticated_at: now,
+      authenticated_at: params.authenticatedAt ?? now,
       expires_at: now + params.ttl * 1000,
       subject_type: params.subjectType,
       subject_properties: params.subjectProperties,
@@ -439,6 +445,7 @@ export class SessionServiceImpl implements SessionService {
         refreshToken: params.refreshToken,
         clientId: params.clientId,
         ttl: params.ttl,
+        authenticatedAt: params.authenticatedAt,
       }),
     )
 

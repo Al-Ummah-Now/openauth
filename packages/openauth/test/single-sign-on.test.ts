@@ -224,6 +224,12 @@ describe("single sign-on", () => {
       expect(b.clientID).toBe(B.id)
       expect(b.authTime).toBe(t0.getTime())
 
+      // A chain of silent sign-ons can't launder a stale sign-in into a fresh one
+      setSystemTime(new Date(t0.getTime() + 7_200_000))
+      const hop2 = await browser.authorize(A)
+      const a2 = await codePayload(new URL(hop2.headers.get("location")!))
+      expect(a2.authTime).toBe(t0.getTime())
+
       // prompt=login is a real sign-in: a fresh auth_time
       const again = await browser.authorize(B, "&prompt=login")
       expectSignInForm(again)
