@@ -168,6 +168,11 @@ export interface EnterpriseIssuerConfig<
   issuer?: string
 
   /**
+   * Device authorization grant (RFC 8628). See `IssuerInput.device`.
+   * Requires `clientDb`.
+   */
+  device?: import("../device.js").DeviceFlowOptions
+  /**
    * PKCE policy (only `S256` is ever accepted). See `IssuerInput.pkce`.
    */
   pkce?: {
