@@ -82,6 +82,11 @@ const DEFAULT_COPY = {
    */
   error_validation_error: "Password does not meet requirements.",
   /**
+   * Error message when the confirmation code could not be sent to the email.
+   */
+  error_code_send_failed:
+    "We couldn't send the code to this email. Check the address and try again.",
+  /**
    * Title of the register page.
    */
   register_title: "Welcome to the app",
@@ -195,6 +200,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         error_invalid_password: t.error_invalid_password,
         error_password_mismatch: t.error_password_mismatch,
         error_validation_error: t.error_validation_error,
+        error_code_send_failed: t.error_code_send_failed,
         register_title: t.register_title,
         register_description: t.register_description,
         login_title: t.login_title,
@@ -271,6 +277,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         error_invalid_password: t.error_invalid_password,
         error_password_mismatch: t.error_password_mismatch,
         error_validation_error: t.error_validation_error,
+        error_code_send_failed: t.error_code_send_failed,
         register_title: t.register_title,
         register_description: t.register_description,
         login_title: t.login_title,
@@ -293,6 +300,8 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
       const emailError = ["invalid_email", "email_taken"].includes(
         error?.type || "",
       )
+      // Keep the entered address on a send failure so the user can correct it.
+      const sendError = error?.type === "code_send_failed"
       const passwordError = [
         "invalid_password",
         "password_mismatch",
@@ -315,7 +324,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
                 <input type="hidden" name="action" value="register" />
                 <input
                   data-component="input"
-                  autofocus={!error || emailError}
+                  autofocus={!error || emailError || sendError}
                   type="email"
                   name="email"
                   value={!emailError ? form?.get("email")?.toString() : ""}
@@ -340,6 +349,9 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
                   name="repeat"
                   required
                   autofocus={passwordError}
+                  value={
+                    sendError ? form?.get("repeat")?.toString() : undefined
+                  }
                   placeholder={copy.input_repeat}
                   autoComplete="new-password"
                 />
@@ -392,6 +404,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         error_invalid_password: t.error_invalid_password,
         error_password_mismatch: t.error_password_mismatch,
         error_validation_error: t.error_validation_error,
+        error_code_send_failed: t.error_code_send_failed,
         register_title: t.register_title,
         register_description: t.register_description,
         login_title: t.login_title,
