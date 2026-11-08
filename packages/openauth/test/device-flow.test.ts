@@ -18,6 +18,7 @@ import { issuer } from "../src/issuer.js"
 import { createSubjects } from "../src/subject.js"
 import { MemoryStorage } from "../src/storage/memory.js"
 import {
+  networkOf,
   DEVICE_CODE_GRANT,
   USER_CODE_ALPHABET,
   generateUserCode,
@@ -379,15 +380,20 @@ describe("activation page", () => {
     expect(res.status).toBe(429)
   })
 
-  test("failed lookups are also limited globally, whatever the IP", async () => {
-    for (let i = 0; i < 300; i++)
+  test("failed lookups are limited per network, across its addresses", async () => {
+    for (let i = 0; i < 30; i++)
       await get("/activate?user_code=BCDF-GHJK", {
-        "cf-connecting-ip": `10.0.${i >> 8}.${i & 255}`,
+        "cf-connecting-ip": `10.0.0.${i}`,
       })
-    const res = await get("/activate?user_code=BCDF-GHJK", {
+    const sameNet = await get("/activate?user_code=BCDF-GHJK", {
+      "cf-connecting-ip": "10.0.0.200",
+    })
+    expect(sameNet.status).toBe(429)
+    // Other networks are unaffected: there is no global lockout
+    const other = await get("/activate?user_code=BCDF-GHJK", {
       "cf-connecting-ip": "9.9.9.9",
     })
-    expect(res.status).toBe(429)
+    expect(other.status).toBe(400)
   })
 
   test("a callback without a valid state or code fails safely", async () => {
@@ -403,6 +409,16 @@ describe("activation page", () => {
   test("the entry page can't be framed", async () => {
     const res = await get("/activate")
     expect(res.headers.get("x-frame-options")).toBe("DENY")
+  })
+})
+
+describe("networkOf", () => {
+  test("groups IPv4 by /24 and IPv6 by /48", () => {
+    expect(networkOf("203.0.113.7")).toBe("203.0.113.0/24")
+    expect(networkOf("2001:db8:abcd:12::1")).toBe("2001:db8:abcd::/48")
+    expect(networkOf("2001:db8::1")).toBe("2001:db8:0::/48")
+    expect(networkOf("::1")).toBe("0:0:0::/48")
+    expect(networkOf("unknown")).toBe("unknown")
   })
 })
 
@@ -426,8 +442,9 @@ describe("user codes", () => {
 describe("through the enterprise issuer (client registry on)", () => {
   const ENT = "auth.example.com"
   async function enterprise() {
-    const { createMultiTenantIssuer } =
-      await import("../src/enterprise/issuer.js")
+    const { createMultiTenantIssuer } = await import(
+      "../src/enterprise/issuer.js"
+    )
     const { TenantServiceImpl } = await import("../src/tenant/service.js")
     const { SessionServiceImpl } = await import("../src/session/service.js")
     const { PasswordProvider } = await import("../src/provider/password.js")

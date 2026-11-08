@@ -48,8 +48,14 @@ export interface DeviceFlowOptions {
   lookupsPerMinute?: number
   /** Device authorization requests per client and IP per minute. Default 10. */
   requestsPerMinute?: number
-  /** Failed code lookups per minute across all clients (independent of IP). Default 300. */
-  failedLookupsPerMinute?: number
+  /**
+   * Failed code lookups per network (IPv4 /24, IPv6 /48) per minute, so one
+   * network can't spread guesses across many addresses. Default 30. There is
+   * deliberately no global limit: a global counter would let anyone lock every
+   * user out. The 34-bit code space and 10-minute lifetime make distributed
+   * guessing impractical (RFC 8628 §5.1).
+   */
+  failedLookupsPerNetworkPerMinute?: number
   /**
    * Header with the caller's IP, set by a trusted proxy. Default
    * `cf-connecting-ip` (Cloudflare sets it and clients can't override it).
@@ -170,6 +176,31 @@ async function peekRateLimit(
   return ((await Storage.get<number>(storage, key)) ?? 0) >= limit
 }
 
+/** The network an address belongs to: IPv4 /24, IPv6 /48, else the value itself. */
+export function networkOf(ip: string): string {
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip))
+    return ip.split(".").slice(0, 3).join(".") + ".0/24"
+  if (ip.includes(":")) {
+    const [head, tail = ""] = ip.toLowerCase().split("::")
+    const left = head ? head.split(":") : []
+    const right = tail ? tail.split(":") : []
+    const groups = ip.includes("::")
+      ? [
+          ...left,
+          ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"),
+          ...right,
+        ]
+      : left
+    return (
+      groups
+        .slice(0, 3)
+        .map((g) => g || "0")
+        .join(":") + "::/48"
+    )
+  }
+  return ip
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -200,19 +231,22 @@ export function registerDeviceFlow(
   const interval = options.interval ?? 5
   const lookups = options.lookupsPerMinute ?? 10
   const requests = options.requestsPerMinute ?? 10
-  const failedLookups = options.failedLookupsPerMinute ?? 300
+  const failedLookups = options.failedLookupsPerNetworkPerMinute ?? 30
   const ipHeader = options.ipHeader ?? "cf-connecting-ip"
   const clientIp = (c: Context) => c.req.header(ipHeader) || "unknown"
   const { storage } = deps
 
-  /** A code lookup from this IP (per-IP limit), and the global failed-lookup limit. */
+  /** A code lookup: per-IP limit, plus the failed-lookup limit of the IP's network. */
   async function lookupLimited(c: Context): Promise<boolean> {
-    if (await peekRateLimit(storage, "lookup_fail", "all", failedLookups))
+    const ip = clientIp(c)
+    if (
+      await peekRateLimit(storage, "lookup_fail", networkOf(ip), failedLookups)
+    )
       return true
-    return hitRateLimit(storage, "lookup", clientIp(c), lookups)
+    return hitRateLimit(storage, "lookup", ip, lookups)
   }
-  const lookupFailed = () =>
-    hitRateLimit(storage, "lookup_fail", "all", failedLookups)
+  const lookupFailed = (c: Context) =>
+    hitRateLimit(storage, "lookup_fail", networkOf(clientIp(c)), failedLookups)
 
   const deviceKey = (hash: string) => ["oauth:device", hash]
   const userKey = (code: string) => ["oauth:device_user", code]
@@ -334,7 +368,7 @@ export function registerDeviceFlow(
     const code = normalizeUserCode(typed)
     const found = code ? await recordForUserCode(code) : null
     if (!code || !found) {
-      await lookupFailed()
+      await lookupFailed(c)
       return page(c, { page: "enter", error: "invalid", userCode: typed }, 400)
     }
     const csrf = randomToken(16)
@@ -362,7 +396,7 @@ export function registerDeviceFlow(
       return page(c, { page: "enter", error: "rate_limited" }, 429)
     const found = await recordForUserCode(code)
     if (!found) {
-      await lookupFailed()
+      await lookupFailed(c)
       return page(c, { page: "failed" }, 400)
     }
     setCookie(c, CSRF_COOKIE, "", { path: "/activate", maxAge: 0 })
