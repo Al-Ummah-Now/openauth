@@ -142,16 +142,9 @@ async function confirmPage(userCode: string) {
   return { html, csrf, cookie }
 }
 
-async function approve(userCode: string) {
-  const { csrf, cookie } = await confirmPage(userCode)
-  const res = await post(
-    "/activate",
-    { user_code: userCode, csrf, action: "approve" },
-    { cookie },
-  )
-  expect(res.status).toBe(302)
-  // Through the normal sign-in (dummy provider signs in at once)
-  let r = await get(res.headers.get("location")!)
+/** Through the normal sign-in (dummy provider signs in at once); returns the callback URL. */
+async function signInTo(authorizeUrl: string) {
+  let r = await get(authorizeUrl)
   const cookies = r.headers.get("set-cookie") ?? ""
   while (
     r.status === 302 &&
@@ -161,7 +154,27 @@ async function approve(userCode: string) {
   }
   const callback = r.headers.get("location")!
   expect(callback.startsWith(`${HOST}/activate/callback?`)).toBe(true)
-  const done = await get(callback, { cookie: cookies })
+  return callback
+}
+
+const cookieNamed = (res: Response, name: string) =>
+  (res.headers.get("set-cookie") ?? "")
+    .split(/,\s*(?=[^;=]+=)/)
+    .map((c) => c.split(";")[0])
+    .find((c) => c.startsWith(`${name}=`) && c.length > name.length + 1)
+
+async function approve(userCode: string) {
+  const { csrf, cookie } = await confirmPage(userCode)
+  const res = await post(
+    "/activate",
+    { user_code: userCode, csrf, action: "approve" },
+    { cookie },
+  )
+  expect(res.status).toBe(302)
+  const handleCookie = cookieNamed(res, "__device_handle")!
+  expect(handleCookie).toBeString()
+  const callback = await signInTo(res.headers.get("location")!)
+  const done = await get(callback, { cookie: handleCookie })
   return { authorizeUrl: new URL(res.headers.get("location")!), done }
 }
 
@@ -320,6 +333,61 @@ describe("activation page", () => {
     expect(await res.text()).toContain('data-error="rate_limited"')
     tick(61)
     expect((await get("/activate?user_code=BCDF-GHJK")).status).toBe(400)
+  })
+
+  test("a captured authorize link can't be finished in another browser (phishing)", async () => {
+    const d = await startDevice()
+    const { csrf, cookie } = await confirmPage(d.user_code)
+    // The attacker confirms in their browser and sends the authorize link to a victim
+    const res = await post(
+      "/activate",
+      { user_code: d.user_code, csrf, action: "approve" },
+      { cookie },
+    )
+    const callback = await signInTo(res.headers.get("location")!)
+    // The victim's browser has no (or another) handle cookie
+    expect((await get(callback)).status).toBe(400)
+    expect(
+      (await get(callback, { cookie: "__device_handle=other" })).status,
+    ).toBe(400)
+    tick(11)
+    expect((await poll(d.device_code)).body.error).toBe("authorization_pending")
+  })
+
+  test("the CSRF token is bound to the confirmed code", async () => {
+    const a = await startDevice()
+    const b = await startDevice()
+    const { csrf, cookie } = await confirmPage(a.user_code)
+    const res = await post(
+      "/activate",
+      { user_code: b.user_code, csrf, action: "approve" },
+      { cookie },
+    )
+    expect(res.status).toBe(400)
+    expect((await poll(b.device_code)).body.error).toBe("authorization_pending")
+  })
+
+  test("approvals count against the per-IP lookup limit", async () => {
+    const d = await startDevice()
+    const { csrf, cookie } = await confirmPage(d.user_code)
+    for (let i = 0; i < 9; i++) await get("/activate?user_code=BCDF-GHJK")
+    const res = await post(
+      "/activate",
+      { user_code: d.user_code, csrf, action: "approve" },
+      { cookie },
+    )
+    expect(res.status).toBe(429)
+  })
+
+  test("failed lookups are also limited globally, whatever the IP", async () => {
+    for (let i = 0; i < 300; i++)
+      await get("/activate?user_code=BCDF-GHJK", {
+        "cf-connecting-ip": `10.0.${i >> 8}.${i & 255}`,
+      })
+    const res = await get("/activate?user_code=BCDF-GHJK", {
+      "cf-connecting-ip": "9.9.9.9",
+    })
+    expect(res.status).toBe(429)
   })
 
   test("a callback without a valid state or code fails safely", async () => {

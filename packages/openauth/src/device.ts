@@ -35,6 +35,7 @@ export const USER_CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ"
 export const USER_CODE_LENGTH = 8
 export const DEVICE_CALLBACK_PATH = "/activate/callback"
 const CSRF_COOKIE = "__device_csrf"
+const HANDLE_COOKIE = "__device_handle"
 
 export interface DeviceFlowOptions {
   /** Where users enter the code. Default: `<issuer>/activate`. */
@@ -47,6 +48,13 @@ export interface DeviceFlowOptions {
   lookupsPerMinute?: number
   /** Device authorization requests per client and IP per minute. Default 10. */
   requestsPerMinute?: number
+  /** Failed code lookups per minute across all clients (independent of IP). Default 300. */
+  failedLookupsPerMinute?: number
+  /**
+   * Header with the caller's IP, set by a trusted proxy. Default
+   * `cf-connecting-ip` (Cloudflare sets it and clients can't override it).
+   */
+  ipHeader?: string
 }
 
 export interface DeviceGrant {
@@ -151,8 +159,16 @@ export async function hitRateLimit(
   return count > limit
 }
 
-const clientIp = (c: Context) =>
-  c.req.header("cf-connecting-ip") || c.req.header("x-real-ip") || "unknown"
+async function peekRateLimit(
+  storage: StorageAdapter,
+  bucket: string,
+  id: string,
+  limit: number,
+  now = Date.now(),
+): Promise<boolean> {
+  const key = ["oauth:device_rl", bucket, id, String(Math.floor(now / 60_000))]
+  return ((await Storage.get<number>(storage, key)) ?? 0) >= limit
+}
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -184,7 +200,19 @@ export function registerDeviceFlow(
   const interval = options.interval ?? 5
   const lookups = options.lookupsPerMinute ?? 10
   const requests = options.requestsPerMinute ?? 10
+  const failedLookups = options.failedLookupsPerMinute ?? 300
+  const ipHeader = options.ipHeader ?? "cf-connecting-ip"
+  const clientIp = (c: Context) => c.req.header(ipHeader) || "unknown"
   const { storage } = deps
+
+  /** A code lookup from this IP (per-IP limit), and the global failed-lookup limit. */
+  async function lookupLimited(c: Context): Promise<boolean> {
+    if (await peekRateLimit(storage, "lookup_fail", "all", failedLookups))
+      return true
+    return hitRateLimit(storage, "lookup", clientIp(c), lookups)
+  }
+  const lookupFailed = () =>
+    hitRateLimit(storage, "lookup_fail", "all", failedLookups)
 
   const deviceKey = (hash: string) => ["oauth:device", hash]
   const userKey = (code: string) => ["oauth:device_user", code]
@@ -296,7 +324,7 @@ export function registerDeviceFlow(
   app.get("/activate", async (c) => {
     const typed = c.req.query("user_code")
     if (typed === undefined) return page(c, { page: "enter" })
-    if (await hitRateLimit(storage, "lookup", clientIp(c), lookups)) {
+    if (await lookupLimited(c)) {
       return page(
         c,
         { page: "enter", error: "rate_limited", userCode: typed },
@@ -305,8 +333,10 @@ export function registerDeviceFlow(
     }
     const code = normalizeUserCode(typed)
     const found = code ? await recordForUserCode(code) : null
-    if (!code || !found)
+    if (!code || !found) {
+      await lookupFailed()
       return page(c, { page: "enter", error: "invalid", userCode: typed }, 400)
+    }
     const csrf = randomToken(16)
     const res = page(c, {
       page: "confirm",
@@ -314,21 +344,27 @@ export function registerDeviceFlow(
       appName: found.record.clientName,
       csrf,
     })
-    const cookie = `${CSRF_COOKIE}=${csrf}; Path=/activate; Max-Age=${remaining(found.record)}; HttpOnly; Secure; SameSite=Lax`
+    // The token is bound to the code shown on this page
+    const cookie = `${CSRF_COOKIE}=${csrf}.${code}; Path=/activate; Max-Age=${remaining(found.record)}; HttpOnly; Secure; SameSite=Lax`
     res.headers.append("Set-Cookie", cookie)
     return res
   })
 
-  // Approve or deny (double-submit CSRF token: cookie + form field)
+  // Approve or deny (double-submit CSRF token bound to the confirmed code)
   app.post("/activate", async (c) => {
     const form = await c.req.formData().catch(() => null)
     const csrf = form?.get("csrf")?.toString()
-    const cookie = getCookie(c, CSRF_COOKIE)
-    if (!csrf || !cookie || csrf !== cookie)
-      return page(c, { page: "failed" }, 400)
     const code = normalizeUserCode(form?.get("user_code")?.toString())
-    const found = code ? await recordForUserCode(code) : null
-    if (!code || !found) return page(c, { page: "failed" }, 400)
+    const cookie = getCookie(c, CSRF_COOKIE)
+    if (!csrf || !code || !cookie || cookie !== `${csrf}.${code}`)
+      return page(c, { page: "failed" }, 400)
+    if (await lookupLimited(c))
+      return page(c, { page: "enter", error: "rate_limited" }, 429)
+    const found = await recordForUserCode(code)
+    if (!found) {
+      await lookupFailed()
+      return page(c, { page: "failed" }, 400)
+    }
     setCookie(c, CSRF_COOKIE, "", { path: "/activate", maxAge: 0 })
     const ttl = remaining(found.record)
 
@@ -367,6 +403,16 @@ export function registerDeviceFlow(
     if (found.record.scope)
       authorize.searchParams.set("scope", found.record.scope)
     authorize.searchParams.set("lang", locale)
+    // Bind the sign-in to this browser: the callback only accepts the handle
+    // from the browser that confirmed the code, so a captured authorize link
+    // can't be finished by someone else (device-flow phishing).
+    setCookie(c, HANDLE_COOKIE, handle, {
+      path: "/activate",
+      maxAge: ttl,
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+    })
     return c.redirect(authorize.toString(), 302)
   })
 
@@ -374,6 +420,10 @@ export function registerDeviceFlow(
   app.get(DEVICE_CALLBACK_PATH, async (c) => {
     const handle = c.req.query("state")
     const code = c.req.query("code")
+    const bound = getCookie(c, HANDLE_COOKIE)
+    if (!handle || !bound || bound !== handle)
+      return page(c, { page: "failed" }, 400)
+    setCookie(c, HANDLE_COOKIE, "", { path: "/activate", maxAge: 0 })
     const h = handle
       ? await Storage.get<HandleRecord>(storage, [
           "oauth:device_handle",
