@@ -91,6 +91,9 @@ async function post(
   return res
 }
 
+// The UI HTML-escapes the apostrophe in "couldn't"
+const EN_ERROR_HTML = en.error_code_send_failed.replaceAll("'", "&#39;")
+
 const REGISTER = {
   action: "register",
   email: "x@example.com",
@@ -113,7 +116,7 @@ describe("PasswordProvider sendCode failure", () => {
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(sent).toEqual(["x@example.com"])
-    expect(html).toContain(en.error_code_send_failed.replace("'", "&#39;"))
+    expect(html).toContain(EN_ERROR_HTML)
     expect(html).toContain('name="action" value="register"')
     expect(html).toContain('value="x@example.com"')
     expect(html).not.toContain('name="code"')
@@ -151,7 +154,7 @@ describe("PasswordProvider sendCode failure", () => {
     })
     expect(res.status).toBe(400)
     const html = await res.text()
-    expect(html).toContain(en.error_code_send_failed.replace("'", "&#39;"))
+    expect(html).toContain(EN_ERROR_HTML)
     expect(html).toContain('name="action" value="code"')
     expect(html).toContain('value="x@example.com"')
     expect(html).not.toContain('name="code"')
