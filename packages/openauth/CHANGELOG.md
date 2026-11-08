@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-11-08
+
+### Added
+
+- password): let sendCode report a delivery failure (code_send_failed) (#14)
+
+
 ## [1.0.17] - 2026-11-06
 
 ### Fixed
@@ -470,7 +477,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.17...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.18...HEAD
+[1.0.18]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.17...v1.0.18
 [1.0.17]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.16...v1.0.17
 [1.0.16]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.15...v1.0.16
 [1.0.15]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.14...v1.0.15
