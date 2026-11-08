@@ -656,7 +656,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       requestContextMap.set(ctx.req.raw, {
@@ -948,6 +949,10 @@ export function createMultiTenantIssuer<
                 access: opts?.ttl?.access ?? ttlAccess,
                 refresh: opts?.ttl?.refresh ?? ttlRefresh,
               },
+              // Silent SSO: the user did not sign in now. auth_time is when
+              // this account session was authenticated, so "sign in again"
+              // checks can't be satisfied without a real sign-in.
+              authTime: account.authenticated_at,
             },
             AUTHORIZATION_CODE_TTL,
           )
@@ -1158,7 +1163,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)

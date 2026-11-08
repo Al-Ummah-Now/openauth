@@ -724,6 +724,7 @@ export function issuer<
                   access: subjectOpts?.ttl?.access ?? ttlAccess,
                   refresh: subjectOpts?.ttl?.refresh ?? ttlRefresh,
                 },
+                authTime: Date.now(),
               })
               location.hash = new URLSearchParams({
                 access_token: tokens.access,
@@ -749,6 +750,8 @@ export function issuer<
                     access: subjectOpts?.ttl?.access ?? ttlAccess,
                     refresh: subjectOpts?.ttl?.refresh ?? ttlRefresh,
                   },
+                  // The user just authenticated (OIDC auth_time)
+                  authTime: Date.now(),
                 },
                 AUTHORIZATION_CODE_TTL,
               )
@@ -941,7 +944,8 @@ export function issuer<
       // Storage may lag right after /authorize: accept the legacy cookie, but
       // only when it was written for this same flow (it is browser-bound).
       const cookie = (await auth.get(ctx, "authorization")) as
-        AuthorizationState | undefined
+        | AuthorizationState
+        | undefined
       if (cookie?.flow && cookie.flow === flow.id) return cookie
       throw flowError(
         flow.record ? "mismatch" : "expired",
@@ -977,7 +981,8 @@ export function issuer<
       await saveFlow(flow.id, flow.record)
     }
     const cookie = (await auth.get(ctx, "authorization")) as
-      AuthorizationState | undefined
+      | AuthorizationState
+      | undefined
     if (cookie?.flow === flow.id) deleteCookie(ctx, "authorization")
   }
 
@@ -1044,6 +1049,12 @@ export function issuer<
       }
       timeUsed?: number
       nextToken?: string
+      /**
+       * When the user last authenticated (ms). Kept on the refresh token, so
+       * refreshed access tokens report the original sign-in, not the refresh.
+       * Absent for tokens issued before it was recorded and for clients.
+       */
+      authTime?: number
     },
     opts?: {
       generateRefreshToken?: boolean
@@ -1082,7 +1093,13 @@ export function issuer<
         aud: value.clientID,
         iss: issuer(ctx),
         sub: value.subject,
+        // OIDC auth_time (seconds): lets resource servers demand a recent
+        // sign-in for sensitive actions (e.g. account deletion)
+        ...(value.authTime
+          ? { auth_time: Math.floor(value.authTime / 1000) }
+          : {}),
       })
+        .setIssuedAt(accessTimeUsed)
         .setExpirationTime(Math.floor(accessTimeUsed + value.ttl.access))
         .setProtectedHeader(
           await signingKey().then((k) => ({

@@ -245,6 +245,9 @@ describe("polling and approval", () => {
     const claims = decodeJwt(ok.body.access_token)
     expect(claims.properties).toEqual({ userID: "u-123" })
     expect(claims.aud).toBe("tv")
+    // auth_time is when the approving user signed in, before the TV polled
+    expect(typeof claims.auth_time).toBe("number")
+    expect(claims.auth_time as number).toBeLessThan(claims.iat as number)
 
     // single use
     tick(11)
@@ -452,8 +455,9 @@ describe("user codes", () => {
 describe("through the enterprise issuer (client registry on)", () => {
   const ENT = "auth.example.com"
   async function enterprise() {
-    const { createMultiTenantIssuer } =
-      await import("../src/enterprise/issuer.js")
+    const { createMultiTenantIssuer } = await import(
+      "../src/enterprise/issuer.js"
+    )
     const { TenantServiceImpl } = await import("../src/tenant/service.js")
     const { SessionServiceImpl } = await import("../src/session/service.js")
     const { PasswordProvider } = await import("../src/provider/password.js")
