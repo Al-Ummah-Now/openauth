@@ -111,10 +111,7 @@ export class UnknownStateError extends Error {
 }
 
 export type UnknownStateReason =
-  | "missing"
-  | "expired"
-  | "mismatch"
-  | "completed"
+  "missing" | "expired" | "mismatch" | "completed"
 
 /**
  * The given subject is invalid.
