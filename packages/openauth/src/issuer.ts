@@ -851,12 +851,21 @@ export function issuer<
         // cookie is tagged with the flow: an OAuth callback, which comes back
         // without ?auth_flow=, recovers its own flow from it, and the cookie
         // can stand in for a storage read that lags behind.
+        //
+        // Both copies carry a revision (OA-5): the stored copy can be stale
+        // (KV caches reads for ~60 s and other PoPs see writes late), so a
+        // read takes whichever copy is newer.
+        const rev = Math.max(
+          Date.now(),
+          (flow.record.providerRev?.[key] ?? 0) + 1,
+        )
         const sealed = await encrypt(value)
         flow.record.provider = { ...flow.record.provider, [key]: sealed }
+        flow.record.providerRev = { ...flow.record.providerRev, [key]: rev }
         setCookie(
           ctx,
           key,
-          await encrypt({ [PROVIDER_FLOW_TAG]: flow.id, v: value }),
+          await encrypt({ [PROVIDER_FLOW_TAG]: flow.id, v: value, rev }),
           cookieOptions,
         )
         await saveFlow(flow.id, flow.record)
@@ -880,6 +889,8 @@ export function issuer<
         ? decoded[PROVIDER_FLOW_TAG]
         : undefined
       const cookieValue = tagged ? decoded.v : decoded
+      const cookieRev: number =
+        tagged && typeof decoded.rev === "number" ? decoded.rev : 0
 
       // A callback without ?auth_flow= (OAuth redirect): adopt the flow the
       // provider state was written for, so the code goes to that flow's client.
@@ -892,6 +903,9 @@ export function issuer<
 
       const flow = await loadFlow(ctx)
       if (flow?.record && flow.bound && !flow.record.completedAt) {
+        // This flow's cookie is newer than a stale stored copy: use it
+        const storedRev = flow.record.providerRev?.[key] ?? 0
+        if (cookieFlow === flow.id && cookieRev > storedRev) return cookieValue
         const sealed = flow.record.provider?.[key]
         if (typeof sealed === "string") {
           const value = await decrypt(sealed).catch(() => undefined)
@@ -916,6 +930,7 @@ export function issuer<
       const flow = await loadFlow(ctx)
       if (flow?.record && flow.bound && flow.record.provider?.[key]) {
         delete flow.record.provider[key]
+        if (flow.record.providerRev) delete flow.record.providerRev[key]
         await saveFlow(flow.id, flow.record)
       }
     },
