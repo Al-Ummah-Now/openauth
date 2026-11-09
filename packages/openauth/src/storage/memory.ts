@@ -28,7 +28,13 @@
  *
  * @packageDocumentation
  */
-import { joinKey, joinKeyLegacy, splitKey, StorageAdapter } from "./storage.js"
+import {
+  joinKey,
+  joinKeyLegacy,
+  splitKey,
+  type AtomicStorageAdapter,
+  type StorageAdapter,
+} from "./storage.js"
 import { existsSync, readFileSync } from "node:fs"
 import { writeFile } from "node:fs/promises"
 
@@ -84,7 +90,69 @@ export function MemoryStorage(input?: MemoryStorageOptions): StorageAdapter {
     }
     return { found: false, index: left }
   }
+  /** The live entry for a key (new format), dropping it if expired. Synchronous. */
+  function live(joined: string) {
+    const match = search(joined)
+    if (!match.found) return { match, entry: undefined }
+    const entry = store[match.index][1]
+    if (entry.expiry && Date.now() >= entry.expiry) {
+      store.splice(match.index, 1)
+      return { match: search(joined), entry: undefined }
+    }
+    return { match, entry }
+  }
+  function put(joined: string, value: any, expiry?: Date) {
+    const { match } = live(joined)
+    const entry = [
+      joined,
+      { value, expiry: expiry ? expiry.getTime() : undefined },
+    ] as (typeof store)[number]
+    if (match.found) store[match.index] = entry
+    else store.splice(match.index, 0, entry)
+  }
+  // Every check-and-act below runs synchronously (no await between the check
+  // and the write), so it is atomic within the single JavaScript thread.
+  const atomic: AtomicStorageAdapter = {
+    async get(key) {
+      return live(joinKey(key)).entry?.value
+    },
+    async set(key, value, expiry) {
+      put(joinKey(key), value, expiry)
+      await save()
+    },
+    async add(key, value, expiry) {
+      const joined = joinKey(key)
+      if (live(joined).entry) return false
+      put(joined, value, expiry)
+      await save()
+      return true
+    },
+    async replace(key, expected, value, expiry) {
+      const joined = joinKey(key)
+      const { entry } = live(joined)
+      if (!entry || JSON.stringify(entry.value) !== JSON.stringify(expected))
+        return false
+      put(joined, value, expiry)
+      await save()
+      return true
+    },
+    async take(key) {
+      const joined = joinKey(key)
+      const { match, entry } = live(joined)
+      if (!entry) return undefined
+      store.splice(match.index, 1)
+      await save()
+      return entry.value
+    },
+    async remove(key) {
+      const { match, entry } = live(joinKey(key))
+      if (!entry) return
+      store.splice(match.index, 1)
+      await save()
+    },
+  }
   return {
+    atomic,
     async get(key: string[]) {
       // Try new format first
       let match = search(joinKey(key))
