@@ -17,13 +17,33 @@ export const SIGNING_ALG = signingAlg
 const encryptionAlg = "RSA-OAEP-512"
 
 /**
- * Fixed key IDs for primary keys.
- * Using fixed IDs instead of random UUIDs prevents key proliferation
- * when multiple workers race to generate keys - last writer wins,
- * but all workers will read the same key on next request.
+ * Keys are listed in one index per kind, `["keys:signing"]` and
+ * `["keys:encryption"]` (no other key's prefix), in the storage adapter's atomic store (OA-3):
+ *
+ * - every key has its own random `kid`, so two keys can never share one;
+ * - a new key is added with compare-and-set on the index, so of processes
+ *   racing to create the first key exactly one succeeds and the others use
+ *   it (no process ever signs with a key that lost the race);
+ * - every key in the index is returned (newest first): JWKS publishes all
+ *   non-expired keys.
+ *
+ * Keys stored by older versions (`signing:key/primary` and other
+ * `signing:key/*` entries in the plain store) are adopted into the index on
+ * first use, keeping their ids. New keys are also written to the plain store
+ * under `<kind>:key/<kid>` so older readers still find them.
  */
-const PRIMARY_SIGNING_KEY_ID = "primary"
-const PRIMARY_ENCRYPTION_KEY_ID = "primary"
+const INDEX = {
+  signing: ["keys:signing"],
+  encryption: ["keys:encryption"],
+} as const
+const LEGACY_PREFIX = {
+  signing: ["signing:key"],
+  encryption: ["encryption:key"],
+} as const
+
+interface KeyIndex {
+  keys: SerializedKeyPair[]
+}
 
 /**
  * In-memory promise cache to prevent concurrent key generation within same isolate.
@@ -109,198 +129,118 @@ export async function legacySigningKeys(
 }
 
 export async function signingKeys(storage: StorageAdapter): Promise<KeyPair[]> {
-  // Check for existing lock to prevent concurrent generation
-  let locks = keyGenerationLocks.get(storage)
-  if (!locks) {
-    locks = new Map()
-    keyGenerationLocks.set(storage, locks)
-  }
-
-  const lockKey = "signing"
-  const existingLock = locks.get(lockKey)
-  if (existingLock) {
-    return existingLock
-  }
-
-  const promise = signingKeysInternal(storage).finally(() => {
-    locks!.delete(lockKey)
-  })
-  locks.set(lockKey, promise)
-  return promise
-}
-
-async function signingKeysInternal(
-  storage: StorageAdapter,
-): Promise<KeyPair[]> {
-  // Fast path: try to get the primary key directly (single KV read)
-  const primaryKey = await Storage.get<SerializedKeyPair>(storage, [
-    "signing:key",
-    PRIMARY_SIGNING_KEY_ID,
-  ])
-
-  if (primaryKey && !primaryKey.expired) {
-    try {
-      const keyPair = await deserializeKeyPair(primaryKey, signingAlg, "sig")
-      return [keyPair]
-    } catch (err) {
-      console.error("[openauth:keys] Failed to load primary signing key:", err)
-    }
-  }
-
-  // Slow path: scan for any existing keys (supports rotation/legacy)
-  const results = [] as KeyPair[]
-  const scanner = Storage.scan<SerializedKeyPair>(storage, ["signing:key"])
-  for await (const [_key, value] of scanner) {
-    try {
-      const keyPair = await deserializeKeyPair(value, signingAlg, "sig")
-      results.push(keyPair)
-    } catch (err) {
-      console.error(
-        `[openauth:keys] Failed to load signing key ${value.id}:`,
-        err,
-      )
-    }
-  }
-
-  // Return existing keys if any are unexpired
-  results.sort((a, b) => b.created.getTime() - a.created.getTime())
-  if (results.filter((item) => !item.expired).length) {
-    return results
-  }
-
-  // No valid keys found - generate a new primary key
-  // Using fixed ID means multiple workers racing will overwrite each other,
-  // but that's fine - all generated keys are valid, and on next request
-  // everyone will read the same key
-  const key = await generateKeyPair(signingAlg, {
-    extractable: true,
-  })
-  const serialized: SerializedKeyPair = {
-    id: PRIMARY_SIGNING_KEY_ID,
-    publicKey: await exportSPKI(key.publicKey),
-    privateKey: await exportPKCS8(key.privateKey),
-    created: Date.now(),
-    alg: signingAlg,
-  }
-  await Storage.set(
-    storage,
-    ["signing:key", PRIMARY_SIGNING_KEY_ID],
-    serialized,
+  return locked(storage, "signing", () =>
+    loadOrCreate(storage, "signing", signingAlg, "sig"),
   )
-
-  // Re-read to get whatever key is now stored (handles race condition)
-  const savedKey = await Storage.get<SerializedKeyPair>(storage, [
-    "signing:key",
-    PRIMARY_SIGNING_KEY_ID,
-  ])
-  if (savedKey) {
-    return [await deserializeKeyPair(savedKey, signingAlg, "sig")]
-  }
-
-  // Fallback: return the key we just generated (should rarely happen)
-  console.warn(
-    "[openauth:keys] Using locally generated signing key - storage may be unavailable",
-  )
-  return [await deserializeKeyPair(serialized, signingAlg, "sig")]
 }
 
 export async function encryptionKeys(
   storage: StorageAdapter,
 ): Promise<KeyPair[]> {
-  // Check for existing lock to prevent concurrent generation
+  return locked(storage, "encryption", () =>
+    loadOrCreate(storage, "encryption", encryptionAlg),
+  )
+}
+
+/** One load per storage and kind at a time within this isolate. */
+function locked(
+  storage: StorageAdapter,
+  kind: string,
+  load: () => Promise<KeyPair[]>,
+): Promise<KeyPair[]> {
   let locks = keyGenerationLocks.get(storage)
   if (!locks) {
     locks = new Map()
     keyGenerationLocks.set(storage, locks)
   }
-
-  const lockKey = "encryption"
-  const existingLock = locks.get(lockKey)
-  if (existingLock) {
-    return existingLock
-  }
-
-  const promise = encryptionKeysInternal(storage).finally(() => {
-    locks!.delete(lockKey)
-  })
-  locks.set(lockKey, promise)
+  const existing = locks.get(kind)
+  if (existing) return existing
+  const promise = load().finally(() => locks!.delete(kind))
+  locks.set(kind, promise)
   return promise
 }
 
-async function encryptionKeysInternal(
+/** Keys an older version stored in the plain store. */
+async function legacyKeys(
   storage: StorageAdapter,
+  kind: keyof typeof LEGACY_PREFIX,
+): Promise<SerializedKeyPair[]> {
+  const found = new Map<string, SerializedKeyPair>()
+  const primary = await Storage.get<SerializedKeyPair>(storage, [
+    ...LEGACY_PREFIX[kind],
+    "primary",
+  ])
+  if (primary) found.set(primary.id, primary)
+  for await (const [, value] of Storage.scan<SerializedKeyPair>(storage, [
+    ...LEGACY_PREFIX[kind],
+  ]))
+    if (value?.id) found.set(value.id, value)
+  return [...found.values()]
+}
+
+async function deserializeAll(
+  keys: SerializedKeyPair[],
+  alg: string,
+  use?: string,
 ): Promise<KeyPair[]> {
-  // Fast path: try to get the primary key directly (single KV read)
-  const primaryKey = await Storage.get<SerializedKeyPair>(storage, [
-    "encryption:key",
-    PRIMARY_ENCRYPTION_KEY_ID,
-  ])
-
-  if (primaryKey && !primaryKey.expired) {
+  const out = [] as KeyPair[]
+  for (const value of keys) {
     try {
-      const keyPair = await deserializeKeyPair(primaryKey, encryptionAlg)
-      return [keyPair]
+      out.push(await deserializeKeyPair(value, alg, use))
     } catch (err) {
-      console.error(
-        "[openauth:keys] Failed to load primary encryption key:",
-        err,
-      )
+      console.error(`[openauth:keys] Failed to load key ${value.id}:`, err)
     }
   }
+  // Newest non-expired first: that is the key in use
+  return out.sort(
+    (a, b) =>
+      Number(!!a.expired) - Number(!!b.expired) ||
+      b.created.getTime() - a.created.getTime(),
+  )
+}
 
-  // Slow path: scan for any existing keys (supports rotation/legacy)
-  const results = [] as KeyPair[]
-  const scanner = Storage.scan<SerializedKeyPair>(storage, ["encryption:key"])
-  for await (const [_key, value] of scanner) {
-    try {
-      const keyPair = await deserializeKeyPair(value, encryptionAlg)
-      results.push(keyPair)
-    } catch (err) {
-      console.error(
-        `[openauth:keys] Failed to load encryption key ${value.id}:`,
-        err,
-      )
+async function loadOrCreate(
+  storage: StorageAdapter,
+  kind: keyof typeof INDEX,
+  alg: string,
+  use?: string,
+): Promise<KeyPair[]> {
+  const atomic = Storage.atomic(storage)
+  const indexKey = [...INDEX[kind]]
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const index = (await atomic.get(indexKey)) as KeyIndex | undefined
+    if (!index) {
+      const legacy = await legacyKeys(storage, kind)
+      if (legacy.length) {
+        // Adopt existing keys (same ids); whoever adds first wins, all agree
+        await atomic.add(indexKey, { keys: legacy } satisfies KeyIndex)
+        continue
+      }
     }
-  }
+    const keys = index?.keys ?? []
+    if (keys.some((k) => !k.expired)) {
+      const loaded = await deserializeAll(keys, alg, use)
+      if (loaded.some((k) => !k.expired)) return loaded
+    }
 
-  // Return existing keys if any are unexpired
-  results.sort((a, b) => b.created.getTime() - a.created.getTime())
-  if (results.filter((item) => !item.expired).length) {
-    return results
+    // No usable key: create one with a unique kid and add it atomically
+    const pair = await generateKeyPair(alg, { extractable: true })
+    const fresh: SerializedKeyPair = {
+      id: crypto.randomUUID(),
+      publicKey: await exportSPKI(pair.publicKey),
+      privateKey: await exportPKCS8(pair.privateKey),
+      created: Date.now(),
+      alg,
+    }
+    const next: KeyIndex = { keys: [fresh, ...keys] }
+    const won = index
+      ? await atomic.replace(indexKey, index, next)
+      : await atomic.add(indexKey, next)
+    if (won) {
+      await Storage.set(storage, [...LEGACY_PREFIX[kind], fresh.id], fresh)
+      return deserializeAll(next.keys, alg, use)
+    }
+    // Another process created a key first: use theirs
   }
-
-  // No valid keys found - generate a new primary key
-  // Using fixed ID means multiple workers racing will overwrite each other,
-  // but that's fine - all generated keys are valid, and on next request
-  // everyone will read the same key
-  const key = await generateKeyPair(encryptionAlg, {
-    extractable: true,
-  })
-  const serialized: SerializedKeyPair = {
-    id: PRIMARY_ENCRYPTION_KEY_ID,
-    publicKey: await exportSPKI(key.publicKey),
-    privateKey: await exportPKCS8(key.privateKey),
-    created: Date.now(),
-    alg: encryptionAlg,
-  }
-  await Storage.set(
-    storage,
-    ["encryption:key", PRIMARY_ENCRYPTION_KEY_ID],
-    serialized,
-  )
-
-  // Re-read to get whatever key is now stored (handles race condition)
-  const savedKey = await Storage.get<SerializedKeyPair>(storage, [
-    "encryption:key",
-    PRIMARY_ENCRYPTION_KEY_ID,
-  ])
-  if (savedKey) {
-    return [await deserializeKeyPair(savedKey, encryptionAlg)]
-  }
-
-  // Fallback: return the key we just generated (should rarely happen)
-  console.warn(
-    "[openauth:keys] Using locally generated encryption key - storage may be unavailable",
-  )
-  return [await deserializeKeyPair(serialized, encryptionAlg)]
+  throw new Error(`[openauth:keys] Could not load or create ${kind} keys`)
 }
