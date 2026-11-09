@@ -54,6 +54,7 @@
  */
 import { Context } from "hono"
 import { Provider } from "./provider.js"
+import { renderOptions, type RenderOptions } from "../ui/render.js"
 import { generateUnbiasedDigits, timingSafeCompare } from "../random.js"
 
 export interface CodeProviderConfig<
@@ -82,6 +83,7 @@ export interface CodeProviderConfig<
     state: CodeProviderState,
     form?: FormData,
     error?: CodeProviderError,
+    render?: RenderOptions,
   ) => Promise<Response>
   /**
    * Callback to send the pin code to the user.
@@ -155,7 +157,7 @@ export function CodeProvider<
         await ctx.set<CodeProviderState>(c, "provider", 60 * 60 * 24, next)
         const resp = ctx.forward(
           c,
-          await config.request(c.req.raw, next, fd, err),
+          await config.request(c.req.raw, next, fd, err, renderOptions(c)),
         )
         return resp
       }

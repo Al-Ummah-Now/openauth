@@ -3,7 +3,7 @@
 /**
  * Device activation pages (RFC 8628 verification URI): enter the code shown on
  * the TV, confirm the sign-in, and the result. Localized (en/ar, RTL) like the
- * restart page: `?lang=` > Accept-Language > en.
+ * restart page: `?lang=` > en.
  *
  * @packageDocumentation
  */

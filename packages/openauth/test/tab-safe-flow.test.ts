@@ -278,7 +278,7 @@ describe("stale login page", () => {
     expect(html).toContain("ابدأ تسجيل الدخول من جديد")
   })
 
-  test("Arabic from Accept-Language when nothing else is known", async () => {
+  test("English, not the browser's Accept-Language, when no lang is given", async () => {
     const html = await expectRestartPage(
       await createAuth().request(`${ISSUER}/password/authorize`, {
         method: "POST",
@@ -290,7 +290,24 @@ describe("stale login page", () => {
       }),
       FALLBACK,
     )
-    expect(html).toContain('lang="ar"')
+    expect(html).toContain('lang="en"')
+    expect(html).toContain('dir="ltr"')
+  })
+
+  test("an unsupported or invalid lang falls back to English", async () => {
+    for (const lang of ["fr", "constructor", "__proto__", "ar-XX-<x>"]) {
+      const res = await createAuth().request(
+        `${ISSUER}/password/authorize?lang=${encodeURIComponent(lang)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(login).toString(),
+        },
+      )
+      const html = await expectRestartPage(res, FALLBACK)
+      expect(html).toContain('lang="en"')
+      expect(html).toContain('dir="ltr"')
+    }
   })
 
   test("storage lag: the cookie of the same flow still completes it", async () => {
