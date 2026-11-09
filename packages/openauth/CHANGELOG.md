@@ -9,13 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.29] - 2026-11-08
 
-
 ## [1.0.28] - 2026-11-08
 
 ### Added
 
 - OIDC auth_time (and iat) on access tokens, kept across refreshes (#20)
-
 
 ## [1.0.27] - 2026-11-08
 

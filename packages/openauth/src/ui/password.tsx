@@ -31,31 +31,11 @@ import {
   PasswordRegisterError,
 } from "../provider/password.js"
 import { Layout } from "./base.js"
+import { renderOptionsFromRequest } from "./render.js"
 import { withFlowParams } from "../flow.js"
 import "./form.js"
 import { FormAlert } from "./form.js"
-import type { Theme } from "./theme.js"
-import {
-  getLocaleFromRequest,
-  getTranslations,
-  type Locale,
-  type Translations,
-} from "./i18n.js"
-
-/**
- * Extracts theme from request header if available
- * @internal
- */
-function getThemeFromRequest(req: Request): Theme | undefined {
-  const themeHeader = req.headers.get("X-OpenAuth-Theme")
-  if (!themeHeader) return undefined
-
-  try {
-    return JSON.parse(themeHeader) as Theme
-  } catch {
-    return undefined
-  }
-}
+import { getTranslations, type Locale, type Translations } from "./i18n.js"
 
 const DEFAULT_COPY = {
   /**
@@ -188,9 +168,9 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
   return {
     validatePassword: input.validatePassword,
     sendCode: input.sendCode,
-    login: async (req, form, error): Promise<Response> => {
-      const theme = getThemeFromRequest(req)
-      const locale = getLocaleFromRequest(req)
+    login: async (req, form, error, render): Promise<Response> => {
+      const { theme, locale, direction } =
+        render ?? renderOptionsFromRequest(req)
       const t = getTranslations(locale)
       const copy = {
         ...DEFAULT_COPY,
@@ -223,7 +203,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         ...input.copy,
       }
       const jsx = (
-        <Layout theme={theme} locale={locale}>
+        <Layout theme={theme} locale={locale} direction={direction}>
           <form data-component="form" method="post">
             <FormAlert message={error?.type && copy?.[`error_${error.type}`]} />
             <input
@@ -269,9 +249,9 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         },
       })
     },
-    register: async (req, state, form, error): Promise<Response> => {
-      const theme = getThemeFromRequest(req)
-      const locale = getLocaleFromRequest(req)
+    register: async (req, state, form, error, render): Promise<Response> => {
+      const { theme, locale, direction } =
+        render ?? renderOptionsFromRequest(req)
       const t = getTranslations(locale)
       const copy = {
         ...DEFAULT_COPY,
@@ -312,7 +292,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         "validation_error",
       ].includes(error?.type || "")
       const jsx = (
-        <Layout theme={theme} locale={locale}>
+        <Layout theme={theme} locale={locale} direction={direction}>
           <form data-component="form" method="post">
             <FormAlert
               message={
@@ -399,9 +379,9 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         },
       })
     },
-    change: async (req, state, form, error): Promise<Response> => {
-      const theme = getThemeFromRequest(req)
-      const locale = getLocaleFromRequest(req)
+    change: async (req, state, form, error, render): Promise<Response> => {
+      const { theme, locale, direction } =
+        render ?? renderOptionsFromRequest(req)
       const t = getTranslations(locale)
       const copy = {
         ...DEFAULT_COPY,
@@ -437,7 +417,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         "validation_error",
       ].includes(error?.type || "")
       const jsx = (
-        <Layout theme={theme} locale={locale}>
+        <Layout theme={theme} locale={locale} direction={direction}>
           <form data-component="form" method="post" replace>
             <FormAlert
               message={

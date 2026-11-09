@@ -39,6 +39,7 @@
  */
 import { Storage } from "../storage/storage.js"
 import { Provider } from "./provider.js"
+import { renderOptions, type RenderOptions } from "../ui/render.js"
 import { generateUnbiasedDigits, timingSafeCompare } from "../random.js"
 import { v1 } from "@standard-schema/spec"
 
@@ -75,6 +76,7 @@ export interface PasswordConfig {
     req: Request,
     form?: FormData,
     error?: PasswordLoginError,
+    render?: RenderOptions,
   ) => Promise<Response>
   /**
    * The request handler to generate the UI for the register screen.
@@ -93,6 +95,7 @@ export interface PasswordConfig {
     state: PasswordRegisterState,
     form?: FormData,
     error?: PasswordRegisterError,
+    render?: RenderOptions,
   ) => Promise<Response>
   /**
    * The request handler to generate the UI for the change password screen.
@@ -111,6 +114,7 @@ export interface PasswordConfig {
     state: PasswordChangeState,
     form?: FormData,
     error?: PasswordChangeError,
+    render?: RenderOptions,
   ) => Promise<Response>
   /**
    * Callback to send the confirmation pin code to the user.
@@ -328,13 +332,19 @@ export function PasswordProvider(
     type: "password",
     init(routes, ctx) {
       routes.get("/authorize", async (c) =>
-        ctx.forward(c, await config.login(c.req.raw)),
+        ctx.forward(
+          c,
+          await config.login(c.req.raw, undefined, undefined, renderOptions(c)),
+        ),
       )
 
       routes.post("/authorize", async (c) => {
         const fd = await c.req.formData()
         async function error(err: PasswordLoginError) {
-          return ctx.forward(c, await config.login(c.req.raw, fd, err))
+          return ctx.forward(
+            c,
+            await config.login(c.req.raw, fd, err, renderOptions(c)),
+          )
         }
         const email = fd.get("email")?.toString()?.toLowerCase()
         if (!email) return error({ type: "invalid_email" })
@@ -397,7 +407,16 @@ export function PasswordProvider(
           type: "start",
         }
         await ctx.set(c, "provider", 60 * 60 * 24, state)
-        return ctx.forward(c, await config.register(c.req.raw, state))
+        return ctx.forward(
+          c,
+          await config.register(
+            c.req.raw,
+            state,
+            undefined,
+            undefined,
+            renderOptions(c),
+          ),
+        )
       })
 
       routes.post("/register", async (c) => {
@@ -420,7 +439,10 @@ export function PasswordProvider(
             60 * 60 * 24,
             next,
           )
-          return ctx.forward(c, await config.register(c.req.raw, next, fd, err))
+          return ctx.forward(
+            c,
+            await config.register(c.req.raw, next, fd, err, renderOptions(c)),
+          )
         }
 
         if (action === "register" && provider.type === "start") {
@@ -518,7 +540,16 @@ export function PasswordProvider(
           redirect,
         }
         await ctx.set(c, "provider", 60 * 60 * 24, state)
-        return ctx.forward(c, await config.change(c.req.raw, state))
+        return ctx.forward(
+          c,
+          await config.change(
+            c.req.raw,
+            state,
+            undefined,
+            undefined,
+            renderOptions(c),
+          ),
+        )
       })
 
       routes.post("/change", async (c) => {
@@ -538,7 +569,10 @@ export function PasswordProvider(
           err?: PasswordChangeError,
         ) {
           await ctx.set<PasswordChangeState>(c, "provider", 60 * 60 * 24, next)
-          return ctx.forward(c, await config.change(c.req.raw, next, fd, err))
+          return ctx.forward(
+            c,
+            await config.change(c.req.raw, next, fd, err, renderOptions(c)),
+          )
         }
 
         if (action === "code") {
