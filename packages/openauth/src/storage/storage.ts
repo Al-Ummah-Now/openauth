@@ -12,6 +12,13 @@ export interface StorageAdapter {
    * consistent stores such as Cloudflare KV cannot give one-time use).
    */
   atomic?: AtomicStorageAdapter
+  /**
+   * Optional stable name of the underlying store (e.g. the KV namespace).
+   * Adapters are often rebuilt per request; with a scope, data derived from
+   * the store that rarely changes (imported signing and encryption keys) is
+   * cached in module scope across requests for a few minutes.
+   */
+  scope?: string
 }
 
 /**
