@@ -646,8 +646,7 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      | EnterpriseAuthorizationState
-      | undefined
+      EnterpriseAuthorizationState | undefined
 
     if (tenant) {
       ctx.set(ENTERPRISE_CONTEXT_KEY, {
@@ -1169,8 +1168,7 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        | EnterpriseAuthorizationState
-        | undefined
+        EnterpriseAuthorizationState | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)

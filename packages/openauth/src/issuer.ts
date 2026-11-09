@@ -982,8 +982,7 @@ export function issuer<
       // Storage may lag right after /authorize: accept the legacy cookie, but
       // only when it was written for this same flow (it is browser-bound).
       const cookie = (await auth.get(ctx, "authorization")) as
-        | AuthorizationState
-        | undefined
+        AuthorizationState | undefined
       if (cookie?.flow && cookie.flow === flow.id) return cookie
       throw flowError(
         flow.record ? "mismatch" : "expired",
@@ -1019,8 +1018,7 @@ export function issuer<
       await saveFlow(flow.id, flow.record)
     }
     const cookie = (await auth.get(ctx, "authorization")) as
-      | AuthorizationState
-      | undefined
+      AuthorizationState | undefined
     if (cookie?.flow === flow.id) deleteCookie(ctx, "authorization")
   }
 

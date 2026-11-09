@@ -528,8 +528,7 @@ export function registerDeviceFlow(
       return page(c, { page: "failed" }, 400)
     }
     const payload = redeemed.payload as
-      | (AuthorizationCodePayload & DeviceGrant)
-      | undefined
+      (AuthorizationCodePayload & DeviceGrant) | undefined
     if (
       !payload ||
       payload.clientID !== record.clientID ||
