@@ -80,6 +80,12 @@ export interface Translations {
   device_failed_title: string
   device_failed_description: string
 
+  // Account picker
+  picker_title: string
+  picker_description: string
+  picker_sign_out: string
+  picker_use_another: string
+
   // Code UI
   email_placeholder: string
   email_invalid: string
@@ -108,6 +114,10 @@ export interface Translations {
 export const en: Translations = {
   // Common
   button_continue: "Continue",
+  picker_title: "Choose Account",
+  picker_description: "Select an account to continue",
+  picker_sign_out: "Sign out",
+  picker_use_another: "+ Use another account",
   restart_title: "Let's start your sign-in again",
   restart_description:
     "This sign-in page is no longer active. This happens when it was open for a long time, opened from a bookmark or the back button, or used in another tab.",
@@ -271,6 +281,12 @@ export const ar: Translations = {
   provider_facebook: "فيسبوك",
   provider_microsoft: "مايكروسوفت",
   provider_slack: "سلاك",
+
+  // Account picker
+  picker_title: "اختر حسابًا",
+  picker_description: "اختر حسابًا للمتابعة",
+  picker_sign_out: "تسجيل الخروج",
+  picker_use_another: "+ استخدام حساب آخر",
 }
 
 /**
@@ -300,7 +316,7 @@ export const DEFAULT_LOCALE: Locale = "en"
  * @returns The text direction ("ltr" or "rtl")
  */
 export function getDirection(locale: Locale): Direction {
-  return localeDirections[locale] || "ltr"
+  return isLocaleSupported(locale) ? localeDirections[locale] : "ltr"
 }
 
 /**
@@ -309,9 +325,8 @@ export function getDirection(locale: Locale): Direction {
  * @returns The translations object
  */
 export function getTranslations(locale?: Locale | string): Translations {
-  if (!locale) return en
-  const normalizedLocale = locale.split("-")[0].toLowerCase() as Locale
-  return translations[normalizedLocale] || en
+  const normalized = normalizeLocale(locale)
+  return normalized ? translations[normalized] : en
 }
 
 /**
@@ -320,7 +335,18 @@ export function getTranslations(locale?: Locale | string): Translations {
  * @returns True if the locale is supported
  */
 export function isLocaleSupported(locale: string): locale is Locale {
-  return locale in translations
+  // Own keys only: `"constructor" in translations` is true.
+  return Object.prototype.hasOwnProperty.call(translations, locale)
+}
+
+/**
+ * The supported locale a tag names, by its primary subtag ("ar-EG" is "ar").
+ * @param locale - A locale tag
+ * @returns The supported locale, or undefined
+ */
+export function normalizeLocale(locale?: string): Locale | undefined {
+  const primary = locale?.split("-")[0].toLowerCase()
+  return primary && isLocaleSupported(primary) ? primary : undefined
 }
 
 /**
@@ -338,7 +364,7 @@ export function getLocaleFromUrl(url: URL | string): Locale | undefined {
 }
 
 /**
- * Extract locale from request (URL parameter).
+ * Extract locale from request: `?lang=`, otherwise English.
  * @param req - The request object
  * @returns The detected locale or default
  */

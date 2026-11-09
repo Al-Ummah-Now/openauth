@@ -23,6 +23,7 @@ import type { StorageAdapter } from "../storage/storage.js"
 import type { Provider } from "../provider/provider.js"
 import type { SubjectSchema, SubjectPayload } from "../subject.js"
 import type { Theme } from "../ui/theme.js"
+import type { RenderOptions } from "../ui/render.js"
 import type { D1Database } from "@cloudflare/workers-types"
 import type { Context } from "hono"
 import type { AuditService } from "../services/audit.js"
@@ -121,13 +122,10 @@ export interface EnterpriseIssuerConfig<
    * Theme priority chain (resolved per request):
    * 1. tenant.branding.theme (per-tenant customization) - highest priority
    * 2. config.theme (this property) - default for all tenants
-   * 3. Default tenant theme (tenant with ID "default" from database)
-   * 4. THEME_OPENAUTH (hardcoded fallback) - lowest priority
+   * 3. THEME_OPENAUTH (hardcoded fallback) - lowest priority
    *
-   * The resolved theme is:
-   * - Set to globalThis via setTheme() for SSR components
-   * - Available via ctx.get("resolvedTheme") for programmatic access
-   * - Compatible with existing UI components that use getTheme()
+   * The resolved theme is kept on the request context, available via
+   * ctx.get("resolvedTheme"), and passed to every page render.
    *
    * @example
    * ```typescript
@@ -322,7 +320,11 @@ export interface EnterpriseIssuerConfig<
    * })
    * ```
    */
-  error?(error: UnknownStateError, req: Request): Promise<Response>
+  error?(
+    error: UnknownStateError,
+    req: Request,
+    render?: RenderOptions,
+  ): Promise<Response>
 
   /**
    * Where the friendly "Start sign-in again" page links when the flow's
@@ -576,7 +578,15 @@ export interface OIDCErrorResponse {
 /**
  * Context variables set by enterprise middleware
  */
+export interface EnterpriseRequestContext {
+  tenant: Tenant
+  browserSession: BrowserSession | null
+  authorization: EnterpriseAuthorizationState | null
+}
+
 export interface EnterpriseContextVariables {
+  /** Tenant, session and authorization of this request, for the success callback. */
+  enterpriseRequestContext?: EnterpriseRequestContext
   /**
    * Resolved tenant
    */
@@ -614,11 +624,9 @@ export interface EnterpriseContextVariables {
    * Set using the following priority chain:
    * 1. tenant.branding.theme (per-tenant customization)
    * 2. config.theme (from createMultiTenantIssuer)
-   * 3. Default tenant theme (tenant with ID "default")
-   * 4. THEME_OPENAUTH (hardcoded fallback)
+   * 3. THEME_OPENAUTH (hardcoded fallback)
    *
-   * Can be accessed programmatically via `ctx.get("resolvedTheme")`
-   * or use `getTheme()` from `@openauthjs/openauth/ui/theme` for SSR.
+   * Can be accessed programmatically via `ctx.get("resolvedTheme")`.
    */
   resolvedTheme?: Theme
 }

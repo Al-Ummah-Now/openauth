@@ -28,23 +28,8 @@ import { CodeProviderOptions } from "../provider/code.js"
 import { UnknownStateError } from "../error.js"
 import { Layout } from "./base.js"
 import { FormAlert } from "./form.js"
-import type { Theme } from "./theme.js"
-import { getLocaleFromRequest, getTranslations, type Locale } from "./i18n.js"
-
-/**
- * Extracts theme from request header if available
- * @internal
- */
-function getThemeFromRequest(req: Request): Theme | undefined {
-  const themeHeader = req.headers.get("X-OpenAuth-Theme")
-  if (!themeHeader) return undefined
-
-  try {
-    return JSON.parse(themeHeader) as Theme
-  } catch {
-    return undefined
-  }
-}
+import { renderOptionsFromRequest } from "./render.js"
+import { getTranslations, type Locale } from "./i18n.js"
 
 const DEFAULT_COPY = {
   /**
@@ -130,9 +115,9 @@ export function CodeUI(props: CodeUIOptions): CodeProviderOptions {
   return {
     sendCode: props.sendCode,
     length: 6,
-    request: async (req, state, _form, error): Promise<Response> => {
-      const theme = getThemeFromRequest(req)
-      const locale = getLocaleFromRequest(req)
+    request: async (req, state, _form, error, render): Promise<Response> => {
+      const { theme, locale, direction } =
+        render ?? renderOptionsFromRequest(req)
       const t = getTranslations(locale)
       const copy = {
         ...DEFAULT_COPY,
@@ -151,7 +136,7 @@ export function CodeUI(props: CodeUIOptions): CodeProviderOptions {
 
       if (state.type === "start") {
         const jsx = (
-          <Layout theme={theme} locale={locale}>
+          <Layout theme={theme} locale={locale} direction={direction}>
             <form data-component="form" method="post">
               {error?.type === "invalid_claim" && (
                 <FormAlert message={copy.email_invalid} />
@@ -180,7 +165,7 @@ export function CodeUI(props: CodeUIOptions): CodeProviderOptions {
 
       if (state.type === "code") {
         const jsx = (
-          <Layout theme={theme} locale={locale}>
+          <Layout theme={theme} locale={locale} direction={direction}>
             <form data-component="form" class="form" method="post">
               {error?.type === "invalid_code" && (
                 <FormAlert message={copy.code_invalid} />

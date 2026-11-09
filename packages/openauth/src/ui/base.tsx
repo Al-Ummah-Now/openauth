@@ -2,17 +2,17 @@ import { PropsWithChildren } from "hono/jsx"
 import css from "./ui.css" assert { type: "text" }
 import { resolveTheme, resolveLocalizedString, type Theme } from "./theme.js"
 import {
+  DEFAULT_LOCALE,
   getDirection,
-  getTranslations,
+  normalizeLocale,
   type Locale,
-  type Translations,
 } from "./i18n.js"
 
 export interface LayoutProps {
   size?: "small"
   theme?: Theme
   /**
-   * The locale for the UI. Overrides theme.locale.
+   * The locale for the UI. English when missing or unsupported.
    */
   locale?: Locale | string
   /**
@@ -23,10 +23,10 @@ export interface LayoutProps {
 
 export function Layout(props: PropsWithChildren<LayoutProps>) {
   const theme = resolveTheme(props.theme)
-  // Priority: props.locale > theme.locale > "en"
-  const locale = (props.locale || theme?.locale || "en") as Locale
-  // Priority: props.direction > theme.direction > derived from locale
-  const direction = props.direction || theme?.direction || getDirection(locale)
+  // The request decides these, never the theme: a theme can be shared by
+  // requests in different languages.
+  const locale = normalizeLocale(props.locale) ?? DEFAULT_LOCALE
+  const direction = props.direction || getDirection(locale)
   function get(key: "primary" | "background" | "logo", mode: "light" | "dark") {
     if (!theme) return
     if (!theme[key]) return

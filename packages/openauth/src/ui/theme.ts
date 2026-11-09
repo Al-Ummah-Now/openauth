@@ -92,28 +92,11 @@ export interface Theme {
    */
   title?: LocalizedString
   /**
-   * The text direction for the UI.
-   *
-   * @default "ltr"
-   * @example
-   * ```ts
-   * {
-   *   direction: "rtl"
-   * }
-   * ```
+   * @deprecated Ignored. The request's locale decides the direction.
    */
   direction?: "ltr" | "rtl"
   /**
-   * The locale for the UI. Determines the language of UI text.
-   * Can also be set via `?lang=` URL parameter.
-   *
-   * @default "en"
-   * @example
-   * ```ts
-   * {
-   *   locale: "ar"
-   * }
-   * ```
+   * @deprecated Ignored. The request's `?lang=` decides the language.
    */
   locale?: string
   /**
@@ -346,35 +329,16 @@ export const THEME_VERCEL: Theme = {
   `,
 }
 
-// i really don't wanna use async local storage for this so get over it
-
 /**
- * @internal
- */
-export function setTheme(value: Theme) {
-  // @ts-ignore
-  globalThis.OPENAUTH_THEME = value
-}
-
-/**
- * @internal
- */
-export function getTheme() {
-  // @ts-ignore
-  return globalThis.OPENAUTH_THEME || THEME_OPENAUTH
-}
-
-/**
- * Get theme with explicit precedence.
+ * The theme for one render.
  *
- * @param explicitTheme - Theme passed explicitly (takes precedence)
+ * @param explicitTheme - The theme passed to this render
  * @returns The resolved theme
  *
  * @internal
  */
 export function resolveTheme(explicitTheme?: Theme): Theme {
-  // Priority: explicit > global > default
-  return explicitTheme || getTheme()
+  return explicitTheme || THEME_OPENAUTH
 }
 
 /**
@@ -382,7 +346,7 @@ export function resolveTheme(explicitTheme?: Theme): Theme {
  */
 export interface ThemeProps {
   /**
-   * Optional theme override. If not provided, falls back to global theme.
+   * The theme for this render. If not provided, the built-in default.
    */
   theme?: Theme
 }

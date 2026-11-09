@@ -27,7 +27,7 @@ import type { ClientD1Adapter } from "./client/client-d1-adapter.js"
 import { generatePKCE, validatePKCE } from "./pkce.js"
 import { DevicePage } from "./ui/device.js"
 import { restartLocale } from "./ui/restart.js"
-import type { Theme } from "./ui/theme.js"
+import { renderOptions } from "./ui/render.js"
 
 export const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 /** Consonants only (no vowels: no words; no 0/O, 1/I lookalikes), per RFC 8628 §6.1. */
@@ -99,7 +99,6 @@ interface DeviceFlowDeps {
     c: Context,
     grant: DeviceGrant,
   ) => Promise<{ access: string; refresh: string; expiresIn: number }>
-  theme?: () => Theme | undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +283,7 @@ export function registerDeviceFlow(
     headers?: Record<string, string>,
   ) =>
     DevicePage(restartLocale(c.req.raw), input, {
-      theme: deps.theme?.(),
+      theme: renderOptions(c).theme,
       status,
       headers,
     })

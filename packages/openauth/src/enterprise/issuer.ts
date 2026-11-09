@@ -125,11 +125,7 @@ import {
   UnauthorizedClientError,
   UnknownStateError,
 } from "../error.js"
-import {
-  setTheme,
-  THEME_OPENAUTH,
-  resolveLocalizedString,
-} from "../ui/theme.js"
+import { THEME_OPENAUTH, resolveLocalizedString } from "../ui/theme.js"
 import type { Theme } from "../ui/theme.js"
 import { ClientD1Adapter } from "../client/client-d1-adapter.js"
 import {
@@ -143,6 +139,9 @@ import {
   deviceDiscovery,
 } from "../device.js"
 import { ClientErrorPage } from "../ui/client-error.js"
+import { RESOLVED_THEME_KEY, renderOptions } from "../ui/render.js"
+import { forwardRequest } from "../forward.js"
+import { getLocaleFromUrl, getTranslations } from "../ui/i18n.js"
 import type { ClientErrorReason } from "../ui/client-error.js"
 import type { D1Database } from "@cloudflare/workers-types"
 
@@ -154,28 +153,30 @@ import type { D1Database } from "@cloudflare/workers-types"
  * Options for the enterprise theme middleware
  */
 interface EnterpriseThemeMiddlewareOptions {
-  tenantService: TenantService
   configTheme?: Theme
 }
 
 /**
  * Theme Resolution Middleware
  *
- * Resolves theme using priority chain and sets to globalThis for SSR.
+ * Resolves the theme using priority chain and stores it on the request context.
  *
  * Priority Chain:
  * 1. tenant.branding.theme (resolved tenant's theme)
  * 2. config.theme (from createMultiTenantIssuer config)
- * 3. Default tenant from DB (prepared for future)
- * 4. THEME_OPENAUTH (hardcoded fallback)
+ * 3. THEME_OPENAUTH (hardcoded fallback)
  */
+const ENTERPRISE_CONTEXT_KEY = "enterpriseRequestContext"
+
+function enterpriseContext(
+  c: Context,
+): EnterpriseContextVariables["enterpriseRequestContext"] {
+  return c.get(ENTERPRISE_CONTEXT_KEY)
+}
+
 function createEnterpriseThemeMiddleware(
   options: EnterpriseThemeMiddlewareOptions,
 ): MiddlewareHandler {
-  let defaultTenantCache: { tenant: Tenant | null; timestamp: number } | null =
-    null
-  const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
   return async function enterpriseThemeMiddleware(
     ctx: Context,
     next: Next,
@@ -193,33 +194,13 @@ function createEnterpriseThemeMiddleware(
       resolvedTheme = options.configTheme
     }
 
-    // Priority 3: Default tenant theme (prepared for future)
-    if (!resolvedTheme) {
-      const now = Date.now()
-      if (
-        defaultTenantCache &&
-        now - defaultTenantCache.timestamp < CACHE_TTL
-      ) {
-        if (defaultTenantCache.tenant?.branding?.theme) {
-          resolvedTheme = convertTenantThemeToUITheme(
-            defaultTenantCache.tenant.branding.theme,
-          )
-        }
-      } else {
-        defaultTenantCache = { tenant: null, timestamp: now }
-      }
-    }
-
-    // Priority 4: THEME_OPENAUTH fallback
+    // Priority 3: THEME_OPENAUTH fallback
     if (!resolvedTheme) {
       resolvedTheme = THEME_OPENAUTH
     }
 
-    // Set theme to globalThis for SSR components
-    setTheme(resolvedTheme)
-
-    // Store in context for programmatic access
-    ctx.set("resolvedTheme", resolvedTheme)
+    // Per request: pages read it from this request's context, never a global
+    ctx.set(RESOLVED_THEME_KEY, resolvedTheme)
 
     await next()
   }
@@ -299,17 +280,7 @@ export function createMultiTenantIssuer<
   // ============================================
   // CONTEXT FOR PASSING DATA TO SUCCESS CALLBACK
   // ============================================
-  // We use a WeakMap to associate request objects with their enterprise context
-  // This avoids polluting the global scope while enabling the success callback
-  // to access tenant and session information.
-  const requestContextMap = new WeakMap<
-    Request,
-    {
-      tenant: Tenant
-      browserSession: BrowserSession | null
-      authorization: EnterpriseAuthorizationState | null
-    }
-  >()
+  // Kept on the request's own Hono context, so one request can't see another's.
 
   // ============================================
   // CREATE BASE ISSUER WITH WRAPPED SUCCESS
@@ -331,13 +302,14 @@ export function createMultiTenantIssuer<
     responder: OnSuccessResponder<SubjectPayload<Subjects>>,
     value: any,
     req: Request,
+    c: Context | undefined,
     /**
      * Silent SSO: when the account session was really authenticated. Kept on
      * the session so a chain of silent sign-ons can't refresh auth_time.
      */
     silentAuthenticatedAt?: number,
   ): Promise<Response> {
-    const ctx = requestContextMap.get(req)
+    const ctx = c ? enterpriseContext(c) : undefined
     if (!ctx?.tenant) {
       // No enterprise context - delegate directly to base
       throw new Error("Enterprise context not found for request")
@@ -537,8 +509,8 @@ export function createMultiTenantIssuer<
     restart: config.restart,
 
     // Allow check delegates to enterprise onAllow with tenant context
-    allow: async (input, req) => {
-      const ctx = requestContextMap.get(req)
+    allow: async (input, req, c) => {
+      const ctx = c ? enterpriseContext(c) : undefined
       if (!ctx?.tenant) {
         // Fallback to default allow check if no tenant context
         return defaultAllowCheck(input, req, !!configuredIssuer)
@@ -559,8 +531,8 @@ export function createMultiTenantIssuer<
     },
 
     // Success callback intercepts to add enterprise features
-    success: (responder, value, req) =>
-      enterpriseSuccess(responder, value, req),
+    success: (responder, value, req, c) =>
+      enterpriseSuccess(responder, value, req, c),
 
     // Provider selection UI (inherits from base)
     select: config.select,
@@ -600,6 +572,16 @@ export function createMultiTenantIssuer<
     )
   }
 
+  // Pages rendered before the tenant is known (an error in the resolver) still
+  // get the configured theme; the theme middleware below refines it.
+  if (config.theme) {
+    const configTheme = config.theme
+    app.use("*", async (ctx, next) => {
+      ctx.set(RESOLVED_THEME_KEY, configTheme)
+      await next()
+    })
+  }
+
   // ============================================
   // 2. TENANT RESOLVER MIDDLEWARE
   // ============================================
@@ -628,7 +610,6 @@ export function createMultiTenantIssuer<
   app.use(
     "*",
     createEnterpriseThemeMiddleware({
-      tenantService: config.tenantService,
       configTheme: config.theme,
     }),
   )
@@ -651,7 +632,7 @@ export function createMultiTenantIssuer<
   // ============================================
   // 5. CONTEXT BRIDGE MIDDLEWARE
   // ============================================
-  // Store enterprise context in WeakMap so success callback can access it
+  // Store enterprise context on the request so the success callback can read it
 
   app.use("*", async (ctx, next) => {
     const tenant = getTenant(ctx)
@@ -664,10 +645,11 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
-      requestContextMap.set(ctx.req.raw, {
+      ctx.set(ENTERPRISE_CONTEXT_KEY, {
         tenant,
         browserSession,
         authorization: authorization || null,
@@ -761,7 +743,7 @@ export function createMultiTenantIssuer<
     // Missing core parameters: let the base issuer produce its standard errors
     // (no prompt / silent-auth handling without a validated redirect_uri).
     if (!authorization.redirect_uri || !authorization.client_id) {
-      return baseIssuer.request(c.req.raw)
+      return forwardRequest(baseIssuer, c)
     }
 
     // SECURITY: validate client_id/redirect_uri BEFORE any prompt handling.
@@ -823,6 +805,7 @@ export function createMultiTenantIssuer<
         )
         if (config.clientRegistry.mode === "enforce") {
           return ClientErrorPage(c.req.raw, {
+            theme: renderOptions(c).theme,
             reason,
             homeUrl:
               config.clientRegistry.homeUrl ?? config.restart?.fallbackUrl,
@@ -846,7 +829,7 @@ export function createMultiTenantIssuer<
     }
 
     // Update context map with authorization
-    requestContextMap.set(c.req.raw, {
+    c.set(ENTERPRISE_CONTEXT_KEY, {
       tenant,
       browserSession,
       authorization,
@@ -973,14 +956,14 @@ export function createMultiTenantIssuer<
         silentResponder,
         { provider: "session", ...identity },
         c.req.raw,
+        c,
         account.authenticated_at,
       )
     }
 
     // Delegate to base issuer for actual authorization
     // Create a new request that will be handled by the base issuer
-    const baseResponse = await baseIssuer.request(c.req.raw)
-    return baseResponse
+    return forwardRequest(baseIssuer, c)
   })
 
   // ============================================
@@ -1014,6 +997,13 @@ export function createMultiTenantIssuer<
       typeof formData.scope === "string" ? formData.scope : undefined
     const nonce =
       typeof formData.nonce === "string" ? formData.nonce : undefined
+
+    const lang =
+      typeof formData.lang === "string"
+        ? getLocaleFromUrl(
+            `https://x/?lang=${encodeURIComponent(formData.lang)}`,
+          )
+        : undefined
 
     // Validate required OAuth parameters
     if (!userId) {
@@ -1059,6 +1049,7 @@ export function createMultiTenantIssuer<
     if (nonce) authorizeUrl.searchParams.set("nonce", nonce)
     authorizeUrl.searchParams.set("prompt", "select_account")
 
+    if (lang) authorizeUrl.searchParams.set("lang", lang)
     return c.redirect(authorizeUrl.toString(), 302)
   })
 
@@ -1164,14 +1155,21 @@ export function createMultiTenantIssuer<
 
     if (err instanceof UnknownStateError) {
       // Never show the technical error: render the friendly restart page.
+      const render = renderOptions(c)
       return config.error
-        ? config.error(err, c.req.raw)
-        : unknownStateResponse(err, c.req.raw, config.restart?.fallbackUrl)
+        ? config.error(err, c.req.raw, render)
+        : unknownStateResponse(
+            err,
+            c.req.raw,
+            config.restart?.fallbackUrl,
+            render.theme,
+          )
     }
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1370,11 +1368,13 @@ function renderAccountPicker(
   tenant: Tenant,
 ): Response {
   // Get resolved theme from middleware context, with fallbacks
-  const resolvedTheme: Theme | undefined = ctx.get("resolvedTheme")
+  const render = renderOptions(ctx)
+  const resolvedTheme = render.theme
   const tenantTheme = tenant?.branding?.theme
   const theme: Theme = resolvedTheme || (tenantTheme as Theme) || THEME_OPENAUTH
 
   const baseUrl = new URL(ctx.req.url).origin
+  const lang = getLocaleFromUrl(new URL(ctx.req.url))
 
   // Extract theme values with light/dark support
   const primaryLight = getThemeValue(theme.primary, "light") || "#000000"
@@ -1390,9 +1390,8 @@ function renderAccountPicker(
   const fontScale = theme.font?.scale || "1"
   const radius = getRadiusMultiplier(theme.radius)
 
-  // Get locale from URL or theme
-  const url = new URL(ctx.req.url)
-  const locale = url.searchParams.get("lang") || theme.locale || "en"
+  const { locale, direction } = render
+  const t = getTranslations(locale)
   const title =
     resolveLocalizedString(theme.title, locale) || tenant?.name || "OpenAuth"
 
@@ -1420,7 +1419,7 @@ function renderAccountPicker(
 
   const html = `
 <!DOCTYPE html>
-<html style="
+<html lang="${locale}" dir="${direction}" style="
   --color-background-light: ${escapeHtml(bgLight)};
   --color-background-dark: ${escapeHtml(bgDark)};
   --color-primary-light: ${escapeHtml(primaryLight)};
@@ -1432,7 +1431,7 @@ function renderAccountPicker(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Choose Account - ${escapeHtml(title)}</title>
+  <title>${escapeHtml(t.picker_title)} - ${escapeHtml(title)}</title>
   ${faviconHtml}
   <style>
     @import url("https://unpkg.com/tailwindcss@3.4.15/src/css/preflight.css");
@@ -1643,8 +1642,8 @@ function renderAccountPicker(
       ${logoHtml}
     </div>
     <div class="header">
-      <h1>Choose Account</h1>
-      <p class="subtitle">Select an account to continue</p>
+      <h1>${escapeHtml(t.picker_title)}</h1>
+      <p class="subtitle">${escapeHtml(t.picker_description)}</p>
     </div>
     <div class="accounts-list">
     ${accounts
@@ -1664,6 +1663,7 @@ function renderAccountPicker(
           accountUrl.searchParams.set("nonce", authorization.nonce)
         accountUrl.searchParams.set("prompt", "none")
         accountUrl.searchParams.set("account_hint", account.userId)
+        if (lang) accountUrl.searchParams.set("lang", lang)
         const activeClass = Boolean(account.isActive) ? "active" : ""
         return `
       <div class="account-row">
@@ -1680,11 +1680,12 @@ function renderAccountPicker(
             }
           </div>
           <div class="account-info">
-            <div class="account-name">${escapeHtml(account.displayName || account.email || account.userId)}</div>
-            ${account.email && account.displayName ? `<div class="account-email">${escapeHtml(account.email)}</div>` : ""}
+            <div class="account-name" dir="auto">${escapeHtml(account.displayName || account.email || account.userId)}</div>
+            ${account.email && account.displayName ? `<div class="account-email" dir="auto">${escapeHtml(account.email)}</div>` : ""}
           </div>
         </a>
         <form method="POST" action="/account-picker/remove" style="margin: 0;">
+          ${lang ? `<input type="hidden" name="lang" value="${lang}">` : ""}
           <input type="hidden" name="user_id" value="${escapeHtml(account.userId)}">
           <input type="hidden" name="client_id" value="${escapeHtml(authorization.client_id)}">
           <input type="hidden" name="redirect_uri" value="${escapeHtml(authorization.redirect_uri)}">
@@ -1692,15 +1693,15 @@ function renderAccountPicker(
           <input type="hidden" name="state" value="${escapeHtml(authorization.state || "")}">
           <input type="hidden" name="scope" value="${escapeHtml(authorization.scope || "")}">
           <input type="hidden" name="nonce" value="${escapeHtml(authorization.nonce || "")}">
-          <button type="submit" class="signout-btn">Sign out</button>
+          <button type="submit" class="signout-btn">${escapeHtml(t.picker_sign_out)}</button>
         </form>
       </div>
     `
       })
       .join("")}
     </div>
-    <a href="${generateAddAccountUrl(baseUrl + "/authorize", authorization)}" class="add-account">
-      + Use another account
+    <a href="${generateAddAccountUrl(baseUrl + "/authorize", authorization, lang)}" class="add-account">
+      ${escapeHtml(t.picker_use_another)}
     </a>
   </div>
 </body>

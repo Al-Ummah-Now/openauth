@@ -10,7 +10,12 @@
  */
 
 import { Layout } from "./base.js"
-import { getLocaleFromUrl, getTranslations, isLocaleSupported } from "./i18n.js"
+import {
+  DEFAULT_LOCALE,
+  getLocaleFromUrl,
+  getTranslations,
+  normalizeLocale,
+} from "./i18n.js"
 import type { Locale } from "./i18n.js"
 import type { Theme } from "./theme.js"
 
@@ -26,12 +31,9 @@ export interface RestartPageInput {
 export function restartLocale(req: Request, hint?: string): Locale {
   const fromUrl = getLocaleFromUrl(new URL(req.url))
   if (fromUrl) return fromUrl
-  const normalized = hint?.split("-")[0].toLowerCase()
-  if (normalized && isLocaleSupported(normalized)) return normalized
   const accept = req.headers.get("accept-language") || ""
-  const first = accept.split(",")[0]?.trim().split(/[-;]/)[0]?.toLowerCase()
-  if (first && isLocaleSupported(first)) return first
-  return "en"
+  const first = accept.split(",")[0]?.trim().split(";")[0]
+  return normalizeLocale(hint) ?? normalizeLocale(first) ?? DEFAULT_LOCALE
 }
 
 export function RestartPage(req: Request, input: RestartPageInput): Response {
