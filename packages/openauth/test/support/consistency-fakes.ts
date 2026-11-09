@@ -84,12 +84,33 @@ export class SharedAtomicStore {
         await roundTrip()
         this.rows.delete(joinKey(key))
       },
+      removePrefix: async (prefix) => {
+        await roundTrip()
+        const p = joinKey([...prefix, ""])
+        let n = 0
+        for (const k of [...this.rows.keys()])
+          if (k.startsWith(p)) {
+            this.rows.delete(k)
+            n++
+          }
+        return n
+      },
     }
   }
 }
 
 export class EventualKV {
   readonly global = new Map<string, Entry>()
+  /**
+   * @param propagationMs  how long a write takes to reach the other PoPs
+   *   (Cloudflare: up to ~60 s). 0 = at once.
+   */
+  constructor(public propagationMs = 0) {}
+
+  private publish(apply: () => void) {
+    if (this.propagationMs) setTimeout(apply, this.propagationMs)
+    else apply()
+  }
 
   /** One PoP's view. `atomic` is attached as the adapter's atomic store. */
   pop(atomic?: AtomicStorageAdapter): StorageAdapter {
@@ -109,12 +130,12 @@ export class EventualKV {
       set: async (key, value, expiry) => {
         await roundTrip()
         const e = { json: JSON.stringify(value), expiry: expiry?.getTime() }
-        this.global.set(joinKey(key), e)
+        this.publish(() => this.global.set(joinKey(key), e))
         cache.set(joinKey(key), e)
       },
       remove: async (key) => {
         await roundTrip()
-        this.global.delete(joinKey(key))
+        this.publish(() => this.global.delete(joinKey(key)))
         cache.set(joinKey(key), null)
       },
       scan: async function* (this: EventualKV, prefix: string[]) {
