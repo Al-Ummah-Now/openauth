@@ -25,6 +25,12 @@ import type { StorageAdapter } from "./storage/storage.js"
 import { Storage } from "./storage/storage.js"
 import type { ClientD1Adapter } from "./client/client-d1-adapter.js"
 import { generatePKCE, validatePKCE } from "./pkce.js"
+import {
+  type AuthorizationCodePayload,
+  type CodeGrant,
+  consumeAuthorizationCode,
+  redeemAuthorizationCode,
+} from "./authorization-code.js"
 import { DevicePage } from "./ui/device.js"
 import { restartLocale } from "./ui/restart.js"
 import { renderOptions } from "./ui/render.js"
@@ -71,6 +77,8 @@ export interface DeviceGrant {
   ttl: { access: number; refresh: number }
   /** When the approving user authenticated (ms) */
   authTime?: number
+  /** Refresh-token family started by the code the approval redeemed */
+  family?: string
 }
 
 export interface DeviceRecord {
@@ -99,6 +107,8 @@ interface DeviceFlowDeps {
     c: Context,
     grant: DeviceGrant,
   ) => Promise<{ access: string; refresh: string; expiresIn: number }>
+  /** Revoke what a replayed authorization code was exchanged for. */
+  revokeCodeGrant: (grant: CodeGrant) => Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -512,12 +522,13 @@ export function registerDeviceFlow(
       }
       return page(c, { page: "failed" }, 400)
     }
-    const payload = await Storage.get<
-      DeviceGrant & {
-        redirectURI: string
-        pkce?: { challenge: string; method: string }
-      }
-    >(storage, ["oauth:code", code])
+    const redeemed = await redeemAuthorizationCode(storage, code)
+    if (redeemed.replayed) {
+      await deps.revokeCodeGrant(redeemed.replayed)
+      return page(c, { page: "failed" }, 400)
+    }
+    const payload = redeemed.payload as
+      (AuthorizationCodePayload & DeviceGrant) | undefined
     if (
       !payload ||
       payload.clientID !== record.clientID ||
@@ -531,7 +542,15 @@ export function registerDeviceFlow(
     ) {
       return page(c, { page: "failed" }, 400)
     }
-    await Storage.remove(storage, ["oauth:code", code])
+    const family = crypto.randomUUID()
+    if (
+      !(await consumeAuthorizationCode(storage, code, redeemed, {
+        family,
+        subject: payload.subject,
+        clientID: payload.clientID,
+      }))
+    )
+      return page(c, { page: "failed" }, 400)
     const grant: DeviceGrant = {
       type: payload.type,
       properties: payload.properties,
@@ -539,6 +558,7 @@ export function registerDeviceFlow(
       clientID: payload.clientID,
       ttl: payload.ttl,
       authTime: payload.authTime,
+      family,
     }
     await Storage.set(
       storage,

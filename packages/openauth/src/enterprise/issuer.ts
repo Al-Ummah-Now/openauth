@@ -71,6 +71,7 @@ import type {
 import { DEFAULT_SESSION_CONFIG } from "../contracts/types.js"
 import type { Provider } from "../provider/provider.js"
 import type { SubjectPayload, SubjectSchema } from "../subject.js"
+import { storeAuthorizationCode } from "../authorization-code.js"
 import { Storage, type StorageAdapter } from "../storage/storage.js"
 
 import {
@@ -921,9 +922,9 @@ export function createMultiTenantIssuer<
       const silentResponder: OnSuccessResponder<SubjectPayload<Subjects>> = {
         async subject(type, properties, opts) {
           const code = crypto.randomUUID()
-          await Storage.set(
+          await storeAuthorizationCode(
             config.storage,
-            ["oauth:code", code],
+            code,
             {
               type,
               properties,

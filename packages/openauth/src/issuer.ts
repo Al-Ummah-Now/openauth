@@ -200,6 +200,16 @@ import { compactDecrypt, CompactEncrypt, jwtVerify, SignJWT } from "jose"
 import { Storage, StorageAdapter } from "./storage/storage.js"
 import { encryptionKeys, legacySigningKeys, signingKeys } from "./keys.js"
 import { validatePKCE } from "./pkce.js"
+import {
+  type AuthorizationCodePayload,
+  type CodeGrant,
+  consumeAuthorizationCode,
+  isRefreshFamilyRevoked,
+  redeemAuthorizationCode,
+  revokeRefreshFamily,
+  storeAuthorizationCode,
+  usedCodeKey,
+} from "./authorization-code.js"
 import { clientRequiresPkce } from "./client/native.js"
 import {
   DEVICE_CODE_GRANT,
@@ -390,6 +400,15 @@ export interface IssuerInput<
      * @default false
      */
     requireForPublicClients?: boolean
+    /**
+     * Require PKCE or client authentication on every authorization code
+     * exchange: a code issued without PKCE is only redeemed by a client that
+     * authenticates (client_secret). Turn on once every client sends PKCE.
+     * Independently of this flag, client credentials that are presented must
+     * be valid.
+     * @default false
+     */
+    requireForCodeExchange?: boolean
   }
   /**
    * Set the TTL, in seconds, for access and refresh tokens.
@@ -753,9 +772,10 @@ export function issuer<
             }
             if (authorization.response_type === "code") {
               const code = crypto.randomUUID()
-              await Storage.set(
+              // Strongly consistent store: the code is consumed atomically
+              await storeAuthorizationCode(
                 storage,
-                ["oauth:code", code],
+                code,
                 {
                   type,
                   properties,
@@ -1065,6 +1085,10 @@ export function issuer<
       }
       timeUsed?: number
       nextToken?: string
+      /** Refresh-token family (the authorization code that started it). */
+      family?: string
+      /** `jti` for the access token; random when absent. Never stored. */
+      jti?: string
       /**
        * When the user last authenticated (ms). Kept on the refresh token, so
        * refreshed access tokens report the original sign-in, not the refresh.
@@ -1092,6 +1116,7 @@ export function issuer<
         nextToken: crypto.randomUUID(),
       }
       delete refreshValue.timeUsed
+      delete refreshValue.jti
       await Storage.set(
         storage!,
         ["oauth:refresh", value.subject, refreshToken],
@@ -1105,7 +1130,7 @@ export function issuer<
         mode: "access",
         type: value.type,
         properties: value.properties,
-        jti: crypto.randomUUID(),
+        jti: value.jti ?? crypto.randomUUID(),
         aud: value.clientID,
         iss: issuer(ctx),
         sub: value.subject,
@@ -1188,6 +1213,7 @@ export function issuer<
             clients: clientAdapter,
             issuer,
             generateTokens: (c, grant) => generateTokens(c, grant),
+            revokeCodeGrant: (grant) => revokeCodeGrant(grant),
           },
           input.device,
         )
@@ -1301,19 +1327,27 @@ export function issuer<
             },
             400,
           )
-        const key = ["oauth:code", code.toString()]
-        const payload = await Storage.get<{
-          type: string
-          properties: any
-          clientID: string
-          redirectURI: string
-          subject: string
-          ttl: {
-            access: number
-            refresh: number
-          }
-          pkce?: AuthorizationState["pkce"]
-        }>(storage, key)
+        const redeemed = await redeemAuthorizationCode(storage, code.toString())
+        if (redeemed.replayed) {
+          // RFC 6749 §4.1.2: a reused code revokes what it was exchanged for
+          await revokeCodeGrant(redeemed.replayed)
+          return c.json(
+            {
+              error: "invalid_grant",
+              error_description: "Authorization code has been used or expired",
+            },
+            400,
+          )
+        }
+        const payload = redeemed.payload as
+          | (AuthorizationCodePayload & {
+              type: string
+              properties: any
+              subject: string
+              ttl: { access: number; refresh: number }
+              authTime?: number
+            })
+          | undefined
         if (!payload) {
           return c.json(
             {
@@ -1342,6 +1376,11 @@ export function issuer<
             403,
           )
         }
+        // Client authentication: credentials that are presented must be
+        // valid. A code issued without PKCE needs them when the client is
+        // confidential, or always with pkce.requireForCodeExchange.
+        const clientError = await authenticateCodeClient(c, form, payload)
+        if (clientError) return clientError
 
         if (payload.pkce) {
           const codeVerifier = form.get("code_verifier")?.toString()
@@ -1370,8 +1409,39 @@ export function issuer<
             )
           }
         }
-        const tokens = await generateTokens(c, payload)
-        await Storage.remove(storage, key)
+        // Every check passed: consume the code. Exactly one concurrent
+        // request wins; the record of the use is written before any token
+        // exists, so a replay can always find what to revoke.
+        const grant = {
+          family: crypto.randomUUID(),
+          jti: crypto.randomUUID(),
+          subject: payload.subject,
+          clientID: payload.clientID,
+        }
+        const consumed = await consumeAuthorizationCode(
+          storage,
+          code.toString(),
+          redeemed,
+          grant,
+        )
+        if (!consumed) {
+          const used = await Storage.atomic(storage).get(
+            usedCodeKey(code.toString()),
+          )
+          if (used) await revokeCodeGrant(used)
+          return c.json(
+            {
+              error: "invalid_grant",
+              error_description: "Authorization code has been used or expired",
+            },
+            400,
+          )
+        }
+        const tokens = await generateTokens(c, {
+          ...payload,
+          family: grant.family,
+          jti: grant.jti,
+        })
         return c.json({
           access_token: tokens.access,
           token_type: "bearer",
@@ -1405,8 +1475,13 @@ export function issuer<
           }
           nextToken: string
           timeUsed?: number
+          family?: string
         }>(storage, key)
-        if (!payload) {
+        if (
+          !payload ||
+          (await isRefreshFamilyRevoked(storage, payload.family))
+        ) {
+          if (payload) await Storage.remove(storage, key)
           return c.json(
             {
               error: "invalid_grant",
@@ -1810,6 +1885,63 @@ export function issuer<
    * Collect the client_id values a token request identifies itself with
    * (form `client_id` and/or the username of HTTP Basic auth).
    */
+  /** A replayed authorization code: revoke what its first use minted. */
+  async function revokeCodeGrant(grant: CodeGrant) {
+    await revokeRefreshFamily(storage!, grant.family, ttlRefresh)
+    if (grant.jti) await revocationService.revokeAccessToken(grant.jti)
+    if (input.audit?.hooks?.onTokenReused) {
+      void input.audit.service.logTokenUsage({
+        token_id: grant.family,
+        subject: grant.subject,
+        event_type: "reused",
+        client_id: grant.clientID,
+        timestamp: Date.now(),
+      })
+    }
+  }
+
+  /**
+   * Client authentication on the authorization_code grant. Presented
+   * credentials must be valid for the code's client. With
+   * `pkce.requireForCodeExchange`, a code without PKCE needs them. Returns an
+   * error response, or undefined.
+   */
+  async function authenticateCodeClient(
+    c: Context,
+    form: FormData,
+    payload: AuthorizationCodePayload,
+  ): Promise<Response | undefined> {
+    const invalidClient = () =>
+      c.json(
+        {
+          error: "invalid_client",
+          error_description: "Client authentication failed",
+        },
+        401,
+      )
+    const credentials = extractClientCredentials(c, form, false)
+    if (credentials.error) return credentials.error
+    if (credentials.clientSecret) {
+      if (!clientAuthenticator || credentials.clientId !== payload.clientID)
+        return invalidClient()
+      const result = await clientAuthenticator.authenticateClient(
+        credentials.clientId,
+        credentials.clientSecret,
+      )
+      return result.client ? undefined : invalidClient()
+    }
+    if (payload.pkce) return undefined
+    if (input.pkce?.requireForCodeExchange)
+      return c.json(
+        {
+          error: "invalid_grant",
+          error_description: "PKCE or client authentication is required",
+        },
+        400,
+      )
+    return undefined
+  }
+
   function getPresentedClientIds(c: Context, form: FormData): string[] {
     const ids: string[] = []
     const formClientId = form.get("client_id")?.toString()
