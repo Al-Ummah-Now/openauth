@@ -71,6 +71,7 @@ import type {
 import { DEFAULT_SESSION_CONFIG } from "../contracts/types.js"
 import type { Provider } from "../provider/provider.js"
 import type { SubjectPayload, SubjectSchema } from "../subject.js"
+import { storeAuthorizationCode } from "../authorization-code.js"
 import { Storage, type StorageAdapter } from "../storage/storage.js"
 
 import {
@@ -645,7 +646,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       ctx.set(ENTERPRISE_CONTEXT_KEY, {
@@ -921,9 +923,9 @@ export function createMultiTenantIssuer<
       const silentResponder: OnSuccessResponder<SubjectPayload<Subjects>> = {
         async subject(type, properties, opts) {
           const code = crypto.randomUUID()
-          await Storage.set(
+          await storeAuthorizationCode(
             config.storage,
-            ["oauth:code", code],
+            code,
             {
               type,
               properties,
@@ -1167,7 +1169,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
