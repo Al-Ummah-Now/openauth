@@ -150,6 +150,19 @@ export function MemoryStorage(input?: MemoryStorageOptions): StorageAdapter {
       store.splice(match.index, 1)
       await save()
     },
+    async increment(key, by, expiry) {
+      const joined = joinKey(key)
+      const { entry } = live(joined)
+      if (entry) {
+        const next = (Number(entry.value) || 0) + by
+        entry.value = next as any
+        await save()
+        return next
+      }
+      put(joined, by, expiry)
+      await save()
+      return by
+    },
     async removePrefix(prefix) {
       const p = joinKey([...prefix, ""])
       let n = 0

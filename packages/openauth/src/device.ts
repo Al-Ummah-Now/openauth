@@ -171,7 +171,8 @@ export async function hashDeviceCode(code: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiting (fixed one-minute windows in storage; approximate is fine)
+// Rate limiting (fixed one-minute windows). Counters are atomic increments in
+// the atomic store (OA-8): exact across isolates, and no KV write per request.
 // ---------------------------------------------------------------------------
 
 export async function hitRateLimit(
@@ -182,8 +183,11 @@ export async function hitRateLimit(
   now = Date.now(),
 ): Promise<boolean> {
   const key = ["oauth:device_rl", bucket, id, String(Math.floor(now / 60_000))]
-  const count = ((await Storage.get<number>(storage, key)) ?? 0) + 1
-  await Storage.set(storage, key, count, 120)
+  const count = await Storage.atomic(storage).increment!(
+    key,
+    1,
+    new Date(now + 120_000),
+  )
   return count > limit
 }
 
@@ -195,7 +199,7 @@ async function peekRateLimit(
   now = Date.now(),
 ): Promise<boolean> {
   const key = ["oauth:device_rl", bucket, id, String(Math.floor(now / 60_000))]
-  return ((await Storage.get<number>(storage, key)) ?? 0) >= limit
+  return (Number(await Storage.atomic(storage).get(key)) || 0) >= limit
 }
 
 /**

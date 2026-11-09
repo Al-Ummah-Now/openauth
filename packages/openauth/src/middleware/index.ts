@@ -52,6 +52,7 @@ export {
   rateLimit,
   endpointRateLimit,
   memoryStore,
+  atomicStore,
   kvStore,
   defaultKeyGenerator,
   type RateLimitStore,
