@@ -1134,6 +1134,7 @@ describe("RBACServiceImpl", () => {
         "tenant-1",
         "user-1",
         "app-1",
+        "0", // cache generation (OA-7)
       ])
     })
   })
@@ -1301,129 +1302,136 @@ describe("RBACServiceImpl", () => {
   // Cache Invalidation
   // ==========================================
 
-  describe("cache invalidation", () => {
-    test("invalidates cache when assigning role to user", async () => {
-      // Set up mock responses for the query sequence:
-      // 1. getRole: return the role object
-      // 2. check existing assignment: return null (no existing assignment)
-      const mockRole = {
+  describe("cache invalidation (versioned cache, OA-7)", () => {
+    const perm = (name: string) => ({
+      id: name,
+      name,
+      client_id: "app-1",
+      description: name,
+      resource: "posts",
+      action: "read",
+      created_at: Date.now(),
+    })
+    const read = () =>
+      service.getUserPermissions({
+        userId: "user-1",
+        clientId: "app-1",
+        tenantId: "tenant-1",
+      })
+
+    /** Cache "old", run `change`, then the DB says "new": the next read must see it. */
+    async function expectFreshAfter(change: () => Promise<unknown>) {
+      const fetch = spyOn(adapter, "getUserPermissionsForClient")
+      fetch.mockResolvedValue([perm("old")] as any)
+      expect(await read()).toEqual(["old"])
+      expect(await read()).toEqual(["old"]) // cached
+      expect(fetch).toHaveBeenCalledTimes(1)
+      await change()
+      fetch.mockResolvedValue([perm("new")] as any)
+      expect(await read()).toEqual(["new"])
+      fetch.mockRestore()
+    }
+
+    test("assigning a role to a user", async () => {
+      spyOn(adapter, "getRole").mockResolvedValue({
         id: "role-1",
-        name: "editor",
-        tenant_id: "tenant-1",
-        description: "Editor role",
-        is_system_role: 0,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-      }
-      // Use consume mode (true) to shift results off queue after each query
-      mockDb._setResults([mockRole, null], true)
-
-      const removeSpy = spyOn(storage, "remove")
-
-      // Pre-populate cache
-      await storage.set(
-        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
-        { permissions: ["posts:read"], cachedAt: Date.now() },
+        is_system_role: false,
+      } as any)
+      spyOn(adapter, "assignRoleToUser").mockResolvedValue({} as any)
+      await expectFreshAfter(() =>
+        service.assignRoleToUser({
+          userId: "user-1",
+          roleId: "role-1",
+          tenantId: "tenant-1",
+          assignedBy: "admin",
+        }),
       )
-
-      await service.assignRoleToUser({
-        userId: "user-1",
-        roleId: "role-1",
-        tenantId: "tenant-1",
-        assignedBy: "admin",
-      })
-
-      // Should have removed cache
-      expect(removeSpy).toHaveBeenCalled()
     })
 
-    test("invalidates cache when removing role from user", async () => {
-      const removeSpy = spyOn(storage, "remove")
-
-      await storage.set(
-        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
-        { permissions: ["posts:read"], cachedAt: Date.now() },
+    test("removing a role from a user", async () => {
+      await expectFreshAfter(() =>
+        service.removeRoleFromUser({
+          userId: "user-1",
+          roleId: "role-1",
+          tenantId: "tenant-1",
+        }),
       )
-
-      await service.removeRoleFromUser({
-        userId: "user-1",
-        roleId: "role-1",
-        tenantId: "tenant-1",
-      })
-
-      expect(removeSpy).toHaveBeenCalled()
     })
 
-    test("invalidates cache for all users with role when assigning permission", async () => {
-      mockDb._setResults([]) // No existing assignment
-
-      const userRoles = [
-        {
-          user_id: "user-1",
-          role_id: "role-1",
-          tenant_id: "tenant-1",
-          assigned_at: Date.now(),
-          assigned_by: "admin",
-        },
-        {
-          user_id: "user-2",
-          role_id: "role-1",
-          tenant_id: "tenant-1",
-          assigned_at: Date.now(),
-          assigned_by: "admin",
-        },
-      ]
-
-      // Pre-populate caches for both users
-      await storage.set(
-        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
-        { permissions: ["posts:read"], cachedAt: Date.now() },
+    test("assigning a permission to a role: one write, no per-user fan-out", async () => {
+      spyOn(adapter, "assignPermissionToRole").mockResolvedValue({} as any)
+      const listUserRoles = spyOn(adapter, "listUserRoles")
+      const scan = storage.scan as any
+      scan.mockClear?.()
+      await expectFreshAfter(() =>
+        service.assignPermissionToRole({
+          roleId: "role-1",
+          permissionId: "perm-1",
+          grantedBy: "admin",
+        }),
       )
-      await storage.set(
-        ["rbac", "permissions", "tenant-1", "user-2", "app-1"],
-        { permissions: ["posts:read"], cachedAt: Date.now() },
+      expect(listUserRoles).not.toHaveBeenCalled()
+      expect(scan).not.toHaveBeenCalled()
+    })
+
+    test("removing a permission from a role", async () => {
+      spyOn(adapter, "removePermissionFromRole").mockResolvedValue(undefined)
+      await expectFreshAfter(() =>
+        service.removePermissionFromRole({
+          roleId: "role-1",
+          permissionId: "perm-1",
+        }),
       )
+    })
 
-      const removeSpy = spyOn(storage, "remove")
-      const listUserRolesSpy = spyOn(
-        adapter,
-        "listUserRoles",
-      ).mockResolvedValue(userRoles)
-
+    test("a role held by 5000 users is invalidated with one storage write", async () => {
+      spyOn(adapter, "assignPermissionToRole").mockResolvedValue({} as any)
+      const set = storage.set as any
+      set.mockClear()
       await service.assignPermissionToRole({
+        roleId: "role_member",
+        permissionId: "perm-1",
+        grantedBy: "admin",
+      })
+      expect(set).toHaveBeenCalledTimes(1)
+    })
+
+    test("a service built later (another request or isolate) sees the change", async () => {
+      const fetch = spyOn(adapter, "getUserPermissionsForClient")
+      fetch.mockResolvedValue([perm("old")] as any)
+      expect(await read()).toEqual(["old"])
+      spyOn(adapter, "assignPermissionToRole").mockResolvedValue({} as any)
+      await new RBACServiceImpl(adapter, storage).assignPermissionToRole({
         roleId: "role-1",
         permissionId: "perm-1",
         grantedBy: "admin",
       })
-
-      // Should call listUserRoles to find users with this role
-      expect(listUserRolesSpy).toHaveBeenCalled()
-      // The actual cache invalidation might vary based on implementation
-      // so we just verify the method was called to get the user list
+      fetch.mockResolvedValue([perm("new")] as any)
+      const later = new RBACServiceImpl(adapter, storage)
+      expect(
+        await later.getUserPermissions({
+          userId: "user-1",
+          clientId: "app-1",
+          tenantId: "tenant-1",
+        }),
+      ).toEqual(["new"])
+      fetch.mockRestore()
     })
 
     test("handles cache invalidation errors gracefully", async () => {
-      mockDb._setResults([])
-
+      spyOn(adapter, "assignPermissionToRole").mockResolvedValue({} as any)
       const consoleSpy = spyOn(console, "warn")
-      const listUserRolesSpy = spyOn(
-        adapter,
-        "listUserRoles",
-      ).mockRejectedValue(new Error("Database error"))
-
+      ;(storage.set as any).mockRejectedValueOnce(new Error("KV down"))
       await service.assignPermissionToRole({
         roleId: "role-1",
         permissionId: "perm-1",
         grantedBy: "admin",
       })
-
-      // Should warn but not throw
-      expect(consoleSpy).toHaveBeenCalled()
-      const warnCalls = consoleSpy.mock.calls.map((call) => call[0])
-      const hasInvalidationWarning = warnCalls.some((msg) =>
-        msg.includes("Could not invalidate cache"),
-      )
-      expect(hasInvalidationWarning).toBe(true)
+      expect(
+        consoleSpy.mock.calls.some((c) =>
+          String(c[0]).includes("could not invalidate"),
+        ),
+      ).toBe(true)
     })
   })
 
@@ -1561,31 +1569,18 @@ describe("RBACServiceImpl", () => {
     })
 
     test("deletes role and invalidates cache", async () => {
-      const getUsersWithRoleSpy = spyOn(
-        adapter,
-        "getUsersWithRole",
-      ).mockResolvedValue(["user-1", "user-2"])
       const deleteRoleSpy = spyOn(adapter, "deleteRole").mockResolvedValue(
         undefined,
       )
-      const removeSpy = spyOn(storage, "remove")
-
-      // Pre-populate caches
-      await storage.set(
-        ["rbac", "permissions", "tenant-1", "user-1", "app-1"],
-        { permissions: ["posts:read"], cachedAt: Date.now() },
-      )
-      await storage.set(
-        ["rbac", "permissions", "tenant-1", "user-2", "app-1"],
-        { permissions: ["posts:write"], cachedAt: Date.now() },
-      )
+      const set = storage.set as any
+      set.mockClear()
 
       await service.deleteRole("role-1", "tenant-1")
 
-      expect(getUsersWithRoleSpy).toHaveBeenCalledWith("role-1", "tenant-1")
       expect(deleteRoleSpy).toHaveBeenCalledWith("role-1", "tenant-1")
-      // Cache should have been invalidated for users
-      expect(removeSpy).toHaveBeenCalled()
+      // One generation write invalidates every cached permission set
+      expect(set).toHaveBeenCalledTimes(1)
+      expect(set.mock.calls[0][0]).toEqual(["rbac", "cache_generation"])
     })
 
     test("deletes permission via adapter", async () => {
