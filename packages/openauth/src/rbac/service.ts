@@ -38,6 +38,9 @@ import type { CachedPermissions } from "./types.js"
  * - Permission limit (50) enforced in token
  * - Cache invalidation works on role/permission changes
  */
+/** Current permission-cache generation (atomic store). */
+export const RBAC_CACHE_GENERATION_KEY = ["rbac", "cache_generation"]
+
 export class RBACServiceImpl implements RBACService {
   private adapter: RBACAdapter
   private storage: StorageAdapter
@@ -63,6 +66,39 @@ export class RBACServiceImpl implements RBACService {
     }
   }
 
+  /** This service's read of the cache generation (one read per instance). */
+  private generation?: Promise<string>
+
+  /**
+   * The permission cache is versioned (OA-7): every cache key carries the
+   * current generation, and any role or permission change writes a new one.
+   * One write invalidates every cached entry, instead of a KV list and
+   * deletes per affected user (which fanned out to every user of a role).
+   * The generation is kept in the atomic store, so a change is seen
+   * everywhere at once; stale entries simply expire with their TTL.
+   */
+  private cacheGeneration(): Promise<string> {
+    this.generation ??= Storage.atomic(this.storage)
+      .get(RBAC_CACHE_GENERATION_KEY)
+      .then((v) => (typeof v === "string" ? v : "0"))
+      .catch(() => "0")
+    return this.generation
+  }
+
+  /** Invalidate every cached permission set (all users, all apps). */
+  private async invalidateAllCaches(): Promise<void> {
+    this.generation = undefined
+    try {
+      await Storage.atomic(this.storage).set(
+        RBAC_CACHE_GENERATION_KEY,
+        crypto.randomUUID(),
+      )
+    } catch (err) {
+      // The entries still expire with their TTL
+      console.warn("RBAC: could not invalidate the permission cache", err)
+    }
+  }
+
   /**
    * Build cache key for permissions
    */
@@ -70,8 +106,9 @@ export class RBACServiceImpl implements RBACService {
     tenantId: string,
     userId: string,
     clientId: string,
+    generation: string,
   ): string[] {
-    return ["rbac", "permissions", tenantId, userId, clientId]
+    return ["rbac", "permissions", tenantId, userId, clientId, generation]
   }
 
   /**
@@ -82,7 +119,12 @@ export class RBACServiceImpl implements RBACService {
     clientId: string,
     tenantId: string,
   ): Promise<string[]> {
-    const cacheKey = this.getCacheKey(tenantId, userId, clientId)
+    const cacheKey = this.getCacheKey(
+      tenantId,
+      userId,
+      clientId,
+      await this.cacheGeneration(),
+    )
 
     // Try to get from cache
     const cached = await Storage.get<CachedPermissions>(this.storage, cacheKey)
@@ -121,32 +163,10 @@ export class RBACServiceImpl implements RBACService {
    * Called when roles or permissions change
    */
   private async invalidateUserCache(
-    userId: string,
-    tenantId: string,
+    _userId: string,
+    _tenantId: string,
   ): Promise<void> {
-    // Scan for all cached permissions for this user
-    const prefix = ["rbac", "permissions", tenantId, userId]
-    for await (const [key] of Storage.scan<CachedPermissions>(
-      this.storage,
-      prefix,
-    )) {
-      await Storage.remove(this.storage, key)
-    }
-  }
-
-  /**
-   * Invalidate cache for all users with a specific role
-   * Called when role permissions change
-   */
-  private async invalidateRoleCache(
-    roleId: string,
-    tenantId: string,
-  ): Promise<void> {
-    // Get all users with this role and invalidate their caches
-    const userRoles = await this.adapter.listUserRoles(roleId, tenantId)
-    for (const ur of userRoles) {
-      await this.invalidateUserCache(ur.user_id, tenantId)
-    }
+    await this.invalidateAllCaches()
   }
 
   // ==========================================
@@ -476,21 +496,8 @@ export class RBACServiceImpl implements RBACService {
       granted_by: params.grantedBy,
     })
 
-    // Get the role to find tenant ID for cache invalidation
-    // Note: We need to get all user roles to invalidate their caches
-    // This is a more expensive operation but necessary for consistency
-    // In practice, role permission changes are infrequent
-    try {
-      const roleUsers = await this.adapter.listUserRoles(params.roleId, "")
-      for (const ur of roleUsers) {
-        await this.invalidateUserCache(ur.user_id, ur.tenant_id)
-      }
-    } catch {
-      // If we can't invalidate, the cache will expire naturally
-      console.warn(
-        `RBAC: Could not invalidate cache for role ${params.roleId} permission assignment`,
-      )
-    }
+    // One write, whatever the number of users holding the role
+    await this.invalidateAllCaches()
 
     return result
   }
@@ -511,17 +518,8 @@ export class RBACServiceImpl implements RBACService {
       params.permissionId,
     )
 
-    // Invalidate cache for users with this role
-    try {
-      const roleUsers = await this.adapter.listUserRoles(params.roleId, "")
-      for (const ur of roleUsers) {
-        await this.invalidateUserCache(ur.user_id, ur.tenant_id)
-      }
-    } catch {
-      console.warn(
-        `RBAC: Could not invalidate cache for role ${params.roleId} permission removal`,
-      )
-    }
+    // One write, whatever the number of users holding the role
+    await this.invalidateAllCaches()
   }
 
   /**
@@ -595,13 +593,8 @@ export class RBACServiceImpl implements RBACService {
    * @param tenantId - The tenant ID
    */
   async deleteRole(roleId: string, tenantId: string): Promise<void> {
-    // Invalidate cache for affected users before deletion
-    const usersWithRole = await this.adapter.getUsersWithRole(roleId, tenantId)
-    for (const userId of usersWithRole) {
-      await this.invalidateUserCache(userId, tenantId)
-    }
-
     await this.adapter.deleteRole(roleId, tenantId)
+    await this.invalidateAllCaches()
   }
 
   /**
