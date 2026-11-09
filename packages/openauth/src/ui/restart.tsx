@@ -27,13 +27,15 @@ export interface RestartPageInput {
   theme?: Theme
 }
 
-/** Pick the page locale: `?lang=` > hint > Accept-Language > en. */
+/**
+ * Pick the page locale: `?lang=` > the flow's own `?lang=` (hint) > English.
+ * The browser's Accept-Language is not consulted: like every other sign-in
+ * page, it is English unless the link asks for another language.
+ */
 export function restartLocale(req: Request, hint?: string): Locale {
   const fromUrl = getLocaleFromUrl(new URL(req.url))
   if (fromUrl) return fromUrl
-  const accept = req.headers.get("accept-language") || ""
-  const first = accept.split(",")[0]?.trim().split(";")[0]
-  return normalizeLocale(hint) ?? normalizeLocale(first) ?? DEFAULT_LOCALE
+  return normalizeLocale(hint) ?? DEFAULT_LOCALE
 }
 
 export function RestartPage(req: Request, input: RestartPageInput): Response {
