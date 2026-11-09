@@ -27,23 +27,8 @@
 import { Layout } from "./base.js"
 import { withFlowParams } from "../flow.js"
 import { ICON_GITHUB, ICON_GOOGLE } from "./icon.js"
-import type { Theme } from "./theme.js"
-import { getLocaleFromRequest, getTranslations, type Locale } from "./i18n.js"
-
-/**
- * Extracts theme from request header if available
- * @internal
- */
-function getThemeFromRequest(req: Request): Theme | undefined {
-  const themeHeader = req.headers.get("X-OpenAuth-Theme")
-  if (!themeHeader) return undefined
-
-  try {
-    return JSON.parse(themeHeader) as Theme
-  } catch {
-    return undefined
-  }
-}
+import { renderOptionsFromRequest, type RenderOptions } from "./render.js"
+import { getTranslations, type Locale } from "./i18n.js"
 
 export interface SelectProps {
   /**
@@ -81,9 +66,9 @@ export function Select(props?: SelectProps) {
   return async (
     providers: Record<string, string>,
     req: Request,
+    render?: RenderOptions,
   ): Promise<Response> => {
-    const theme = getThemeFromRequest(req)
-    const locale = getLocaleFromRequest(req)
+    const { theme, locale, direction } = render ?? renderOptionsFromRequest(req)
     const t = getTranslations(locale)
 
     // Locale-aware display names
@@ -99,7 +84,7 @@ export function Select(props?: SelectProps) {
     }
 
     const jsx = (
-      <Layout theme={theme} locale={locale}>
+      <Layout theme={theme} locale={locale} direction={direction}>
         <div data-component="form">
           {Object.entries(providers).map(([key, type]) => {
             const match = props?.providers?.[key]

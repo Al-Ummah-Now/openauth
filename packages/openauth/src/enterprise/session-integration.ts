@@ -585,6 +585,7 @@ export function formatAccountsForPicker(
 export function generateAddAccountUrl(
   baseUrl: string,
   authorization: EnterpriseAuthorizationState,
+  lang?: string,
 ): string {
   const url = new URL(baseUrl)
 
@@ -604,6 +605,7 @@ export function generateAddAccountUrl(
 
   // Force login prompt to add new account
   url.searchParams.set("prompt", "login")
+  if (lang) url.searchParams.set("lang", lang)
 
   return url.toString()
 }

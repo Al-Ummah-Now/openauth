@@ -208,8 +208,14 @@ import {
   type DeviceFlowOptions,
 } from "./device.js"
 import { Select } from "./ui/select.js"
-import { setTheme, Theme } from "./ui/theme.js"
+import type { Theme } from "./ui/theme.js"
+import {
+  RESOLVED_THEME_KEY,
+  renderOptions,
+  type RenderOptions,
+} from "./ui/render.js"
 import { RestartPage } from "./ui/restart.js"
+import { inheritForwarded } from "./forward.js"
 import {
   FLOW_BIND_COOKIE,
   FLOW_COMPLETED_TTL,
@@ -476,12 +482,17 @@ export interface IssuerInput<
     response: OnSuccessResponder<SubjectPayload<Subjects>>,
     input: Result,
     req: Request,
+    c?: Context,
   ): Promise<Response>
   /**
    * Render the response for an unrecoverable sign-in state. Defaults to a
    * friendly, localized "Start sign-in again" page (see `restart`).
    */
-  error?(error: UnknownStateError, req: Request): Promise<Response>
+  error?(
+    error: UnknownStateError,
+    req: Request,
+    render?: RenderOptions,
+  ): Promise<Response>
   /**
    * The friendly page shown when a sign-in can't be resumed links back to the
    * app that started it (origin of the flow's redirect_uri). When that client
@@ -517,6 +528,7 @@ export interface IssuerInput<
       audience?: string
     },
     req: Request,
+    c?: Context,
   ): Promise<boolean>
   /**
    * D1 database for client credentials (optional).
@@ -624,18 +636,23 @@ export function issuer<
 
   const error =
     input.error ??
-    async function (err: UnknownStateError, req: Request) {
-      return unknownStateResponse(err, req, input.restart?.fallbackUrl)
+    async function (
+      err: UnknownStateError,
+      req: Request,
+      render?: RenderOptions,
+    ) {
+      return unknownStateResponse(
+        err,
+        req,
+        input.restart?.fallbackUrl,
+        render?.theme,
+      )
     }
   const configuredIssuer = normalizeIssuer(input.issuer)
   const ttlAccess = input.ttl?.access ?? DEFAULT_ACCESS_TOKEN_TTL
   const ttlRefresh = input.ttl?.refresh ?? DEFAULT_REFRESH_TOKEN_TTL
   const ttlRefreshReuse = input.ttl?.reuse ?? DEFAULT_REFRESH_REUSE_WINDOW
   const ttlRefreshRetention = input.ttl?.retention ?? DEFAULT_REFRESH_RETENTION
-  if (input.theme) {
-    setTheme(input.theme)
-  }
-
   const select = lazy(() => input.select ?? Select())
   const allow = lazy(
     () =>
@@ -772,6 +789,7 @@ export function issuer<
           ...properties,
         },
         ctx.req.raw,
+        ctx,
       )
     },
     forward(ctx, response) {
@@ -944,7 +962,8 @@ export function issuer<
       // Storage may lag right after /authorize: accept the legacy cookie, but
       // only when it was written for this same flow (it is browser-bound).
       const cookie = (await auth.get(ctx, "authorization")) as
-        AuthorizationState | undefined
+        | AuthorizationState
+        | undefined
       if (cookie?.flow && cookie.flow === flow.id) return cookie
       throw flowError(
         flow.record ? "mismatch" : "expired",
@@ -980,7 +999,8 @@ export function issuer<
       await saveFlow(flow.id, flow.record)
     }
     const cookie = (await auth.get(ctx, "authorization")) as
-      AuthorizationState | undefined
+      | AuthorizationState
+      | undefined
     if (cookie?.flow === flow.id) deleteCookie(ctx, "authorization")
   }
 
@@ -1146,8 +1166,19 @@ export function issuer<
   const app = new Hono<{
     Variables: {
       authorization: AuthorizationState
+      resolvedTheme?: Theme
     }
   }>().use(logger())
+
+  // The theme travels with the request. The enterprise issuer has already set
+  // this request's tenant theme (and tenant context) when it mounts or forwards
+  // to this app.
+  app.use("*", async (c, next) => {
+    inheritForwarded(c, [RESOLVED_THEME_KEY, "enterpriseRequestContext"])
+    if (input.theme && !c.get(RESOLVED_THEME_KEY))
+      c.set(RESOLVED_THEME_KEY, input.theme)
+    await next()
+  })
 
   // Device authorization grant (RFC 8628), see device.ts
   const deviceToken =
@@ -1611,6 +1642,7 @@ export function issuer<
             ...response,
           },
           c.req.raw,
+          c,
         )
       }
 
@@ -1667,6 +1699,7 @@ export function issuer<
           audience,
         },
         c.req.raw,
+        c,
       ))
     )
       throw new UnauthorizedClientError(client_id, redirect_uri)
@@ -1713,6 +1746,7 @@ export function issuer<
           ]),
         ),
         new Request(selectUrl.toString(), c.req.raw),
+        renderOptions(c),
       ),
     )
   })
@@ -2208,7 +2242,7 @@ export function issuer<
   app.onError(async (err, c) => {
     console.error(err)
     if (err instanceof UnknownStateError) {
-      return auth.forward(c, await error(err, c.req.raw))
+      return auth.forward(c, await error(err, c.req.raw, renderOptions(c)))
     }
     let authorization: AuthorizationState
     try {
@@ -2217,7 +2251,10 @@ export function issuer<
       // No flow to report the error to: show the friendly restart page
       // instead of letting a second error escape.
       if (stateErr instanceof UnknownStateError)
-        return auth.forward(c, await error(stateErr, c.req.raw))
+        return auth.forward(
+          c,
+          await error(stateErr, c.req.raw, renderOptions(c)),
+        )
       throw stateErr
     }
     const url = new URL(authorization.redirect_uri)
@@ -2245,6 +2282,7 @@ export function unknownStateResponse(
   err: UnknownStateError,
   req: Request,
   fallbackUrl?: string,
+  theme?: Theme,
 ): Response {
   const restartUrl = err.restartUrl || fallbackUrl
   if (err.reason === "completed" && restartUrl) {
@@ -2253,7 +2291,7 @@ export function unknownStateResponse(
       headers: { Location: restartUrl, "Cache-Control": "no-store" },
     })
   }
-  return RestartPage(req, { restartUrl, locale: err.locale })
+  return RestartPage(req, { restartUrl, locale: err.locale, theme })
 }
 
 /**
