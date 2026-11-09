@@ -8,6 +8,11 @@
  */
 
 import type { StorageAdapter } from "./storage/storage.js"
+import {
+  refreshKey,
+  removeAllRefreshTokens,
+  removeRefreshToken,
+} from "./refresh-token.js"
 import { Storage } from "./storage/storage.js"
 
 export interface RevocationServiceConfig {
@@ -53,8 +58,7 @@ export class RevocationService {
    */
   async revokeRefreshToken(subject: string, tokenId: string): Promise<boolean> {
     try {
-      const key = ["oauth:refresh", subject, tokenId]
-      await Storage.remove(this.storage, key)
+      await removeRefreshToken(this.storage, refreshKey(subject, tokenId))
       return true
     } catch (error) {
       console.error("RevocationService: Failed to revoke refresh token:", error)
@@ -88,20 +92,7 @@ export class RevocationService {
    */
   async revokeAllRefreshTokens(subject: string): Promise<number> {
     try {
-      const prefix = ["oauth:refresh", subject]
-
-      // Collect all keys first to avoid iterator issues during deletion
-      const keysToDelete: string[][] = []
-      for await (const [key] of Storage.scan(this.storage, prefix)) {
-        keysToDelete.push(key)
-      }
-
-      // Delete all collected keys
-      for (const key of keysToDelete) {
-        await Storage.remove(this.storage, key)
-      }
-
-      return keysToDelete.length
+      return await removeAllRefreshTokens(this.storage, subject)
     } catch (error) {
       console.error(
         "RevocationService: Failed to revoke all refresh tokens:",

@@ -210,6 +210,15 @@ import {
   storeAuthorizationCode,
   usedCodeKey,
 } from "./authorization-code.js"
+import {
+  type RefreshTokenPayload,
+  loadRefreshToken,
+  markRefreshTokenUsed,
+  refreshKey,
+  removeAllRefreshTokens,
+  removeRefreshToken,
+  storeRefreshToken,
+} from "./refresh-token.js"
 import { clientRequiresPkce } from "./client/native.js"
 import {
   DEVICE_CODE_GRANT,
@@ -438,7 +447,7 @@ export interface IssuerInput<
     /**
      * Interval in seconds where refresh token reuse is allowed. This helps mitigrate
      * concurrency issues.
-     * @default 60s
+     * @default 120s
      */
     reuse?: number
     /**
@@ -649,7 +658,10 @@ export function issuer<
   // Default TTL constants (in seconds)
   const DEFAULT_ACCESS_TOKEN_TTL = 60 * 60 * 24 * 30 // 30 days
   const DEFAULT_REFRESH_TOKEN_TTL = 60 * 60 * 24 * 365 // 1 year
-  const DEFAULT_REFRESH_REUSE_WINDOW = 60 // 60 seconds
+  // Concurrent refreshes of one token (several tabs, a retried request) within
+  // this window get the same next token. Kept above KV's ~60 s read staleness
+  // so tokens stored before the atomic store existed are not misread as reuse.
+  const DEFAULT_REFRESH_REUSE_WINDOW = 120 // seconds
   const DEFAULT_REFRESH_RETENTION = 0 // No retention
   const AUTHORIZATION_CODE_TTL = 60 // 60 seconds
   const AUTHORIZATION_COOKIE_TTL = 60 * 60 * 24 // 24 hours
@@ -908,13 +920,7 @@ export function issuer<
       }
     },
     async invalidate(subject: string) {
-      // Resolve the scan in case modifications interfere with iteration
-      const keys = await Array.fromAsync(
-        Storage.scan(this.storage, ["oauth:refresh", subject]),
-      )
-      for (const [key] of keys) {
-        await Storage.remove(this.storage, key)
-      }
+      await removeAllRefreshTokens(this.storage, subject)
     },
     storage,
   }
@@ -1118,10 +1124,10 @@ export function issuer<
       }
       delete refreshValue.timeUsed
       delete refreshValue.jti
-      await Storage.set(
+      await storeRefreshToken(
         storage!,
-        ["oauth:refresh", value.subject, refreshToken],
-        refreshValue,
+        refreshKey(value.subject, refreshToken),
+        refreshValue as RefreshTokenPayload,
         value.ttl.refresh,
       )
     }
@@ -1464,25 +1470,13 @@ export function issuer<
         const splits = refreshToken.toString().split(":")
         const token = splits.pop()!
         const subject = splits.join(":")
-        const key = ["oauth:refresh", subject, token]
-        const payload = await Storage.get<{
-          type: string
-          properties: any
-          clientID: string
-          subject: string
-          ttl: {
-            access: number
-            refresh: number
-          }
-          nextToken: string
-          timeUsed?: number
-          family?: string
-        }>(storage, key)
+        const key = refreshKey(subject, token)
+        let payload = await loadRefreshToken(storage, key)
         if (
           !payload ||
           (await isRefreshFamilyRevoked(storage, payload.family))
         ) {
-          if (payload) await Storage.remove(storage, key)
+          if (payload) await removeRefreshToken(storage, key)
           return c.json(
             {
               error: "invalid_grant",
@@ -1499,7 +1493,7 @@ export function issuer<
         const presentedClientIds = getPresentedClientIds(c, form)
         if (
           presentedClientIds.length > 0 &&
-          presentedClientIds.some((id) => id !== payload.clientID)
+          presentedClientIds.some((id) => id !== payload!.clientID)
         ) {
           return c.json(
             {
@@ -1509,21 +1503,64 @@ export function issuer<
             400,
           )
         }
-        const generateRefreshToken = payload.timeUsed === undefined
-        if (ttlRefreshReuse <= 0) {
-          // no reuse interval, remove the refresh token immediately
-          await Storage.remove(storage, key)
-        } else if (payload.timeUsed === undefined) {
-          payload.timeUsed = Date.now()
-          await Storage.set(
-            storage,
-            key,
-            payload,
-            ttlRefreshReuse + ttlRefreshRetention,
+        // Tokens from before families existed start one at their first use
+        const family = payload.family ?? token
+        let generateRefreshToken = false
+        // First use: exactly one request marks it used and rotates. A losing
+        // request re-reads: normally it then sees it used (a reuse within
+        // the window); if the value changed otherwise, it tries again.
+        for (
+          let attempt = 0;
+          payload.timeUsed === undefined && attempt < 3;
+          attempt++
+        ) {
+          const used = { ...payload, family, timeUsed: Date.now() }
+          if (
+            await markRefreshTokenUsed(
+              storage,
+              key,
+              payload,
+              used,
+              ttlRefreshReuse + ttlRefreshRetention,
+            )
+          ) {
+            payload = used
+            generateRefreshToken = true
+            break
+          }
+          const current: RefreshTokenPayload | undefined =
+            await loadRefreshToken(storage, key)
+          if (!current)
+            return c.json(
+              {
+                error: "invalid_grant",
+                error_description: "Refresh token has been used or expired",
+              },
+              400,
+            )
+          payload = current
+        }
+        if (payload.timeUsed === undefined)
+          return c.json(
+            {
+              error: "temporarily_unavailable",
+              error_description: "Please retry the refresh",
+            },
+            503,
           )
-        } else if (Date.now() > payload.timeUsed + ttlRefreshReuse * 1000) {
-          // token was reused past the allowed interval
-          await auth.invalidate(subject)
+        if (
+          !generateRefreshToken &&
+          (ttlRefreshReuse <= 0 ||
+            Date.now() > payload.timeUsed! + ttlRefreshReuse * 1000)
+        ) {
+          // Reused past the window: the token was stolen or replayed.
+          // Revoke this token's family only; the user's other sessions stay.
+          await revokeRefreshFamily(
+            storage,
+            payload.family ?? family,
+            ttlRefresh,
+          )
+          await removeRefreshToken(storage, key)
 
           // Fire audit event for token reuse detection if configured
           if (input.audit?.hooks?.onTokenReused) {

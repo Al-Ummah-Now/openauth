@@ -150,6 +150,18 @@ export function MemoryStorage(input?: MemoryStorageOptions): StorageAdapter {
       store.splice(match.index, 1)
       await save()
     },
+    async removePrefix(prefix) {
+      const p = joinKey([...prefix, ""])
+      let n = 0
+      for (let i = store.length - 1; i >= 0; i--) {
+        if (store[i][0].startsWith(p)) {
+          store.splice(i, 1)
+          n++
+        }
+      }
+      if (n) await save()
+      return n
+    },
   }
   return {
     atomic,
