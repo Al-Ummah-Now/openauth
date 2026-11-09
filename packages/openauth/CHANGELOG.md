@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.30] - 2026-11-09
+
+### Fixed
+
+- render every page with its own request's theme and language
+- restart page: English unless the link asks for another language
+
 ## [1.0.29] - 2026-11-08
 
 ## [1.0.28] - 2026-11-08
@@ -522,7 +529,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.29...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.30...HEAD
+[1.0.30]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.29...v1.0.30
 [1.0.29]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.28...v1.0.29
 [1.0.28]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.27...v1.0.28
 [1.0.27]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.26...v1.0.27
