@@ -42,6 +42,12 @@ export interface FlowRecord<A = unknown> {
   completedAt?: number
   /** Provider state (what providers store with ctx.set), keyed by name. */
   provider?: Record<string, unknown>
+  /**
+   * Revision of each provider value (also in the value's cookie). A read
+   * takes the newer of the stored and the cookie copy: the stored copy can
+   * be stale on an eventually consistent store.
+   */
+  providerRev?: Record<string, number>
 }
 
 export function flowKey(id: string) {
