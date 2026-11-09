@@ -2133,26 +2133,18 @@ export function issuer<
   ): Promise<boolean> {
     if (!storage) return true // Skip rate limiting if no storage
 
+    // Fixed window, atomic counter (OA-8): exact across isolates, one
+    // increment per request instead of a read-modify-write of a KV array
+    // (which lost increments and hit KV's 1 write/s per key)
     const now = Date.now()
-    const key = ["ratelimit", endpoint, clientId]
-
-    // Get current request log
-    const log = (await Storage.get<number[]>(storage, key)) || []
-
-    // Remove old entries (outside the window)
-    const windowStart = now - window * 1000
-    const recentRequests = log.filter((timestamp) => timestamp > windowStart)
-
-    // Check if limit exceeded
-    if (recentRequests.length >= limit) {
-      return false
-    }
-
-    // Add current request and save
-    recentRequests.push(now)
-    await Storage.set(storage, key, recentRequests, window)
-
-    return true
+    const slot = Math.floor(now / (window * 1000))
+    const key = ["ratelimit", endpoint, clientId, String(slot)]
+    const count = await Storage.atomic(storage).increment!(
+      key,
+      1,
+      new Date((slot + 1) * window * 1000 + 60_000),
+    )
+    return count <= limit
   }
 
   // RFC 7662: Token Introspection Endpoint

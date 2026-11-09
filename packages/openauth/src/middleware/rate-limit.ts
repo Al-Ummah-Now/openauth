@@ -6,9 +6,12 @@ import { createMiddleware } from "hono/factory"
 import type { RateLimitConfig, RateLimitInfo } from "./types.js"
 import { RateLimitExceededError } from "./errors.js"
 
+import { Storage, type StorageAdapter } from "../storage/storage.js"
+
 /**
- * In-memory rate limit store (for single instance)
- * For production, use KV or Durable Objects
+ * In-memory rate limit store. Per isolate: on Workers every isolate counts
+ * separately, so the effective limit grows with the number of isolates.
+ * Only for tests and single-process servers; never the default.
  */
 const inMemoryStore = new Map<string, { count: number; resetAt: number }>()
 
@@ -42,7 +45,31 @@ export const memoryStore: RateLimitStore = {
 }
 
 /**
+ * Exact counters in the storage adapter's atomic store (D1 or a Durable
+ * Object on Workers): one atomic increment per request, shared by every
+ * isolate and location.
+ */
+export function atomicStore(storage: StorageAdapter): RateLimitStore {
+  return {
+    async increment(key: string, windowMs: number) {
+      const now = Date.now()
+      const slot = Math.floor(now / windowMs)
+      const resetAt = (slot + 1) * windowMs
+      const count = await Storage.atomic(storage).increment!(
+        ["ratelimit", "mw", key, String(slot)],
+        1,
+        new Date(resetAt + 60_000),
+      )
+      return { count, resetAt }
+    },
+  }
+}
+
+/**
  * KV-based rate limit store for Cloudflare Workers
+ *
+ * @deprecated KV has no atomic increment: concurrent requests lose counts,
+ * and more than ~1 write/s per key fails. Use `atomicStore`.
  */
 export function kvStore(kv: any): RateLimitStore {
   return {
@@ -98,7 +125,13 @@ export function rateLimit(
     skip?: (c: any) => boolean
   },
 ) {
-  const store = options?.store || memoryStore
+  // No default store: an in-memory default silently multiplied the limit by
+  // the number of isolates (OA-8)
+  const store = options?.store
+  if (!store)
+    throw new Error(
+      "rateLimit: pass a store (atomicStore(storage) on Workers; memoryStore only for a single process)",
+    )
   const keyGenerator = options?.keyGenerator || defaultKeyGenerator
   const windowMs = config.window * 1000
 
@@ -140,6 +173,11 @@ export function endpointRateLimit(
   limits: Record<string, RateLimitConfig>,
   options?: { store?: RateLimitStore },
 ) {
+  const store = options?.store
+  if (!store)
+    throw new Error(
+      "rateLimit: pass a store (atomicStore(storage) on Workers; memoryStore only for a single process)",
+    )
   return createMiddleware(async (c, next) => {
     const path = c.req.path
     const method = c.req.method
@@ -153,7 +191,6 @@ export function endpointRateLimit(
       return
     }
 
-    const store = options?.store || memoryStore
     const windowMs = config.window * 1000
     const clientKey = `${config.keyPrefix || "ep:"}${key}:${defaultKeyGenerator(c)}`
 
