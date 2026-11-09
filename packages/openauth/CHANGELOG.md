@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.31] - 2026-11-09
+
+### Fixed
+
+- oauth: single-use authorization codes across processes (OA-1): optional atomic storage capability, replay revokes the code's tokens, presented client credentials are verified
+
 ## [1.0.30] - 2026-11-09
 
 ### Fixed
@@ -529,7 +535,8 @@ The following is the changelog from the upstream OpenAuth project.
 
 - 515635f: rename package
 
-[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.30...HEAD
+[Unreleased]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.31...HEAD
+[1.0.31]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.30...v1.0.31
 [1.0.30]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.29...v1.0.30
 [1.0.29]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.28...v1.0.29
 [1.0.28]: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.27...v1.0.28
