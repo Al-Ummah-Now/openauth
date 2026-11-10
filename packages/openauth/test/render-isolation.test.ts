@@ -103,6 +103,47 @@ describe("per-request rendering", () => {
     })
   })
 
+  test("password pages are English for an Arabic browser unless the link says ?lang=ar", async () => {
+    const app = plainIssuer(THEME_SST)
+    const origin = "https://a.example.com"
+    const headers = {
+      host: "a.example.com",
+      "accept-language": "ar-SA,ar;q=0.9",
+    }
+    const q = new URLSearchParams({
+      client_id: "app",
+      response_type: "code",
+      provider: "password",
+      state: "s",
+      redirect_uri: "http://localhost/cb",
+    })
+    const start = await app.request(`${origin}/authorize?${q}`, { headers })
+    expect(start.status).toBe(302)
+    const cookie = start.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ")
+    const flow = new URL(start.headers.get("location")!, origin).search
+    for (const page of ["authorize", "register", "change"]) {
+      for (const [suffix, lang, dir] of [
+        ["", "en", "ltr"],
+        ["&lang=fr", "en", "ltr"],
+        ["&lang=ar", "ar", "rtl"],
+      ]) {
+        const res = await app.request(
+          `${origin}/password/${page}${flow}${suffix}`,
+          {
+            headers: { ...headers, cookie },
+          },
+        )
+        expect(res.status).toBe(200)
+        const html = await res.text()
+        expect(html, `/password/${page}${suffix}`).toContain(`lang="${lang}"`)
+        expect(html, `/password/${page}${suffix}`).toContain(`dir="${dir}"`)
+      }
+    }
+  })
+
   test("enterprise tenants on one issuer each get their own branding", async () => {
     const tenantService = new TenantServiceImpl(storage)
     await tenantService.createTenant({
