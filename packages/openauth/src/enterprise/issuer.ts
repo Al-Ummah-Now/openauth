@@ -117,6 +117,8 @@ import {
   issuer as createBaseIssuer,
   normalizeIssuer,
   type OnSuccessResponder,
+  type RefreshHookInput,
+  type RefreshHookResult,
   unknownStateResponse,
 } from "../issuer.js"
 import { signingKeys, SIGNING_ALG } from "../keys.js"
@@ -495,7 +497,90 @@ export function createMultiTenantIssuer<
     return response
   }
 
+  /**
+   * Refresh grant: the token's current claims (see `onRefresh` in types.ts).
+   * Roles are never copied from the refresh token: a role granted after
+   * sign-in arrives and a revoked one goes on the next refresh. Errors
+   * propagate, so the base issuer answers a retryable 503 instead of
+   * serving the stored (possibly elevated) roles.
+   */
+  async function refreshClaims(
+    input: RefreshHookInput,
+    req: Request,
+    c: Context,
+  ): Promise<RefreshHookResult> {
+    const properties: Record<string, unknown> =
+      input.properties && typeof input.properties === "object"
+        ? { ...(input.properties as Record<string, unknown>) }
+        : {}
+    const userId = propertiesUserId(properties)
+    // The token's own tenant: roles of another tenant never apply to it
+    const tenantId =
+      typeof properties.tenantId === "string" && properties.tenantId
+        ? properties.tenantId
+        : enterpriseContext(c)?.tenant?.id
+
+    let appRoles: string[] = []
+    let appPermissions: string[] = []
+    if (config.onRefresh) {
+      if (!tenantId) throw new Error("refresh: the token has no tenant")
+      const decision = await config.onRefresh(
+        {
+          type: input.type,
+          properties,
+          subject: input.subject,
+          clientID: input.clientID,
+          tenantId,
+          userId,
+        },
+        req,
+      )
+      if (decision?.revoke) return { revoke: true, reason: decision.reason }
+      if (decision) {
+        appRoles = Array.isArray(decision.roles) ? decision.roles : []
+        appPermissions = Array.isArray(decision.permissions)
+          ? decision.permissions
+          : []
+      }
+    }
+
+    // Nothing to recompute from: no RBAC, or a subject without a user
+    if (!config.rbacService || !userId) return { properties: input.properties }
+    if (!tenantId) throw new Error("refresh: the token has no tenant")
+
+    const claims = await config.rbacService.enrichTokenClaims({
+      userId,
+      clientId: input.clientID,
+      tenantId,
+    })
+    const roles = [...new Set([...appRoles, ...claims.roles])]
+    const permissions = [...new Set([...appPermissions, ...claims.permissions])]
+
+    if (
+      config.sessionService.updateAccountRoles &&
+      !sameMembers(properties.roles, roles)
+    ) {
+      // Session-based reissue (account picker, silent sign-on) shows the
+      // current roles too. Best effort: the token is already correct.
+      try {
+        await config.sessionService.updateAccountRoles({
+          tenantId,
+          userId,
+          roles,
+        })
+      } catch (err) {
+        console.error(
+          "refresh: could not update the account sessions' roles",
+          err instanceof Error ? err.message : String(err),
+        )
+      }
+    }
+
+    return { properties: { ...properties, tenantId, roles, permissions } }
+  }
+
   const baseIssuer = createBaseIssuer({
+    refresh: refreshClaims,
     subjects: config.subjects,
     storage: config.storage,
     providers: config.providers,
@@ -1721,6 +1806,27 @@ async function resolveSubject(type: string, properties: unknown) {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
   return `${type}:${hex.slice(0, 16)}`
+}
+
+/** The user id in a subject's properties (providers use different keys). */
+function propertiesUserId(
+  properties: Record<string, unknown>,
+): string | undefined {
+  const id =
+    properties.userId ?? properties.userID ?? properties.id ?? properties.sub
+  return typeof id === "string" && id
+    ? id
+    : typeof id === "number"
+      ? String(id)
+      : undefined
+}
+
+/** Same members, any order. */
+function sameMembers(stored: unknown, current: string[]): boolean {
+  if (!Array.isArray(stored)) return false
+  const a = new Set(stored)
+  const b = new Set(current)
+  return a.size === b.size && [...a].every((x) => b.has(x))
 }
 
 /**
