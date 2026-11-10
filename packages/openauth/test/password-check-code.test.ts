@@ -145,17 +145,16 @@ describe("PasswordProvider checkCode", () => {
     const auth = createAuth()
     const jar = await changeAtCodeStep(auth)
     const right = codes.get(EMAIL)!
-    // The attacker replays the same cookies; the right code is guessed after the limit
-    const guesses = Array.from({ length: 300 }, (_, i) =>
-      i === 250 ? right : wrong(right),
-    )
+    // The attacker replays the same cookies with 300 parallel wrong guesses.
+    // (Parallel requests complete in any order, so a right guess among them
+    // could legitimately land within the limit: it is sent afterwards.)
     const results = await Promise.all(
-      guesses.map((code) =>
+      Array.from({ length: 300 }, () =>
         post(
           auth,
           "/password/change",
           new Map(jar),
-          { action: "verify", code },
+          { action: "verify", code: wrong(right) },
           false,
         ).then((r) => r.text()),
       ),
@@ -164,6 +163,16 @@ describe("PasswordProvider checkCode", () => {
     expect(
       results.filter((html) => html.includes('name="repeat"')).length,
     ).toBe(0)
+    // Every replay was counted: the right code is now refused too
+    const after = await post(
+      auth,
+      "/password/change",
+      new Map(jar),
+      { action: "verify", code: right },
+      false,
+    ).then((r) => r.text())
+    expect(calls.length).toBe(301)
+    expect(after).not.toContain('name="repeat"')
   })
 
   test("register: the hook gates email verification and no password is stored", async () => {
