@@ -29,7 +29,8 @@ describe("Key Generation and Persistence", () => {
 
       expect(keys1).toHaveLength(1)
       expect(keys1[0].alg).toBe("RSA-OAEP-512")
-      expect(keys1[0].id).toBe("primary") // Fixed ID to prevent race condition
+      // A unique kid per key (OA-3): two keys can never share one
+      expect(keys1[0].id).toMatch(/^[0-9a-f-]{36}$/)
       expect(keys1[0].public).toBeDefined()
       expect(keys1[0].private).toBeDefined()
 
@@ -38,7 +39,7 @@ describe("Key Generation and Persistence", () => {
         Storage.scan(storage, ["encryption:key"]),
       )
       expect(savedKeys).toHaveLength(1)
-      expect(savedKeys[0][0]).toEqual(["encryption:key", "primary"])
+      expect(savedKeys[0][0]).toEqual(["encryption:key", keys1[0].id])
     })
 
     test("uses double colon separator for storage keys", async () => {
@@ -109,13 +110,13 @@ describe("Key Generation and Persistence", () => {
 
       expect(keys).toHaveLength(1)
       expect(keys[0].alg).toBe("ES256")
-      expect(keys[0].id).toBe("primary") // Fixed ID to prevent race condition
+      expect(keys[0].id).toMatch(/^[0-9a-f-]{36}$/)
 
       const savedKeys = await Array.fromAsync(
         Storage.scan(storage, ["signing:key"]),
       )
       expect(savedKeys).toHaveLength(1)
-      expect(savedKeys[0][0]).toEqual(["signing:key", "primary"])
+      expect(savedKeys[0][0]).toEqual(["signing:key", keys[0].id])
     })
 
     test("loads existing key on second call", async () => {
@@ -123,7 +124,6 @@ describe("Key Generation and Persistence", () => {
       const keys2 = await signingKeys(storage)
 
       expect(keys1[0].id).toBe(keys2[0].id)
-      expect(keys1[0].id).toBe("primary")
     })
 
     test("concurrent calls only generate one key", async () => {
