@@ -26,6 +26,12 @@ on:
           - major
         default: patch
 
+# One publish per commit at a time: `test` and `format` both trigger a run for the
+# same master commit, and the second must see the first's tag and skip.
+concurrency:
+  group: publish-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   packages: write
@@ -58,6 +64,7 @@ jobs:
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_repository.full_name == github.repository))
     steps:
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
@@ -83,9 +90,24 @@ jobs:
         run: |
           cd packages/openauth
 
-          # Read current version
-          CURRENT_VERSION=$(node -e "console.log(require('./package.github.json').version)")
-          echo "Current version: $CURRENT_VERSION"
+          # The released version lives in the git tags, not in a commit on master:
+          # master's ruleset requires a pull request, so this workflow never pushes
+          # to it. Base = the newer of the latest stable tag and package.github.json.
+          FILE_VERSION=$(node -e "console.log(require('./package.github.json').version)")
+          TAG_VERSION=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -ve '-' | head -1 | sed 's/^v//')
+          CURRENT_VERSION=$(printf '%s\n%s\n' "$FILE_VERSION" "${TAG_VERSION:-0.0.0}" | sort -V | tail -1)
+          echo "Current version: $CURRENT_VERSION (file $FILE_VERSION, tag ${TAG_VERSION:-none})"
+
+          # A commit is released once: a second trigger for the same commit skips
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            RELEASED=$(git tag --points-at HEAD -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -ve '-' | head -1)
+            if [ -n "$RELEASED" ]; then
+              echo "HEAD is already released as $RELEASED; nothing to publish"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
 
           # Parse version components
           MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
@@ -132,6 +154,7 @@ jobs:
           echo "should_update=$SHOULD_UPDATE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Prepare GitHub Packages release
+        if: steps.version.outputs.skip != 'true'
         run: |
           cd packages/openauth
           # Backup original package.json
@@ -147,119 +170,8 @@ jobs:
           "
           echo "Package version: $(node -e "console.log(require('./package.json').version)")"
 
-      - name: Update base version in package.github.json
-        if: steps.version.outputs.should_update == 'true'
-        run: |
-          cd packages/openauth
-          node -e "
-            const fs = require('fs');
-            const pkg = require('./package.github.json');
-            pkg.version = '${{ steps.version.outputs.version }}';
-            fs.writeFileSync('package.github.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-          echo "Updated package.github.json to version ${{ steps.version.outputs.version }}"
-
-      - name: Publish to GitHub Packages
-        run: |
-          cd packages/openauth
-          npm publish --tag ${{ steps.version.outputs.tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Restore original package.json
-        if: always()
-        run: |
-          cd packages/openauth
-          if [ -f package.npm.json ]; then
-            mv package.npm.json package.json
-          fi
-
-      - name: Update CHANGELOG.md
-        if: steps.version.outputs.should_update == 'true'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          TODAY=$(date +%Y-%m-%d)
-          CHANGELOG="packages/openauth/CHANGELOG.md"
-
-          # Get the previous stable tag
-          PREV_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname | grep -v "-" | head -1 || echo "")
-
-          # Get commits since last tag
-          if [ -n "$PREV_TAG" ]; then
-            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"%s" --no-merges | grep -v "\[skip ci\]" || echo "")
-          else
-            COMMITS=$(git log -20 --pretty=format:"%s" --no-merges | grep -v "\[skip ci\]" || echo "")
-          fi
-
-          # Categorize commits
-          FEATURES=$(echo "$COMMITS" | grep -iE "^(feat|feature)" | sed 's/^feat[:(]//' | sed 's/^feature[:(]//' | sed 's/^[[:space:]]*/- /' || echo "")
-          FIXES=$(echo "$COMMITS" | grep -iE "^fix" | sed 's/^fix[:(]//' | sed 's/^[[:space:]]*/- /' || echo "")
-          DOCS=$(echo "$COMMITS" | grep -iE "^doc" | sed 's/^docs*[:(]//' | sed 's/^[[:space:]]*/- /' || echo "")
-          REFACTOR=$(echo "$COMMITS" | grep -iE "^refactor" | sed 's/^refactor[:(]//' | sed 's/^[[:space:]]*/- /' || echo "")
-
-          # Build changelog entry
-          ENTRY="## [${VERSION}] - ${TODAY}\n\n"
-
-          if [ -n "$FEATURES" ]; then
-            ENTRY="${ENTRY}### Added\n\n${FEATURES}\n\n"
-          fi
-
-          if [ -n "$FIXES" ]; then
-            ENTRY="${ENTRY}### Fixed\n\n${FIXES}\n\n"
-          fi
-
-          if [ -n "$REFACTOR" ]; then
-            ENTRY="${ENTRY}### Changed\n\n${REFACTOR}\n\n"
-          fi
-
-          if [ -n "$DOCS" ]; then
-            ENTRY="${ENTRY}### Documentation\n\n${DOCS}\n\n"
-          fi
-
-          # Update CHANGELOG.md - insert new entry after [Unreleased] section
-          # First, find where Unreleased section ends (next ## header)
-          if grep -q "## \[Unreleased\]" "$CHANGELOG"; then
-            # Create temp file with new entry inserted
-            awk -v entry="$ENTRY" '
-              /^## \[Unreleased\]/ {
-                print;
-                getline;
-                # Skip any content under Unreleased until next ## or end
-                while ($0 !~ /^## \[/ && NF) { getline }
-                # Print new entry before next version
-                printf "\n%s", entry
-              }
-              { print }
-            ' "$CHANGELOG" > "${CHANGELOG}.tmp"
-            mv "${CHANGELOG}.tmp" "$CHANGELOG"
-          fi
-
-          # Update the links at bottom of file
-          if grep -q "^\[Unreleased\]:" "$CHANGELOG"; then
-            # Update Unreleased link to point to new version
-            sed -i "s|\[Unreleased\]:.*|[Unreleased]: https://github.com/${{ github.repository }}/compare/v${VERSION}...HEAD|" "$CHANGELOG"
-            # Add new version link if not exists
-            if ! grep -q "^\[${VERSION}\]:" "$CHANGELOG"; then
-              PREV_VER=$(echo "$PREV_TAG" | sed 's/^v//')
-              if [ -n "$PREV_VER" ]; then
-                sed -i "/^\[Unreleased\]:/a [${VERSION}]: https://github.com/${{ github.repository }}/compare/v${PREV_VER}...v${VERSION}" "$CHANGELOG"
-              fi
-            fi
-          fi
-
-          echo "Updated CHANGELOG.md with v${VERSION}"
-          cat "$CHANGELOG" | head -80
-
-      - name: Commit version and changelog update
-        if: steps.version.outputs.should_update == 'true'
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add packages/openauth/package.github.json packages/openauth/CHANGELOG.md
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }} [skip ci]" || echo "No changes to commit"
-          git push
-
       - name: Generate release notes
+        if: steps.version.outputs.skip != 'true'
         id: release_notes
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -325,13 +237,16 @@ jobs:
           echo "Generated release notes"
 
       - name: Create Git Tag
+        if: steps.version.outputs.skip != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG_NAME="v${VERSION}"
 
-          # Check if tag already exists
+          # Tag before publishing: the tag is the record of the release (master is
+          # never pushed to), so an existing tag means this version is taken.
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Tag $TAG_NAME already exists, skipping"
+            echo "::error::Tag $TAG_NAME already exists; refusing to publish over it"
+            exit 1
           else
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
             git config --local user.name "github-actions[bot]"
@@ -340,7 +255,24 @@ jobs:
             echo "Created and pushed tag $TAG_NAME"
           fi
 
+      - name: Publish to GitHub Packages
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          cd packages/openauth
+          npm publish --tag ${{ steps.version.outputs.tag }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore original package.json
+        if: always()
+        run: |
+          cd packages/openauth
+          if [ -f package.npm.json ]; then
+            mv package.npm.json package.json
+          fi
+
       - name: Create GitHub Release
+        if: steps.version.outputs.skip != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -379,7 +311,7 @@ jobs:
             }
 
       - name: Comment on PR
-        if: github.event_name == 'pull_request'
+        if: steps.version.outputs.skip != 'true' && (github.event_name == 'pull_request')
         uses: actions/github-script@v7
         with:
           script: |
