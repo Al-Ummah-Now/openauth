@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.32] - 2026-11-09
+
+### Added
+
+- password: `checkCode(email, code)` hook so apps can limit confirmation-code attempts (count, expiry, single use) in a strongly consistent store
+
 ## [1.0.31] - 2026-11-09
 
 ### Fixed

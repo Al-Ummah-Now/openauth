@@ -1,6 +1,6 @@
 {
   "name": "@al-ummah-now/openauth",
-  "version": "1.0.31",
+  "version": "1.0.32",
   "type": "module",
   "bin": {
     "openauth": "./bin/cli.js"
