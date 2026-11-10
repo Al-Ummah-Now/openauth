@@ -19,7 +19,12 @@
  * ## Cache Behavior
  *
  * - Lazy loading: Only fetches when first requested
- * - TTL: 1 hour (3600000ms) - cached value expires after this duration
+ * - TTL: 60 s. The cache is per isolate (OA-9): other isolates keep their
+ *   copy until it expires, so the TTL is kept short.
+ * - Cross-isolate invalidation: pass a storage adapter to
+ *   `getDefaultTenantTheme` and `invalidateDefaultTenantCache`. A change
+ *   writes a new version to the atomic store; readers compare it (at most
+ *   every 5 s) and reload when it differs.
  * - Graceful fallback: Returns null if default tenant doesn't exist or is inactive
  * - Error resilient: DB errors don't break the application
  *
@@ -34,6 +39,7 @@
 
 import type { TenantService, Tenant } from "../contracts/types.js"
 import type { Theme } from "../ui/theme.js"
+import { Storage, type StorageAdapter } from "../storage/storage.js"
 
 // ============================================
 // CONSTANTS
@@ -45,9 +51,22 @@ import type { Theme } from "../ui/theme.js"
 export const DEFAULT_TENANT_ID = "default"
 
 /**
- * Default TTL for the cache (1 hour in milliseconds)
+ * Default TTL for the cache (60 seconds)
  */
-export const DEFAULT_CACHE_TTL_MS = 3600000 // 1 hour
+export const DEFAULT_CACHE_TTL_MS = 60_000
+
+/** How often a cached tenant is checked against the shared version. */
+export const DEFAULT_TENANT_VERSION_CHECK_MS = 5_000
+
+/** Version of the default tenant (atomic store); changes on every update. */
+export const DEFAULT_TENANT_VERSION_KEY = ["tenant", "default", "version"]
+
+async function readVersion(storage: StorageAdapter): Promise<string> {
+  const v = await Storage.atomic(storage)
+    .get(DEFAULT_TENANT_VERSION_KEY)
+    .catch(() => undefined)
+  return typeof v === "string" ? v : ""
+}
 
 // ============================================
 // CACHE IMPLEMENTATION
@@ -63,6 +82,10 @@ interface DefaultTenantCache {
   loadedAt: number
   /** Whether a fetch has been attempted (distinguishes "not loaded" from "loaded but null") */
   loaded: boolean
+  /** Shared version the tenant was loaded at (with a storage adapter) */
+  version?: string
+  /** When the version was last compared */
+  checkedAt?: number
 }
 
 /**
@@ -99,8 +122,9 @@ let cache: DefaultTenantCache = {
  */
 export async function getDefaultTenantTheme(
   tenantService: TenantService,
+  storage?: StorageAdapter,
 ): Promise<Partial<Theme> | null> {
-  const tenant = await getDefaultTenant(tenantService)
+  const tenant = await getDefaultTenant(tenantService, storage)
   return tenant?.branding?.theme ?? null
 }
 
@@ -117,12 +141,20 @@ export async function getDefaultTenantTheme(
  * invalidateDefaultTenantCache()
  * ```
  */
-export function invalidateDefaultTenantCache(): void {
+export async function invalidateDefaultTenantCache(
+  storage?: StorageAdapter,
+): Promise<void> {
   cache = {
     tenant: null,
     loadedAt: 0,
     loaded: false,
   }
+  // Every other isolate reloads on its next version check
+  if (storage)
+    await Storage.atomic(storage).set(
+      DEFAULT_TENANT_VERSION_KEY,
+      crypto.randomUUID(),
+    )
 }
 
 // ============================================
@@ -138,13 +170,25 @@ export function invalidateDefaultTenantCache(): void {
  */
 async function getDefaultTenant(
   tenantService: TenantService,
+  storage?: StorageAdapter,
 ): Promise<Tenant | null> {
   const now = Date.now()
 
   // Check if cache is valid (loaded and not expired)
   if (cache.loaded && now - cache.loadedAt < DEFAULT_CACHE_TTL_MS) {
-    return cache.tenant
+    if (
+      !storage ||
+      now - (cache.checkedAt ?? cache.loadedAt) <
+        DEFAULT_TENANT_VERSION_CHECK_MS
+    )
+      return cache.tenant
+    const version = await readVersion(storage)
+    if (version === cache.version) {
+      cache.checkedAt = now
+      return cache.tenant
+    }
   }
+  const version = storage ? await readVersion(storage) : undefined
 
   // Load from database
   try {
@@ -164,6 +208,8 @@ async function getDefaultTenant(
       tenant,
       loadedAt: now,
       loaded: true,
+      version,
+      checkedAt: now,
     }
 
     return tenant
