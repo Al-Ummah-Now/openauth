@@ -534,6 +534,33 @@ describe("review follow-ups", () => {
     expect(done.headers.get("location")).toStartWith("https://a.example.com/cb")
   })
 
+  test("OA-5: a stale stored copy never beats this flow's newer cookie", async () => {
+    const browser = new Browser(createAuth())
+    const tab = await browser.startSignIn("client-a", APP_A)
+    const register = tab.replace("/password/authorize", "/password/register")
+    await browser.get(register)
+    const form = {
+      action: "register",
+      email: "resent@example.com",
+      password: "pw-123456",
+      repeat: "pw-123456",
+    }
+    await browser.post(register, form)
+    const key = flowKey(flowIdOf(tab))
+    // What a lagging PoP still serves: the state with the first code
+    const stale = structuredClone(await Storage.get<any>(storage, key))
+    const firstCode = codes["resent@example.com"]
+    await browser.post(register, form) // "resend": a new code
+    expect(codes["resent@example.com"]).not.toBe(firstCode)
+    await Storage.set(storage, key, stale, 600)
+    const done = await browser.post(register, {
+      action: "verify",
+      code: codes["resent@example.com"],
+    })
+    expect(done.status).toBe(302)
+    expect(done.headers.get("location")).toStartWith("https://a.example.com/cb")
+  })
+
   test("a stale code-provider form restarts instead of a 500", async () => {
     const browser = new Browser(createAuth())
     const res = await browser.post("/code/authorize", {
