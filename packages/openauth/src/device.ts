@@ -87,10 +87,21 @@ export interface DeviceRecord {
   userCode: string
   scope?: string
   status: "pending" | "approved" | "denied"
+  /** Initial polling interval (seconds); the current one is in {@link PollState}. */
   interval: number
   expiresAt: number
+  /** Only on records written before poll state moved to its own key. */
   lastPollAt?: number
   grant?: DeviceGrant
+}
+
+/**
+ * Polling bookkeeping, kept under its own key so a poll never rewrites the
+ * device record (a poll that read `pending` must not overwrite an approval).
+ */
+export interface PollState {
+  lastPollAt: number
+  interval: number
 }
 
 interface HandleRecord {
@@ -281,7 +292,40 @@ export function registerDeviceFlow(
     hitRateLimit(storage, "lookup_fail", networkOf(clientIp(c)), failedLookups)
 
   const deviceKey = (hash: string) => ["oauth:device", hash]
+  const pollKey = (hash: string) => ["oauth:device_poll", hash]
+  const handleKey = (handle: string) => ["oauth:device_handle", handle]
   const userKey = (code: string) => ["oauth:device_user", code]
+  // Device records, poll state and handles live in the atomic store: status
+  // changes are compare-and-set (pending -> approved | denied, once) and the
+  // grant is handed out by one atomic take. Only the user-code index stays in
+  // the plain store; whatever it points to is checked against the record.
+  const atomic = Storage.atomic(storage)
+  const until = (r: DeviceRecord) => new Date(Date.now() + remaining(r) * 1000)
+
+  /** The device record, moving one written by an older version into the atomic store. */
+  async function loadRecord(hash: string): Promise<DeviceRecord | undefined> {
+    const record = await atomic.get(deviceKey(hash))
+    if (record || !Storage.isAtomic(storage)) return record ?? undefined
+    const legacy = await Storage.get<DeviceRecord>(storage, deviceKey(hash))
+    if (!legacy) return undefined
+    const { lastPollAt: _, ...rest } = legacy
+    await atomic.add(deviceKey(hash), rest, until(legacy))
+    await Storage.remove(storage, deviceKey(hash))
+    return (await atomic.get(deviceKey(hash))) ?? undefined
+  }
+
+  /** Move a pending record to its final state. False if it already moved. */
+  const settle = (hash: string, record: DeviceRecord, next: DeviceRecord) =>
+    atomic.replace(deviceKey(hash), record, next, until(record))
+
+  /** Read and remove a sign-in handle (single use). */
+  async function takeHandle(handle: string): Promise<HandleRecord | undefined> {
+    const h = await atomic.take(handleKey(handle))
+    if (h || !Storage.isAtomic(storage)) return h ?? undefined
+    const legacy = await Storage.get<HandleRecord>(storage, handleKey(handle))
+    if (legacy) await Storage.remove(storage, handleKey(handle))
+    return legacy ?? undefined
+  }
   // Storage TTL for a record's remaining life. Cloudflare KV needs >= 60 s; the
   // record's own expiresAt is always checked, so a longer TTL is harmless.
   const remaining = (r: DeviceRecord) =>
@@ -303,7 +347,7 @@ export function registerDeviceFlow(
   ): Promise<{ hash: string; record: DeviceRecord } | null> {
     const hash = await Storage.get<string>(storage, userKey(code))
     if (!hash) return null
-    const record = await Storage.get<DeviceRecord>(storage, deviceKey(hash))
+    const record = await loadRecord(hash)
     if (
       !record ||
       record.expiresAt <= Date.now() ||
@@ -365,7 +409,7 @@ export function registerDeviceFlow(
       interval,
       expiresAt: Date.now() + expiresIn * 1000,
     }
-    await Storage.set(storage, deviceKey(hash), record, expiresIn)
+    await atomic.set(deviceKey(hash), record, until(record))
     await Storage.set(storage, userKey(userCode), hash, expiresIn)
     const verificationUri =
       options.verificationUri ?? `${deps.issuer(c)}/activate`
@@ -435,12 +479,13 @@ export function registerDeviceFlow(
     const ttl = remaining(found.record)
 
     if (form?.get("action")?.toString() !== "approve") {
-      await Storage.set(
-        storage,
-        deviceKey(found.hash),
-        { ...found.record, status: "denied" },
-        ttl,
+      if (
+        !(await settle(found.hash, found.record, {
+          ...found.record,
+          status: "denied",
+        }))
       )
+        return page(c, { page: "failed" }, 400)
       await Storage.remove(storage, userKey(code))
       return page(c, { page: "denied" })
     }
@@ -448,15 +493,14 @@ export function registerDeviceFlow(
     const pkce = await generatePKCE()
     const handle = randomToken(24)
     const locale = restartLocale(c.req.raw)
-    await Storage.set(
-      storage,
-      ["oauth:device_handle", handle],
+    await atomic.set(
+      handleKey(handle),
       {
         deviceKey: found.hash,
         verifier: pkce.verifier,
         locale,
       } satisfies HandleRecord,
-      ttl,
+      new Date(Date.now() + ttl * 1000),
     )
     const iss = deps.issuer(c)
     const authorize = new URL(`${iss}/authorize`)
@@ -490,18 +534,9 @@ export function registerDeviceFlow(
     if (!handle || !bound || bound !== handle)
       return page(c, { page: "failed" }, 400)
     setCookie(c, HANDLE_COOKIE, "", { path: "/activate", maxAge: 0 })
-    const h = handle
-      ? await Storage.get<HandleRecord>(storage, [
-          "oauth:device_handle",
-          handle,
-        ])
-      : undefined
+    const h = await takeHandle(handle)
     if (!h) return page(c, { page: "failed" }, 400)
-    await Storage.remove(storage, ["oauth:device_handle", handle!])
-    const record = await Storage.get<DeviceRecord>(
-      storage,
-      deviceKey(h.deviceKey),
-    )
+    const record = await loadRecord(h.deviceKey)
     if (
       !record ||
       record.expiresAt <= Date.now() ||
@@ -511,12 +546,10 @@ export function registerDeviceFlow(
     if (!code) {
       // The user cancelled the sign-in (error=access_denied) or it failed
       if (c.req.query("error") === "access_denied") {
-        await Storage.set(
-          storage,
-          deviceKey(h.deviceKey),
-          { ...record, status: "denied" },
-          remaining(record),
+        if (
+          !(await settle(h.deviceKey, record, { ...record, status: "denied" }))
         )
+          return page(c, { page: "failed" }, 400)
         await Storage.remove(storage, userKey(record.userCode))
         return page(c, { page: "denied" })
       }
@@ -560,12 +593,14 @@ export function registerDeviceFlow(
       authTime: payload.authTime,
       family,
     }
-    await Storage.set(
-      storage,
-      deviceKey(h.deviceKey),
-      { ...record, status: "approved", grant },
-      remaining(record),
+    if (
+      !(await settle(h.deviceKey, record, {
+        ...record,
+        status: "approved",
+        grant,
+      }))
     )
+      return page(c, { page: "failed" }, 400)
     await Storage.remove(storage, userKey(record.userCode))
     return page(c, { page: "done" })
   })
@@ -584,7 +619,7 @@ export function registerDeviceFlow(
         "Missing device_code or client_id",
       )
     const hash = await hashDeviceCode(deviceCode)
-    const record = await Storage.get<DeviceRecord>(storage, deviceKey(hash))
+    const record = await loadRecord(hash)
     if (!record || record.expiresAt <= Date.now())
       return oauthError(c, "expired_token", "The device code has expired")
     if (record.clientID !== clientId)
@@ -594,47 +629,58 @@ export function registerDeviceFlow(
         "The device code was not issued to this client",
       )
 
-    if (record.status === "denied") {
-      await Storage.remove(storage, deviceKey(hash))
-      return oauthError(c, "access_denied", "The user denied the request")
-    }
-    if (record.status === "approved" && record.grant) {
-      await Storage.remove(storage, deviceKey(hash))
-      const tokens = await deps.generateTokens(c, record.grant)
-      return c.json(
-        {
-          access_token: tokens.access,
-          token_type: "bearer",
-          expires_in: tokens.expiresIn,
-          refresh_token: tokens.refresh,
-        },
-        200,
-        { "Cache-Control": "no-store" },
-      )
-    }
-    const now = Date.now()
-    if (record.lastPollAt && now - record.lastPollAt < record.interval * 1000) {
-      const slower = {
-        ...record,
-        interval: record.interval + 5,
-        lastPollAt: now,
+    if (record.status !== "pending") {
+      // Final state: hand it out once. Of concurrent polls exactly one takes
+      // the record; the others find it gone.
+      const taken = (await atomic.take(deviceKey(hash))) as
+        DeviceRecord | undefined
+      await atomic.remove(pollKey(hash))
+      if (!taken)
+        return oauthError(c, "expired_token", "The device code has expired")
+      if (taken.status === "denied")
+        return oauthError(c, "access_denied", "The user denied the request")
+      if (taken.status === "approved" && taken.grant) {
+        const tokens = await deps.generateTokens(c, taken.grant)
+        return c.json(
+          {
+            access_token: tokens.access,
+            token_type: "bearer",
+            expires_in: tokens.expiresIn,
+            refresh_token: tokens.refresh,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        )
       }
-      await Storage.set(storage, deviceKey(hash), slower, remaining(record))
+      return oauthError(c, "expired_token", "The device code has expired")
+    }
+
+    // Pending: only the poll state is written, never the device record
+    const now = Date.now()
+    const poll = (await atomic.get(pollKey(hash))) as PollState | undefined
+    const last = poll?.lastPollAt ?? record.lastPollAt
+    const current = poll?.interval ?? record.interval
+    if (last && now - last < current * 1000) {
+      const slower = current + 5
+      await atomic.set(
+        pollKey(hash),
+        { lastPollAt: now, interval: slower } satisfies PollState,
+        until(record),
+      )
       return c.json(
         {
           error: "slow_down",
           error_description: "Polling too fast",
-          interval: slower.interval,
+          interval: slower,
         },
         400,
         { "Cache-Control": "no-store" },
       )
     }
-    await Storage.set(
-      storage,
-      deviceKey(hash),
-      { ...record, lastPollAt: now },
-      remaining(record),
+    await atomic.set(
+      pollKey(hash),
+      { lastPollAt: now, interval: current } satisfies PollState,
+      until(record),
     )
     return oauthError(
       c,
