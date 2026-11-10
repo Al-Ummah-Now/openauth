@@ -41,6 +41,12 @@ export interface AtomicStorageAdapter {
   /** Delete and return the live value. At most one caller receives it. */
   take(key: string[]): Promise<any | undefined>
   remove(key: string[]): Promise<void>
+  /**
+   * Delete every key under a prefix (e.g. all refresh tokens of a subject).
+   * Returns how many were deleted. Required for refresh tokens to be revoked
+   * in bulk; without it only the plain store is cleared.
+   */
+  removePrefix?(prefix: string[]): Promise<number>
 }
 
 /** New separator - double colon is KV-friendly and won't conflict with single colons in key names */
@@ -105,6 +111,8 @@ export namespace Storage {
         a.replace(encode(key), expected, value, expiry),
       take: (key) => a.take(encode(key)),
       remove: (key) => a.remove(encode(key)),
+      removePrefix: async (prefix) =>
+        a.removePrefix ? a.removePrefix(encode(prefix)) : 0,
     }
   }
 

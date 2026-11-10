@@ -328,7 +328,8 @@ describe("refresh token", () => {
     let response = await requestRefreshToken(tokens.refresh)
     expect(response.status).toBe(200)
 
-    setSystemTime(Date.now() + 1000 * 60 + 1000)
+    // Past the default reuse window (120 s)
+    setSystemTime(Date.now() + 1000 * 120 + 1000)
 
     response = await requestRefreshToken(tokens.refresh)
     expect(response.status).toBe(400)
