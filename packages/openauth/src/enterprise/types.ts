@@ -215,6 +215,42 @@ export interface EnterpriseIssuerConfig<
   ) => Promise<Response>
 
   /**
+   * Called on every refresh grant, before the claims are recomputed. Return
+   * `{ revoke: true }` when the user may no longer refresh (deleted,
+   * suspended): the client gets `invalid_grant` and the token family is
+   * revoked. Throwing answers a retryable `503 temporarily_unavailable`.
+   *
+   * After it, when `rbacService` is configured, the token's `roles` and
+   * `permissions` are recomputed from RBAC for the token's own tenant
+   * (`properties.tenantId`), exactly as at sign-in (RBAC's merged with any
+   * `roles`/`permissions` this returns). The refreshed access
+   * token, the rotated refresh token and (when the session service supports
+   * it) the user's account sessions carry the current roles.
+   */
+  onRefresh?: (
+    input: {
+      type: string
+      properties: Record<string, unknown>
+      subject: string
+      clientID: string
+      /** The tenant the token was issued in. */
+      tenantId: string
+      /** The user id read from the properties (`id`, `userId` or `userID`). */
+      userId?: string
+    },
+    req: Request,
+  ) => Promise<
+    | void
+    | { revoke: true; reason?: string }
+    /**
+     * Roles/permissions from the app's own sources (as its onSuccess adds
+     * them): merged with RBAC's, as at sign-in. Without this, roles that
+     * are not in RBAC are not carried over by a refresh.
+     */
+    | { revoke?: false; roles?: string[]; permissions?: string[] }
+  >
+
+  /**
    * Callback to determine if a client is allowed to authorize.
    * Called after tenant resolution, so tenant context is available.
    *

@@ -598,6 +598,31 @@ export class D1SessionAdapter {
   }
 
   /**
+   * Store the user's current roles on their account sessions in a tenant
+   * (`subject_properties.roles`). Returns the number of rows updated.
+   */
+  async updateAccountRoles(params: {
+    userId: string
+    tenantId: string
+    roles: string[]
+  }): Promise<number> {
+    const query = `
+      UPDATE ${this.accountTable}
+      SET subject_properties = json_set(
+        COALESCE(subject_properties, '{}'), '$.roles', json(?)
+      )
+      WHERE user_id = ? AND browser_session_id IN (
+        SELECT id FROM ${this.browserTable} WHERE tenant_id = ?
+      )
+    `
+    const result = await this.db
+      .prepare(query)
+      .bind(JSON.stringify(params.roles), params.userId, params.tenantId)
+      .run()
+    return (result as { meta?: { changes?: number } }).meta?.changes ?? 0
+  }
+
+  /**
    * Get session statistics for a tenant
    */
   async getSessionStats(params: { tenantId?: string }): Promise<{
