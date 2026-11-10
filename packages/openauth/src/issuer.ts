@@ -666,8 +666,7 @@ export interface RefreshHookInput {
 
 /** Result of {@link IssuerInput.refresh}. */
 export type RefreshHookResult =
-  | { properties: any; revoke?: undefined }
-  | { revoke: true; reason?: string }
+  { properties: any; revoke?: undefined } | { revoke: true; reason?: string }
 
 export type RefreshHook = (
   input: RefreshHookInput,
