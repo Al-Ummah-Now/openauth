@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Releases after 1.0.30 are recorded as git tags and [GitHub releases](https://github.com/Al-Ummah-Now/openauth/releases), with their notes there. The publish workflow no longer commits version bumps to master.
+
 ## [1.0.32] - 2026-11-09
 
 ### Added
