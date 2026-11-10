@@ -12,6 +12,12 @@ import {
   type LoadingState,
   type AccountSwitcherState,
 } from "./account-switcher.types"
+import { ConfirmDialog } from "./confirm-dialog"
+
+/**
+ * Which sign-out action is waiting for the user's confirmation, if any.
+ */
+type PendingSignOut = { kind: "account"; userId: string } | { kind: "all" }
 
 /**
  * Helper to get color value from theme (handles string or ColorScheme)
@@ -108,6 +114,9 @@ export function AccountSwitcher({
     loading: "idle",
     error: null,
   })
+  const [pendingSignOut, setPendingSignOut] = useState<PendingSignOut | null>(
+    null,
+  )
 
   // Merge provided theme with defaults
   const theme = useMemo(() => ({ ...DEFAULT_THEME, ...themeProp }), [themeProp])
@@ -231,17 +240,12 @@ export function AccountSwitcher({
    * Calls DELETE /session/accounts/:userId to remove a specific account
    * from the browser session. If it's the active account, the session
    * will either switch to another account or end the session.
+   * Called only after the user confirms in the in-app dialog.
    *
    * @param userId - The user ID of the account to remove
    */
   const signOutAccount = useCallback(
     async (userId: string) => {
-      if (
-        !confirm(`Are you sure you want to sign out this account (${userId})?`)
-      ) {
-        return
-      }
-
       setState((prev) => ({ ...prev, loading: "removing", error: null }))
 
       try {
@@ -296,12 +300,9 @@ export function AccountSwitcher({
    *
    * Calls DELETE /session/all to remove all accounts from the browser
    * session and end the session completely.
+   * Called only after the user confirms in the in-app dialog.
    */
   const signOutAll = useCallback(async () => {
-    if (!confirm("Are you sure you want to sign out all accounts?")) {
-      return
-    }
-
     setState((prev) => ({ ...prev, loading: "removing", error: null }))
 
     try {
@@ -877,7 +878,10 @@ export function AccountSwitcher({
                     className="btn btn-remove"
                     onClick={(e) => {
                       e.stopPropagation()
-                      signOutAccount(account.userId)
+                      setPendingSignOut({
+                        kind: "account",
+                        userId: account.userId,
+                      })
                     }}
                     disabled={state.loading !== "idle"}
                   >
@@ -900,13 +904,38 @@ export function AccountSwitcher({
         {state.accounts.length > 0 && (
           <button
             className="btn btn-sign-out-all"
-            onClick={signOutAll}
+            onClick={() => setPendingSignOut({ kind: "all" })}
             disabled={state.loading !== "idle"}
           >
             Sign Out All
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingSignOut !== null}
+        destructive
+        title={
+          pendingSignOut?.kind === "all"
+            ? "Sign out all accounts?"
+            : "Sign out this account?"
+        }
+        description={
+          pendingSignOut?.kind === "account"
+            ? `${pendingSignOut.userId} will be removed from this browser session.`
+            : "Every account will be removed from this browser session."
+        }
+        confirmLabel={
+          pendingSignOut?.kind === "all" ? "Sign out all" : "Sign out"
+        }
+        onCancel={() => setPendingSignOut(null)}
+        onConfirm={() => {
+          const pending = pendingSignOut
+          setPendingSignOut(null)
+          if (pending?.kind === "account") signOutAccount(pending.userId)
+          else if (pending?.kind === "all") signOutAll()
+        }}
+      />
     </div>
   )
 }
