@@ -100,45 +100,97 @@ async function deserializeKeyPair(
 }
 
 /**
+ * Imported key sets cached in module scope per `StorageAdapter.scope` (OA-6):
+ * the issuer is often built per request, and loading keys cost a storage
+ * read (and a KV list for legacy keys) plus PKCS8/SPKI imports every time.
+ * Keys only change when a new one is created, which every process sees
+ * within this TTL; the old key stays valid and published meanwhile.
+ */
+const KEY_CACHE_TTL_MS = 5 * 60 * 1000
+const keyCache = new Map<string, { at: number; keys: Promise<KeyPair[]> }>()
+
+function cached(
+  storage: StorageAdapter,
+  kind: string,
+  load: () => Promise<KeyPair[]>,
+): Promise<KeyPair[]> {
+  if (!storage.scope) return load()
+  const id = `${storage.scope}\u0000${kind}`
+  const hit = keyCache.get(id)
+  if (hit && Date.now() - hit.at < KEY_CACHE_TTL_MS) return hit.keys
+  const keys = load()
+  keyCache.set(id, { at: Date.now(), keys })
+  keys.catch(() => keyCache.delete(id))
+  return keys
+}
+
+/** Drop cached key sets (tests, or after creating keys out of band). */
+export function clearKeyCache() {
+  keyCache.clear()
+}
+
+const LEGACY_SIGNING_INDEX = ["keys:legacy_signing"]
+
+/**
+ * RS512 keys of the original openauth (`oauth:key/*`), verify-only.
+ * Listed once and kept in the atomic store, instead of a KV list per request.
  * @deprecated use `signingKeys` instead
  */
 export async function legacySigningKeys(
   storage: StorageAdapter,
 ): Promise<KeyPair[]> {
-  const alg = "RS512"
-  const results = [] as KeyPair[]
-  const scanner = Storage.scan<SerializedKeyPair>(storage, ["oauth:key"])
-  for await (const [_key, value] of scanner) {
-    const publicKey = await importSPKI(value.publicKey, alg, {
-      extractable: true,
-    })
-    const privateKey = await importPKCS8(value.privateKey, alg)
-    const jwk = await exportJWK(publicKey)
-    jwk.kid = value.id
-    results.push({
-      id: value.id,
-      alg,
-      created: new Date(value.created),
-      public: publicKey,
-      private: privateKey,
-      expired: new Date(1735858114000),
-      jwk,
-    })
-  }
-  return results
+  return cached(storage, "legacy_signing", async () => {
+    const atomic = Storage.atomic(storage)
+    let index = (await atomic.get(LEGACY_SIGNING_INDEX)) as KeyIndex | undefined
+    if (!index) {
+      const keys = [] as SerializedKeyPair[]
+      for await (const [, value] of Storage.scan<SerializedKeyPair>(storage, [
+        "oauth:key",
+      ]))
+        keys.push(value)
+      index = { keys }
+      // Only adopted when the atomic store is real (else list every time)
+      if (Storage.isAtomic(storage))
+        await atomic.add(LEGACY_SIGNING_INDEX, index)
+    }
+    const alg = "RS512"
+    const results = [] as KeyPair[]
+    for (const value of index.keys) {
+      const publicKey = await importSPKI(value.publicKey, alg, {
+        extractable: true,
+      })
+      const privateKey = await importPKCS8(value.privateKey, alg)
+      const jwk = await exportJWK(publicKey)
+      jwk.kid = value.id
+      results.push({
+        id: value.id,
+        alg,
+        created: new Date(value.created),
+        public: publicKey,
+        private: privateKey,
+        expired: new Date(1735858114000),
+        jwk,
+      })
+    }
+    return results
+  })
 }
 
 export async function signingKeys(storage: StorageAdapter): Promise<KeyPair[]> {
-  return locked(storage, "signing", () =>
-    loadOrCreate(storage, "signing", signingAlg, "sig"),
+  return cached(storage, "signing", () =>
+    locked(storage, "signing", () =>
+      loadOrCreate(storage, "signing", signingAlg, "sig"),
+    ),
   )
 }
 
 export async function encryptionKeys(
   storage: StorageAdapter,
 ): Promise<KeyPair[]> {
-  return locked(storage, "encryption", () =>
-    loadOrCreate(storage, "encryption", encryptionAlg),
+  return cached(storage, "encryption", () =>
+    locked(storage, "encryption", () =>
+      loadOrCreate(storage, "encryption", encryptionAlg),
+    ),
   )
 }
 
