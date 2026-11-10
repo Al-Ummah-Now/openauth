@@ -6,7 +6,7 @@ import type { MiddlewareHandler } from "hono"
 import { bearerAuth } from "./bearer-auth.js"
 import { requireScope } from "./require-scope.js"
 import { requireTenantMatch } from "./tenant-isolation.js"
-import { rateLimit } from "./rate-limit.js"
+import { rateLimit, type RateLimitStore } from "./rate-limit.js"
 import type { RateLimitConfig } from "./types.js"
 
 /**
@@ -23,6 +23,8 @@ export interface EnterpriseAuthOptions {
   requireM2M?: boolean
   /** Rate limit configuration */
   rateLimit?: RateLimitConfig
+  /** Where rate-limit counts are kept (required with `rateLimit`), e.g. `atomicStore(storage)` */
+  rateLimitStore?: RateLimitStore
   /** Whether to enforce tenant isolation */
   tenantIsolation?: boolean
   /** Allow super admin to bypass tenant check */
@@ -39,7 +41,9 @@ export function enterpriseAuth(
 
   // 1. Rate limiting (first, to reject early)
   if (options.rateLimit) {
-    middlewares.push(rateLimit(options.rateLimit))
+    middlewares.push(
+      rateLimit(options.rateLimit, { store: options.rateLimitStore }),
+    )
   }
 
   // 2. Bearer token authentication

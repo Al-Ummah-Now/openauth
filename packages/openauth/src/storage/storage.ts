@@ -54,6 +54,12 @@ export interface AtomicStorageAdapter {
    * in bulk; without it only the plain store is cleared.
    */
   removePrefix?(prefix: string[]): Promise<number>
+  /**
+   * Add `by` to a numeric value (absent or expired counts as 0) and return
+   * the new value; `expiry` applies when the value is created. Used for
+   * exact rate-limit counters. Without it, a compare-and-set loop is used.
+   */
+  increment?(key: string[], by: number, expiry?: Date): Promise<number>
 }
 
 /** New separator - double colon is KV-friendly and won't conflict with single colons in key names */
@@ -120,6 +126,10 @@ export namespace Storage {
       remove: (key) => a.remove(encode(key)),
       removePrefix: async (prefix) =>
         a.removePrefix ? a.removePrefix(encode(prefix)) : 0,
+      increment: (key, by, expiry) =>
+        a.increment
+          ? a.increment(encode(key), by, expiry)
+          : incrementWithCas(a, encode(key), by, expiry),
     }
   }
 
@@ -133,6 +143,24 @@ export namespace Storage {
     key: string[],
   ): AsyncIterable<[string[], T]> {
     return adapter.scan(encode(key))
+  }
+}
+
+/** increment() from get/add/replace: exact on a real atomic store. */
+async function incrementWithCas(
+  a: AtomicStorageAdapter,
+  key: string[],
+  by: number,
+  expiry?: Date,
+): Promise<number> {
+  for (;;) {
+    const current = await a.get(key)
+    if (current === undefined || current === null) {
+      if (await a.add(key, by, expiry)) return by
+      continue
+    }
+    const next = Number(current) + by
+    if (await a.replace(key, current, next, expiry)) return next
   }
 }
 
