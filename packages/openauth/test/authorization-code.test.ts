@@ -212,6 +212,19 @@ describe("client authentication", () => {
     ).toBe(200)
   })
 
+  test("requireForCodeExchange per client: only the listed clients need PKCE", async () => {
+    const auth = makeIssuer(MemoryStorage(), {
+      pkce: { requireForCodeExchange: ["app"] },
+    })
+    const listed = await getCode(auth, false)
+    expect((await exchange(auth, listed.code)).status).toBe(400)
+    const other = makeIssuer(MemoryStorage(), {
+      pkce: { requireForCodeExchange: ["someone-else"] },
+    })
+    const unlisted = await getCode(other, false)
+    expect((await exchange(other, unlisted.code)).status).toBe(200)
+  })
+
   test("without the flag a code without PKCE still works (existing clients)", async () => {
     const auth = makeIssuer(MemoryStorage())
     const { code } = await getCode(auth, false)

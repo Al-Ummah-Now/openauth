@@ -179,6 +179,14 @@ export interface EnterpriseIssuerConfig<
      * @default false
      */
     requireForPublicClients?: boolean
+    /**
+     * Require PKCE (or client authentication) at the code exchange: `true`
+     * for every client, or only for the listed client ids. See
+     * `IssuerInput.pkce.requireForCodeExchange`.
+     * @default false
+     */
+    requireForCodeExchange?:
+      boolean | readonly string[] | ((clientId: string) => boolean)
   }
 
   /**

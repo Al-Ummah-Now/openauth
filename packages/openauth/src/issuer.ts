@@ -408,7 +408,8 @@ export interface IssuerInput<
      * be valid.
      * @default false
      */
-    requireForCodeExchange?: boolean
+    requireForCodeExchange?:
+      boolean | readonly string[] | ((clientId: string) => boolean)
   }
   /**
    * Set the TTL, in seconds, for access and refresh tokens.
@@ -1885,6 +1886,17 @@ export function issuer<
    * Collect the client_id values a token request identifies itself with
    * (form `client_id` and/or the username of HTTP Basic auth).
    */
+  /**
+   * `pkce.requireForCodeExchange`: for every client (`true`), the listed
+   * client ids, or as a function decides.
+   */
+  function pkceRequiredAtExchange(clientId: string): boolean {
+    const rule = input.pkce?.requireForCodeExchange
+    if (typeof rule === "function") return rule(clientId)
+    if (Array.isArray(rule)) return rule.includes(clientId)
+    return rule === true
+  }
+
   /** A replayed authorization code: revoke what its first use minted. */
   async function revokeCodeGrant(grant: CodeGrant) {
     await revokeRefreshFamily(storage!, grant.family, ttlRefresh)
@@ -1931,7 +1943,7 @@ export function issuer<
       return result.client ? undefined : invalidClient()
     }
     if (payload.pkce) return undefined
-    if (input.pkce?.requireForCodeExchange)
+    if (pkceRequiredAtExchange(payload.clientID))
       return c.json(
         {
           error: "invalid_grant",
