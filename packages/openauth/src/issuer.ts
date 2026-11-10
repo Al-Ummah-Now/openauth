@@ -639,7 +639,40 @@ export interface IssuerInput<
    * ```
    */
   m2m?: M2MConfig
+  /**
+   * Called on every refresh grant, before the refresh token is spent, to
+   * recompute the subject's claims. Without it a refreshed access token
+   * carries the properties frozen at sign-in for the refresh token's whole
+   * life (a revoked role stays, a granted one never arrives).
+   *
+   * - `{ properties }`: the new access token and the rotated refresh token
+   *   carry these properties.
+   * - `{ revoke: true }`: the user may no longer refresh (deleted, suspended):
+   *   the token's family is revoked and the client gets `invalid_grant`.
+   * - throwing: the claims could not be read. The client gets a retryable
+   *   `503 temporarily_unavailable` and the refresh token stays unspent; stale
+   *   claims are never served.
+   */
+  refresh?: RefreshHook
 }
+
+/** Input of {@link IssuerInput.refresh}: the refresh token being redeemed. */
+export interface RefreshHookInput {
+  type: string
+  properties: any
+  subject: string
+  clientID: string
+}
+
+/** Result of {@link IssuerInput.refresh}. */
+export type RefreshHookResult =
+  { properties: any; revoke?: undefined } | { revoke: true; reason?: string }
+
+export type RefreshHook = (
+  input: RefreshHookInput,
+  req: Request,
+  ctx: Context,
+) => Promise<RefreshHookResult>
 
 /**
  * Create an OpenAuth server, a Hono app.
@@ -1520,6 +1553,54 @@ export function issuer<
         }
         // Tokens from before families existed start one at their first use
         const family = payload.family ?? token
+        // Current claims, computed before the token is spent: a failure here
+        // leaves it unspent, so the client simply retries. A token already
+        // reused past the window is revoked below without asking.
+        const replayed =
+          payload.timeUsed !== undefined &&
+          (ttlRefreshReuse <= 0 ||
+            Date.now() > payload.timeUsed + ttlRefreshReuse * 1000)
+        let currentProperties = payload.properties
+        if (input.refresh && !replayed) {
+          let decision: RefreshHookResult
+          try {
+            decision = await input.refresh(
+              {
+                type: payload.type,
+                properties: payload.properties,
+                subject: payload.subject,
+                clientID: payload.clientID,
+              },
+              c.req.raw,
+              c,
+            )
+          } catch (err) {
+            console.error(
+              "refresh: could not recompute the subject's claims",
+              err instanceof Error ? err.message : String(err),
+            )
+            return c.json(
+              {
+                error: "temporarily_unavailable",
+                error_description: "Please retry the refresh",
+              },
+              503,
+              { "Retry-After": "5", "Cache-Control": "no-store" },
+            )
+          }
+          if (decision.revoke) {
+            await revokeRefreshFamily(storage, family, ttlRefresh)
+            await removeRefreshToken(storage, key)
+            return c.json(
+              {
+                error: "invalid_grant",
+                error_description: "Refresh token has been used or expired",
+              },
+              400,
+            )
+          }
+          currentProperties = decision.properties
+        }
         let generateRefreshToken = false
         // First use: exactly one request marks it used and rotates. A losing
         // request re-reads: normally it then sees it used (a reuse within
@@ -1596,9 +1677,11 @@ export function issuer<
             400,
           )
         }
-        const tokens = await generateTokens(c, payload, {
-          generateRefreshToken,
-        })
+        const tokens = await generateTokens(
+          c,
+          { ...payload, properties: currentProperties },
+          { generateRefreshToken },
+        )
 
         // Fire audit event for token refresh if configured
         if (input.audit?.hooks?.onTokenRefreshed) {

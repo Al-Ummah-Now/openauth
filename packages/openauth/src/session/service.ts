@@ -786,6 +786,54 @@ export class SessionServiceImpl implements SessionService {
   }
 
   /**
+   * Store the user's current roles on each of their account sessions in the
+   * tenant (after a refresh recomputed them). Returns the number updated.
+   */
+  async updateAccountRoles(params: {
+    tenantId: string
+    userId: string
+    roles: string[]
+  }): Promise<number> {
+    let updated = 0
+    const prefix = ["session", "user", params.tenantId, params.userId]
+    const sessionIds: string[] = []
+    for await (const [, value] of Storage.scan<{ sessionId: string }>(
+      this.storage,
+      prefix,
+    )) {
+      sessionIds.push(value.sessionId)
+    }
+    const now = Date.now()
+    for (const sessionId of sessionIds) {
+      const account = await this.getAccountSession(sessionId, params.userId)
+      if (!account) continue
+      const ttl = Math.ceil((account.expires_at - now) / 1000)
+      if (ttl <= 0) continue
+      await Storage.set(
+        this.storage,
+        this.accountSessionKey(sessionId, params.userId),
+        {
+          ...account,
+          subject_properties: {
+            ...account.subject_properties,
+            roles: [...params.roles],
+          },
+        },
+        ttl,
+      )
+      updated++
+    }
+    await this.writeToD1(() =>
+      this.d1Adapter!.updateAccountRoles({
+        userId: params.userId,
+        tenantId: params.tenantId,
+        roles: params.roles,
+      }),
+    )
+    return updated
+  }
+
+  /**
    * Revoke a specific session entirely.
    * This is an admin operation.
    *

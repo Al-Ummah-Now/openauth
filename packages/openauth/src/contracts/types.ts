@@ -106,6 +106,17 @@ export interface SessionService {
 
   removeAllAccounts(browserSessionId: string): Promise<void>
 
+  /**
+   * Optional: store the user's current roles on their account sessions in
+   * the tenant (`subject_properties.roles`), after a refresh recomputed them.
+   * Best effort; returns the number of account sessions updated.
+   */
+  updateAccountRoles?(params: {
+    tenantId: string
+    userId: string
+    roles: string[]
+  }): Promise<number>
+
   // Admin operations
   revokeUserSessions(tenantId: string, userId: string): Promise<number>
 
