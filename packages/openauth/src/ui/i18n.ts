@@ -49,6 +49,8 @@ export interface Translations {
   code_resend: string
   code_return: string
   logo: string
+  /** Alt text for the theme's logo image when the theme has no title */
+  logo_alt?: string
   input_email: string
   input_password: string
   input_code: string
@@ -171,6 +173,7 @@ export const en: Translations = {
   code_resend: "Resend code",
   code_return: "Back to",
   logo: "A",
+  logo_alt: "Logo",
   input_email: "Email",
   input_password: "Password",
   input_code: "Code",
@@ -256,6 +259,7 @@ export const ar: Translations = {
   code_resend: "إعادة إرسال الرمز",
   code_return: "العودة إلى",
   logo: "أ",
+  logo_alt: "الشعار",
   input_email: "البريد الإلكتروني",
   input_password: "كلمة المرور",
   input_code: "الرمز",
