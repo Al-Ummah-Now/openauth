@@ -4,6 +4,7 @@ import { resolveTheme, resolveLocalizedString, type Theme } from "./theme.js"
 import {
   DEFAULT_LOCALE,
   getDirection,
+  getTranslations,
   normalizeLocale,
   type Locale,
 } from "./i18n.js"
@@ -46,6 +47,9 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
 
   const hasLogo = get("logo", "light") && get("logo", "dark")
   const title = resolveLocalizedString(theme?.title, locale)
+  // Every <img> needs a text alternative (WCAG 1.1.1, axe image-alt): the
+  // site's name in the page's language, or "Logo" when the theme has none
+  const logoAlt = title || getTranslations(locale).logo_alt || "Logo"
 
   return (
     <html
@@ -105,11 +109,13 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
                   <img
                     data-component="logo"
                     src={get("logo", "light")}
+                    alt={logoAlt}
                     data-mode="light"
                   />
                   <img
                     data-component="logo"
                     src={get("logo", "dark")}
+                    alt={logoAlt}
                     data-mode="dark"
                   />
                 </>
