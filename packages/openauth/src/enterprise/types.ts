@@ -197,6 +197,8 @@ export interface EnterpriseIssuerConfig<
     refresh?: number
     reuse?: number
     retention?: number
+    /** Seconds an authorization code stays redeemable (default 60, max 600). */
+    code?: number
   }
 
   /**
