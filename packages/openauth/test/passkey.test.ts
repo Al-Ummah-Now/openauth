@@ -255,10 +255,10 @@ describe("passkey provider", () => {
     const browser = new Browser(await createApp())
     const page = await browser.loginPage()
     const html = await (await browser.go(page.pathname + page.search)).text()
-    const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
-      .map((m) => m[1])
-      .find((s) => s.includes("data-passkey-button"))!
-    expect(script).toBeDefined()
+    const at = html.lastIndexOf("data-passkey-button]")
+    const start = html.indexOf(">", html.lastIndexOf("<script", at)) + 1
+    const script = html.slice(start, html.indexOf("</" + "script", at))
+    expect(script).toContain("oaPasskey")
 
     const submitted: string[] = []
     let click: () => void = () => {}
