@@ -144,6 +144,7 @@ import {
 } from "../device.js"
 import { ClientErrorPage } from "../ui/client-error.js"
 import { RESOLVED_THEME_KEY, renderOptions } from "../ui/render.js"
+import { ServerErrorPage, wantsHtml } from "../ui/server-error.js"
 import { forwardRequest } from "../forward.js"
 import { getLocaleFromUrl, getTranslations } from "../ui/i18n.js"
 import type { ClientErrorReason } from "../ui/client-error.js"
@@ -1276,14 +1277,42 @@ export function createMultiTenantIssuer<
       )
     }
 
-    // Never leak internal error details; they are logged above.
-    return c.json(
+    // Never leak internal error details: the host reports them (onServerError)
+    let reference: string | undefined
+    try {
+      reference = (await config.onServerError?.(err, c.req.raw)) || undefined
+    } catch {
+      reference = undefined
+    }
+    if (wantsHtml(c.req.raw)) {
+      const authorization = c.get("authorization") as
+        EnterpriseAuthorizationState | undefined
+      let locale: string | undefined
+      try {
+        locale = authorization?.redirect_uri
+          ? (getLocaleFromUrl(authorization.redirect_uri) ?? undefined)
+          : undefined
+      } catch {
+        locale = undefined
+      }
+      let theme: Theme | undefined
+      try {
+        theme = renderOptions(c).theme
+      } catch {
+        theme = undefined
+      }
+      return ServerErrorPage(c.req.raw, { reference, locale, theme })
+    }
+    const res = c.json(
       {
         error: "server_error",
         error_description: "Internal server error",
+        ...(reference ? { reference } : {}),
       },
       500,
     )
+    if (reference) res.headers.set("X-Error-Ref", reference)
+    return res
   })
   // ============================================
   // HELPER FUNCTIONS
