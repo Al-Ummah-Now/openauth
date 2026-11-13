@@ -178,9 +178,9 @@ var btn=root.querySelector('[data-passkey-button]'),form=root.querySelector('for
 var optionsUrl=root.getAttribute('data-options'),pending=null,busy=false;
 root.hidden=false;
 function options(){return fetch(optionsUrl,{method:'POST',credentials:'same-origin',headers:{'Accept':'application/json'}}).then(function(r){if(!r.ok)throw new Error('options');return r.json();});}
-function finish(cred){busy=true;field.value=JSON.stringify(cred);form.submit();}
+function finish(cred){if(busy)return;busy=true;field.value=JSON.stringify(cred);form.submit();}
 function showError(){if(alertBox){alertBox.textContent=${JSON.stringify(errorText)};alertBox.hidden=false;}}
-function autofill(){pk.autofillSupported().then(function(ok){if(!ok||busy)return;var ctrl=new AbortController();pending=ctrl;options().then(function(o){return pk.get(o,{conditional:true,signal:ctrl.signal});}).then(finish).catch(function(){});});}
+function autofill(){pk.autofillSupported().then(function(ok){if(!ok||busy)return;var ctrl=new AbortController();pending=ctrl;options().then(function(o){return pk.get(o,{conditional:true,signal:ctrl.signal});}).then(function(c){if(pending===ctrl&&!ctrl.signal.aborted)finish(c);}).catch(function(){});});}
 btn.addEventListener('click',function(){if(busy)return;if(pending){pending.abort();pending=null;}btn.disabled=true;
 options().then(function(o){return pk.get(o);}).then(finish).catch(function(e){btn.disabled=false;if(!e||e.name!=='NotAllowedError'&&e.name!=='AbortError')showError();autofill();});});
 autofill();
