@@ -36,6 +36,7 @@ import { withFlowParams } from "../flow.js"
 import "./form.js"
 import { FormAlert } from "./form.js"
 import { getTranslations, type Locale, type Translations } from "./i18n.js"
+import { passkeyClientScript } from "../passkey.js"
 
 const DEFAULT_COPY = {
   /**
@@ -137,12 +138,10 @@ const DEFAULT_COPY = {
    */
   button_continue: "Continue",
 } satisfies {
-  [
-    key in `error_${
-      | PasswordLoginError["type"]
-      | PasswordRegisterError["type"]
-      | PasswordChangeError["type"]}`
-  ]: string
+  [key in `error_${
+    | PasswordLoginError["type"]
+    | PasswordRegisterError["type"]
+    | PasswordChangeError["type"]}`]: string
 } & Record<string, string>
 
 type PasswordUICopy = typeof DEFAULT_COPY
@@ -150,14 +149,38 @@ type PasswordUICopy = typeof DEFAULT_COPY
 /**
  * Configure the password UI.
  */
-export interface PasswordUIOptions extends Pick<
-  PasswordConfig,
-  "sendCode" | "validatePassword"
-> {
+export interface PasswordUIOptions
+  extends Pick<PasswordConfig, "sendCode" | "validatePassword"> {
   /**
    * Custom copy for the UI.
    */
   copy?: Partial<PasswordUICopy>
+  /**
+   * Offer passkey sign-in on the login page (needs `PasskeyProvider` mounted
+   * as `passkey`): a "Sign in with a passkey" button and passkeys in the
+   * email autofill (WebAuthn conditional UI). Both only show in browsers
+   * that support them.
+   */
+  passkey?: boolean
+}
+
+/** Runs the passkey button and autofill on the login page. */
+function passkeyLoginScript(errorText: string) {
+  return `${passkeyClientScript}
+(function(){
+var pk=window.oaPasskey,root=document.querySelector('[data-passkey]');
+if(!pk||!root||!pk.supported())return;
+var btn=root.querySelector('[data-passkey-button]'),form=root.querySelector('form'),field=form.querySelector('input[name=credential]'),alertBox=document.querySelector('[data-passkey-alert]');
+var optionsUrl=root.getAttribute('data-options'),pending=null,busy=false;
+root.hidden=false;
+function options(){return fetch(optionsUrl,{method:'POST',credentials:'same-origin',headers:{'Accept':'application/json'}}).then(function(r){if(!r.ok)throw new Error('options');return r.json();});}
+function finish(cred){busy=true;field.value=JSON.stringify(cred);form.submit();}
+function showError(){if(alertBox){alertBox.textContent=${JSON.stringify(errorText)};alertBox.hidden=false;}}
+function autofill(){pk.autofillSupported().then(function(ok){if(!ok||busy)return;var ctrl=new AbortController();pending=ctrl;options().then(function(o){return pk.get(o,{conditional:true,signal:ctrl.signal});}).then(finish).catch(function(){});});}
+btn.addEventListener('click',function(){if(busy)return;if(pending){pending.abort();pending=null;}btn.disabled=true;
+options().then(function(o){return pk.get(o);}).then(finish).catch(function(e){btn.disabled=false;if(!e||e.name!=='NotAllowedError'&&e.name!=='AbortError')showError();autofill();});});
+autofill();
+})();`
 }
 
 /**
@@ -202,10 +225,22 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
         // User overrides take precedence
         ...input.copy,
       }
+      const passkeyFailed =
+        !!input.passkey &&
+        !error &&
+        new URL(req.url).searchParams.get("passkey_error") === "1"
       const jsx = (
         <Layout theme={theme} locale={locale} direction={direction}>
           <form data-component="form" method="post">
-            <FormAlert message={error?.type && copy?.[`error_${error.type}`]} />
+            <FormAlert
+              message={
+                error?.type
+                  ? copy?.[`error_${error.type}`]
+                  : passkeyFailed
+                    ? t.passkey_error
+                    : undefined
+              }
+            />
             <input
               data-component="input"
               type="email"
@@ -213,6 +248,7 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
               required
               placeholder={copy.input_email}
               autofocus={!error}
+              autoComplete={input.passkey ? "username webauthn" : "email"}
               value={form?.get("email")?.toString()}
             />
             <input
@@ -240,6 +276,44 @@ export function PasswordUI(input: PasswordUIOptions): PasswordConfig {
               </a>
             </div>
           </form>
+          {input.passkey && (
+            <div
+              data-passkey
+              hidden
+              data-options={withFlowParams("../passkey/options", req.url)}
+            >
+              <div data-component="divider">
+                <span>{t.passkey_or}</span>
+              </div>
+              <div
+                data-passkey-alert
+                data-component="form-alert"
+                role="alert"
+                hidden
+              ></div>
+              <form
+                method="post"
+                action={withFlowParams("../passkey/verify", req.url)}
+              >
+                <input type="hidden" name="credential" value="" />
+              </form>
+              <button
+                type="button"
+                data-component="button"
+                data-color="ghost"
+                data-passkey-button
+              >
+                {t.passkey_sign_in}
+              </button>
+            </div>
+          )}
+          {input.passkey && (
+            <script
+              dangerouslySetInnerHTML={{
+                __html: passkeyLoginScript(t.passkey_error),
+              }}
+            />
+          )}
         </Layout>
       )
       return new Response(jsx.toString(), {

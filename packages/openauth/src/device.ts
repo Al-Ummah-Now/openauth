@@ -77,6 +77,8 @@ export interface DeviceGrant {
   ttl: { access: number; refresh: number }
   /** When the approving user authenticated (ms) */
   authTime?: number
+  /** How the approving user authenticated (RFC 8176) */
+  amr?: string[]
   /** Refresh-token family started by the code the approval redeemed */
   family?: string
 }
@@ -565,7 +567,8 @@ export function registerDeviceFlow(
       return page(c, { page: "failed" }, 400)
     }
     const payload = redeemed.payload as
-      (AuthorizationCodePayload & DeviceGrant) | undefined
+      | (AuthorizationCodePayload & DeviceGrant)
+      | undefined
     if (
       !payload ||
       payload.clientID !== record.clientID ||
@@ -595,6 +598,7 @@ export function registerDeviceFlow(
       clientID: payload.clientID,
       ttl: payload.ttl,
       authTime: payload.authTime,
+      amr: payload.amr,
       family,
     }
     if (
@@ -637,7 +641,8 @@ export function registerDeviceFlow(
       // Final state: hand it out once. Of concurrent polls exactly one takes
       // the record; the others find it gone.
       const taken = (await atomic.take(deviceKey(hash))) as
-        DeviceRecord | undefined
+        | DeviceRecord
+        | undefined
       await atomic.remove(pollKey(hash))
       if (!taken)
         return oauthError(c, "expired_token", "The device code has expired")

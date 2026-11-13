@@ -56,6 +56,9 @@ const fakeRbac = {
   },
 }
 
+/** A property patch onRefresh returns (AUTH-PASSKEYS passkey_deadline). */
+let refreshPatch: Record<string, unknown> | undefined
+
 async function createApp(withStatusCheck = true) {
   const tenantService = new TenantServiceImpl(storage)
   await tenantService.createTenant({ id: "default", name: "Default" })
@@ -96,7 +99,9 @@ async function createApp(withStatusCheck = true) {
           onRefresh: async ({ userId }) =>
             userId && suspended.has(userId)
               ? { revoke: true as const, reason: "suspended" }
-              : undefined,
+              : refreshPatch
+                ? { properties: refreshPatch }
+                : undefined,
         }
       : {}),
   })
@@ -183,6 +188,7 @@ async function storedRefresh(refreshToken: string) {
 }
 
 beforeEach(async () => {
+  refreshPatch = undefined
   storage = MemoryStorage()
   sessions = new SessionServiceImpl(storage)
   rbacRoles = new Map([["default:usr_1", ["Member"]]])
@@ -278,6 +284,28 @@ describe("refresh recomputes roles", () => {
     const account = await sessions.getAccountSession(sessionIds[0]!, USER)
     expect(account?.subject_properties.roles).toEqual(["Member", "Admin"])
     expect(account?.subject_properties.email).toBe(EMAIL)
+  })
+})
+
+describe("onRefresh property patch", () => {
+  test("a patched property is set, and undefined removes it", async () => {
+    const browser = new Browser(await createApp())
+    const first = await browser.signIn()
+    refreshPatch = { passkey_deadline: 1234 }
+    const res = await browser.refresh(first.refresh_token)
+    expect(res.status).toBe(200)
+    const props = claims(res.body.access_token).properties
+    expect(props.passkey_deadline).toBe(1234)
+    expect(props.roles).toEqual(["Member"])
+
+    refreshPatch = { passkey_deadline: undefined }
+    const again = await browser.refresh(res.body.refresh_token)
+    expect(again.status).toBe(200)
+    expect(
+      claims(again.body.access_token).properties.passkey_deadline,
+    ).toBeUndefined()
+    // amr from the password sign-in is kept across refreshes
+    expect(claims(again.body.access_token).amr).toEqual(["pwd"])
   })
 })
 
