@@ -1,213 +1,124 @@
 # Release Process
 
-This document describes the automated release process for `@al-ummah-now/openauth`.
+How `@al-ummah-now/openauth` is released. Everything is done by
+`.github/workflows/publish-github.yml`; nobody bumps a version or edits a changelog by hand.
 
-## Overview
+## The short version
 
-The release workflow is fully automated via GitHub Actions. Releases are triggered automatically when code is merged to `master`, or manually via workflow dispatch.
+- **Merge a PR to `master`** → once `test` and `format` pass on that commit, the workflow publishes
+  the next patch version (`1.0.47` → `1.0.48`) to GitHub Packages with the `latest` dist-tag, pushes
+  the tag `v1.0.48` and creates a GitHub Release.
+- **Open or update a PR** that touches `packages/openauth/**` → a pre-release
+  `1.0.48-pr.{PR#}.{run#}` with the `pr` dist-tag, its tag, a pre-release GitHub Release and a PR
+  comment with the install command.
+- **The released version lives in git tags, never in a commit on `master`.** Since openauth#27 the
+  workflow never pushes to `master` (the branch ruleset requires a pull request), so it does not
+  commit a version bump and does not update `CHANGELOG.md`.
 
-## Release Types
+## Where the version comes from
 
-### 1. Pre-releases (Pull Requests)
+The `Determine version` step works it out on every run:
 
-When a PR is opened or updated:
+1. **Base** = the newer of
+   - the latest stable tag (`vX.Y.Z` with no `-suffix`), and
+   - `version` in `packages/openauth/package.github.json` (a floor; only matters if it is ever set
+     above the tags).
+2. **Next version** from the base:
 
-| Step | Action                                                          |
-| ---- | --------------------------------------------------------------- |
-| 1    | Wait for `test` and `format` checks to pass                     |
-| 2    | Publish to GitHub Packages with version `X.Y.Z-pr.{PR#}.{run#}` |
-| 3    | Create git tag `vX.Y.Z-pr.{PR#}.{run#}`                         |
-| 4    | Create GitHub Release (marked as pre-release) with PR commits   |
-| 5    | Comment on PR with installation instructions                    |
+   | Trigger                                                    | Version                                 | npm dist-tag |
+   | ---------------------------------------------------------- | --------------------------------------- | ------------ |
+   | `test` / `format` completed on a push to `master`          | `X.Y.(Z+1)`                             | `latest`     |
+   | `pull_request` (same repo, `packages/openauth/**` changed) | `X.Y.(Z+1)-pr.{PR#}.{run#}`             | `pr`         |
+   | `workflow_dispatch` with `bump` = patch / minor / major    | `X.Y.(Z+1)` / `X.(Y+1).0` / `(X+1).0.0` | `latest`     |
 
-**Example:** PR #7 run #42 would produce:
+3. **One release per commit.** Both `test` and `format` trigger a run for the same `master` commit
+   (serialised by the per-commit `concurrency` group). A non-PR run whose `HEAD` already carries a
+   stable tag skips everything, so the second trigger, a re-run or a dispatch on an already
+   released commit publishes nothing.
 
-- npm version: `1.0.8-pr.7.42`
-- npm tag: `@pr`
-- git tag: `v1.0.8-pr.7.42`
-- GitHub Release: Pre-release with PR commits
+## What a run does
 
-### 2. Stable Releases (Push to master)
+1. PRs only: wait for the `test` and `format` checks on the PR head.
+2. `bun install`, then build the workspace package `@openauthjs/openauth`.
+3. Determine the version (above).
+4. Swap `package.json` for `package.github.json` and write the computed version into it. **This is
+   what gets published**: name `@al-ummah-now/openauth`, the GitHub Packages registry, the computed
+   version.
+5. Generate release notes from the commits since the previous stable tag (PR: the PR's commits),
+   grouped into Features (`feat`), Bug Fixes (`fix`), Documentation (`docs`) and Other Changes.
+6. Create and push the annotated tag `vVERSION`. An existing tag fails the run instead of
+   publishing over it.
+7. `npm publish --tag latest|pr` to GitHub Packages.
+8. Restore the original `package.json` (always).
+9. Create the GitHub Release with the notes (a pre-release for PRs).
+10. PRs only: comment the install command.
 
-When code is pushed to `master`:
+The job only runs for pushes and PRs from this repository (a fork PR, even from a branch called
+`master`, never publishes).
 
-| Step | Action                                               |
-| ---- | ---------------------------------------------------- |
-| 1    | Wait for `test` and `format` workflows to complete   |
-| 2    | Auto-bump patch version (e.g., `1.0.7` → `1.0.8`)    |
-| 3    | Update `CHANGELOG.md` from commit messages           |
-| 4    | Commit version and changelog updates                 |
-| 5    | Publish to GitHub Packages with `@latest` tag        |
-| 6    | Create git tag `vX.Y.Z`                              |
-| 7    | Create GitHub Release with categorized release notes |
+## `package.json` vs `package.github.json`
 
-### 3. Manual Releases (Workflow Dispatch)
+`packages/openauth/package.json` still says `"name": "@openauthjs/openauth"`, `"version": "0.4.3"`.
+That is the upstream fork's metadata, **not** the published package, and the publish workflow never
+reads its version:
 
-Trigger manually from GitHub Actions with version bump type:
+- The published name and version come from `package.github.json` plus the computed version (step 4).
+- The `name` is still load-bearing inside the repo: the workflow builds with
+  `bun run --filter="@openauthjs/openauth" build`, the examples depend on `@openauthjs/openauth`
+  as a workspace package, and `.changeset/config.json` names it. Do not rename it in passing.
+- The `version` in `package.json` is only bumped by the upstream changesets workflow (below).
 
-- **patch**: `1.0.7` → `1.0.8`
-- **minor**: `1.0.7` → `1.1.0`
-- **major**: `1.0.7` → `2.0.0`
+To find the current release, look at the tags or the
+[releases page](https://github.com/Al-Ummah-Now/openauth/releases), not at any `package.json`.
 
-## Automatic CHANGELOG Generation
+## The upstream changesets workflow (`release.yml`)
 
-The workflow automatically updates `CHANGELOG.md` on stable releases:
+`.github/workflows/release.yml` is inherited from upstream openauth. On every push to `master` it runs
+`changesets/action`, which keeps a "Version Packages" PR open that bumps the upstream
+`@openauthjs/openauth` version in `package.json` (`0.4.3` → `0.4.4`) and writes
+`packages/openauth/CHANGELOG.md` from `.changeset/*.md`. It does not publish
+`@al-ummah-now/openauth`. **Do not merge that PR**: it would only change upstream metadata, and with
+no changesets left the action switches to `changeset publish` (the npm registry, upstream name).
 
-1. Parses commits since the last tag
-2. Categorizes by commit type:
-   - `feat:` → **Added**
-   - `fix:` → **Fixed**
-   - `refactor:` → **Changed**
-   - `docs:` → **Documentation**
-3. Inserts new entry after `[Unreleased]` section
-4. Updates version links at bottom of file
+## CHANGELOG.md
 
-### Commit Message Format
+`packages/openauth/CHANGELOG.md` stops at 1.0.32. Later releases are recorded only as tags and
+GitHub Releases. Changesets in `.changeset/` are not needed for a release.
 
-Use conventional commit format for proper categorization:
+## Commit messages
+
+Use conventional commits; the release notes are grouped by prefix:
 
 ```
 feat: add new feature description
 fix: resolve issue with X
-refactor: improve performance of Y
 docs: update API documentation
 chore: update dependencies
 ```
 
-## GitHub Release Notes
+Commits containing `[skip ci]` are left out of the notes.
 
-Release notes are auto-generated with categories:
-
-```markdown
-## What's Changed in v1.0.8
-
-### Features
-
-- feat: add new RBAC security features (abc123)
-
-### Bug Fixes
-
-- fix: resolve cache invalidation issue (def456)
-
-### Documentation
-
-- docs: update enterprise features guide (ghi789)
-
----
-
-**Full Changelog**: https://github.com/Al-Ummah-Now/openauth/compare/v1.0.7...v1.0.8
-```
-
-## Pre-release Notes
-
-Pre-releases show PR-specific changes:
-
-```markdown
-## Pre-release v1.0.8-pr.7.42
-
-> This is a pre-release from PR #7
-
-### Features
-
-- feat: add RBAC security features (abc123)
-
-### Bug Fixes
-
-- fix: resolve test failures (def456)
-```
-
-## Workflow File
-
-The release workflow is defined in `.github/workflows/publish-github.yml`.
-
-### Key Steps
-
-```yaml
-# Version determination
-- PR: X.Y.(Z+1)-pr.{PR#}.{run#}
-- Push: X.Y.(Z+1)
-- Manual: Based on bump type
-
-# CHANGELOG update (stable only)
-- Parse commits since last tag
-- Generate categorized entries
-- Update CHANGELOG.md
-
-# Git operations
-- Create annotated tag
-- Push tag to origin
-
-# GitHub Release
-- Create release with notes
-- Mark as pre-release for PRs
-```
-
-## Installation
-
-### Stable Release
+## Installing
 
 ```bash
-npm install @al-ummah-now/openauth
-# or
-npm install @al-ummah-now/openauth@latest
+npm install @al-ummah-now/openauth            # latest stable
+npm install @al-ummah-now/openauth@pr         # latest PR pre-release
+npm install @al-ummah-now/openauth@1.0.48-pr.7.42
 ```
 
-### Pre-release (Testing)
-
-```bash
-npm install @al-ummah-now/openauth@1.0.8-pr.7.42
-# or get latest pre-release
-npm install @al-ummah-now/openauth@pr
-```
-
-## Viewing Releases
-
-- **GitHub Releases**: https://github.com/Al-Ummah-Now/openauth/releases
-- **npm Packages**: https://github.com/Al-Ummah-Now/openauth/packages
+The registry is GitHub Packages: consumers need `@al-ummah-now:registry=https://npm.pkg.github.com`
+in their `.npmrc` and a token with `read:packages`.
 
 ## Troubleshooting
 
-### Release Failed
-
-1. Check GitHub Actions logs for errors
-2. Verify `test` and `format` workflows passed
-3. Check for version conflicts (tag already exists)
-
-### CHANGELOG Not Updated
-
-The CHANGELOG is only updated for stable releases (push to master), not pre-releases.
-
-### Pre-release Tag Missing
-
-Pre-release tags are created for every PR build. Check:
-
-1. PR triggers the workflow (changes in `packages/openauth/**`)
-2. `test` and `format` checks passed
-3. GitHub Actions has permissions to create tags
-
-## Manual Intervention
-
-If automatic release fails, you can manually:
-
-```bash
-# Update version
-cd packages/openauth
-npm version patch  # or minor/major
-
-# Update CHANGELOG.md manually
-
-# Commit and tag
-git add .
-git commit -m "chore: release v1.0.8"
-git tag v1.0.8
-git push && git push --tags
-
-# Publish
-npm publish --tag latest
-```
-
-## Security
-
-- Only the `github-actions[bot]` account can create releases
-- Tags are protected and cannot be deleted
-- Pre-release versions cannot overwrite stable versions
+- **No release after a merge:** the publish job runs only when `test` or `format` _succeeds_ for a
+  push to `master`. Check those runs first, then the `Publish to GitHub Packages` run.
+- **"Tag vX.Y.Z already exists":** the version is taken; the run refuses to publish over it. The next
+  merge publishes the following patch.
+- **Tag pushed but `npm publish` failed:** that commit now counts as released (its tag exists), so a
+  re-run skips. Delete the tag `vX.Y.Z` (no package was published under it) and re-run the failed
+  run, or let the next merge publish the next patch.
+- **Need a minor or major:** run the workflow manually (`workflow_dispatch`) on `master` with `bump`
+  = minor or major. It skips if `master`'s `HEAD` is already released, so this needs an untagged
+  commit (for example, dispatch while the merge's `test`/`format` runs are still going).
+- **Never** commit a version bump or a hand-edited release to `master`, and never move a tag.
