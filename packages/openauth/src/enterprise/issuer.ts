@@ -88,6 +88,7 @@ import {
   createSessionMiddleware,
   createSessionCookieHeader,
 } from "../session/middleware.js"
+import { isLocalhostUrl } from "../session/cookie.js"
 import { sessionRoutes, adminSessionRoutes } from "../session/routes.js"
 
 import { rbacEndpoints } from "../rbac/endpoints.js"
@@ -339,6 +340,8 @@ export function createMultiTenantIssuer<
         browserSession,
         config.sessionSecret,
         sessionConfig.cookieName,
+        undefined,
+        !isLocalhostUrl(req.url),
       )
     }
 
@@ -731,7 +734,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       ctx.set(ENTERPRISE_CONTEXT_KEY, {
@@ -1253,7 +1257,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1307,6 +1312,8 @@ export function createMultiTenantIssuer<
       browserSession,
       config.sessionSecret,
       sessionConfig.cookieName,
+      undefined,
+      !isLocalhostUrl(ctx.req.url),
     )
     ctx.header("Set-Cookie", cookieHeader)
   }

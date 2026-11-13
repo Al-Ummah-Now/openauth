@@ -111,9 +111,30 @@ export async function decryptSessionCookie(
 }
 
 /**
+ * Whether a request URL is a local development host (localhost, 127.0.0.1, [::1]).
+ *
+ * Browsers that do not treat http://localhost as a secure context (WebKit) drop
+ * `Secure` cookies set over it, so the session cookie is `Secure` everywhere
+ * except on these hosts. Any other host, http or https, keeps `Secure`.
+ */
+export function isLocalhostUrl(url: string | URL): boolean {
+  try {
+    const { hostname } = typeof url === "string" ? new URL(url) : url
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]"
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
  * Create cookie options for session management.
  *
  * @param domain - Optional domain for the cookie
+ * @param secure - `Secure` attribute; false only for a localhost issuer (see isLocalhostUrl)
  * @returns Cookie options object
  *
  * @example
@@ -122,10 +143,13 @@ export async function decryptSessionCookie(
  * // { httpOnly: true, secure: true, sameSite: "lax", maxAge: 604800, path: "/", domain: "example.com" }
  * ```
  */
-export function createCookieOptions(domain?: string): SessionCookieOptions {
+export function createCookieOptions(
+  domain?: string,
+  secure: boolean = true,
+): SessionCookieOptions {
   const options: SessionCookieOptions = {
     httpOnly: true,
-    secure: true,
+    secure,
     sameSite: "lax",
     maxAge: DEFAULT_SESSION_CONFIG.sessionLifetimeSeconds, // 7 days in seconds
     path: "/",

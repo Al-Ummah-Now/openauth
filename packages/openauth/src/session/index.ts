@@ -140,6 +140,7 @@ export {
   encryptSessionCookie,
   decryptSessionCookie,
   createCookieOptions,
+  isLocalhostUrl,
   createCookiePayload,
   parseCookie,
   generateCookieSecret,
