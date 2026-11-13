@@ -567,8 +567,7 @@ export function registerDeviceFlow(
       return page(c, { page: "failed" }, 400)
     }
     const payload = redeemed.payload as
-      | (AuthorizationCodePayload & DeviceGrant)
-      | undefined
+      (AuthorizationCodePayload & DeviceGrant) | undefined
     if (
       !payload ||
       payload.clientID !== record.clientID ||
@@ -641,8 +640,7 @@ export function registerDeviceFlow(
       // Final state: hand it out once. Of concurrent polls exactly one takes
       // the record; the others find it gone.
       const taken = (await atomic.take(deviceKey(hash))) as
-        | DeviceRecord
-        | undefined
+        DeviceRecord | undefined
       await atomic.remove(pollKey(hash))
       if (!taken)
         return oauthError(c, "expired_token", "The device code has expired")
