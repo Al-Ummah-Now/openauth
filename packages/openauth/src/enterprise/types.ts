@@ -186,7 +186,9 @@ export interface EnterpriseIssuerConfig<
      * @default false
      */
     requireForCodeExchange?:
-      boolean | readonly string[] | ((clientId: string) => boolean)
+      | boolean
+      | readonly string[]
+      | ((clientId: string) => boolean)
   }
 
   /**
@@ -377,6 +379,19 @@ export interface EnterpriseIssuerConfig<
   restart?: {
     fallbackUrl?: string
   }
+
+  /**
+   * Called with every unexpected error the issuer answers with a 500 (not an
+   * OauthError or an unknown sign-in state): report it (with its stack) and
+   * return the reference it was reported under. A browser then gets the
+   * localized "Something went wrong / Try again" page showing that reference;
+   * other callers get `{ error: "server_error", reference }`. Must not throw;
+   * a throw is ignored.
+   */
+  onServerError?: (
+    error: unknown,
+    request: Request,
+  ) => string | undefined | Promise<string | undefined>
 
   /**
    * Single sign-on across clients: when the browser already has an active
