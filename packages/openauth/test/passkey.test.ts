@@ -264,8 +264,14 @@ describe("passkey provider", () => {
     let click: () => void = () => {}
     let resolveAutofill: (c: unknown) => void = () => {}
     const field = { value: "" }
-    const form = { querySelector: () => field, submit: () => submitted.push(field.value) }
-    const btn = { disabled: false, addEventListener: (_: string, fn: () => void) => (click = fn) }
+    const form = {
+      querySelector: () => field,
+      submit: () => submitted.push(field.value),
+    }
+    const btn = {
+      disabled: false,
+      addEventListener: (_: string, fn: () => void) => (click = fn),
+    }
     const root = {
       hidden: true,
       getAttribute: () => "../passkey/options",
@@ -281,8 +287,14 @@ describe("passkey provider", () => {
             : Promise.resolve({ id: "from-button" }),
       },
     }
-    const document = { querySelector: (sel: string) => (sel === "[data-passkey]" ? root : null) }
-    const fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ challenge: "c" }) })
+    const document = {
+      querySelector: (sel: string) => (sel === "[data-passkey]" ? root : null),
+    }
+    const fetch = () =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ challenge: "c" }),
+      })
     new Function("window", "document", "fetch", script)(window, document, fetch)
     const tick = () => new Promise((r) => setTimeout(r, 0))
     await tick()
