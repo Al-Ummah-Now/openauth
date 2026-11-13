@@ -112,6 +112,10 @@ export interface Translations {
   provider_facebook: string
   provider_microsoft: string
   provider_slack: string
+  // Passkeys
+  passkey_sign_in: string
+  passkey_or: string
+  passkey_error: string
 }
 
 /**
@@ -208,6 +212,9 @@ export const en: Translations = {
   provider_facebook: "Facebook",
   provider_microsoft: "Microsoft",
   provider_slack: "Slack",
+  passkey_sign_in: "Sign in with a passkey",
+  passkey_or: "or",
+  passkey_error: "That passkey didn't work. Try again or use your password.",
 }
 
 /**
@@ -305,6 +312,9 @@ export const ar: Translations = {
   picker_description: "اختر حسابًا للمتابعة",
   picker_sign_out: "تسجيل الخروج",
   picker_use_another: "+ استخدام حساب آخر",
+  passkey_sign_in: "الدخول بمفتاح المرور",
+  passkey_or: "أو",
+  passkey_error: "لم ينجح مفتاح المرور. حاول مرة أخرى أو استخدم كلمة المرور.",
 }
 
 /**

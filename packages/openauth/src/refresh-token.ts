@@ -27,6 +27,7 @@ export interface RefreshTokenPayload {
   timeUsed?: number
   family?: string
   authTime?: number
+  amr?: string[]
   [key: string]: any
 }
 

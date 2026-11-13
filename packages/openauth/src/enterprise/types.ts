@@ -197,6 +197,8 @@ export interface EnterpriseIssuerConfig<
     refresh?: number
     reuse?: number
     retention?: number
+    /** Seconds an authorization code stays redeemable (default 60, max 600). */
+    code?: number
   }
 
   /**
@@ -247,7 +249,16 @@ export interface EnterpriseIssuerConfig<
      * them): merged with RBAC's, as at sign-in. Without this, roles that
      * are not in RBAC are not carried over by a refresh.
      */
-    | { revoke?: false; roles?: string[]; permissions?: string[] }
+    | {
+        revoke?: false
+        roles?: string[]
+        permissions?: string[]
+        /**
+         * Merged into the token's properties (a key set to `undefined` is
+         * removed), e.g. a policy claim that must follow a setting.
+         */
+        properties?: Record<string, unknown>
+      }
   >
 
   /**
@@ -490,6 +501,8 @@ export interface EnterpriseSuccessContext<
         refresh?: number
       }
       subject?: string
+      /** How the user authenticated (RFC 8176); defaults to the provider's. */
+      amr?: string[]
     },
   ): Promise<Response>
 }
@@ -503,6 +516,12 @@ export interface EnterpriseAuthResult {
    * The provider that was used for authentication
    */
   provider: string
+
+  /**
+   * How the user authenticated (RFC 8176): `pwd`, `otp`, `passkey`, `fed`.
+   * Silent single sign-on reports the account session's original methods.
+   */
+  amr?: string[]
 
   /**
    * User ID from the provider

@@ -77,6 +77,8 @@ export interface DeviceGrant {
   ttl: { access: number; refresh: number }
   /** When the approving user authenticated (ms) */
   authTime?: number
+  /** How the approving user authenticated (RFC 8176) */
+  amr?: string[]
   /** Refresh-token family started by the code the approval redeemed */
   family?: string
 }
@@ -595,6 +597,7 @@ export function registerDeviceFlow(
       clientID: payload.clientID,
       ttl: payload.ttl,
       authTime: payload.authTime,
+      amr: payload.amr,
       family,
     }
     if (
