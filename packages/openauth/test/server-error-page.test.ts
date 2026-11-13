@@ -64,9 +64,8 @@ describe("issuer server errors", () => {
 
   // A browser session cookie makes the session middleware read the (failing) store
   const get = async (path: string, accept: string) => {
-    const { createSessionCookieHeader } = await import(
-      "../src/session/middleware.js"
-    )
+    const { createSessionCookieHeader } =
+      await import("../src/session/middleware.js")
     const cookie = (
       await createSessionCookieHeader(
         { id: "bs-1", tenant_id: "test-tenant", version: 1 } as never,
