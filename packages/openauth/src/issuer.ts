@@ -159,6 +159,11 @@ export interface OnSuccessResponder<
         refresh?: number
       }
       subject?: string
+      /**
+       * How the user authenticated (RFC 8176 `amr`): written to the access
+       * token. Defaults to what the provider reported.
+       */
+      amr?: string[]
     },
   ): Promise<Response>
 }
@@ -418,7 +423,9 @@ export interface IssuerInput<
      * @default false
      */
     requireForCodeExchange?:
-      boolean | readonly string[] | ((clientId: string) => boolean)
+      | boolean
+      | readonly string[]
+      | ((clientId: string) => boolean)
   }
   /**
    * Set the TTL, in seconds, for access and refresh tokens.
@@ -455,6 +462,12 @@ export interface IssuerInput<
      * @default 0s
      */
     retention?: number
+    /**
+     * Interval in seconds an authorization code stays redeemable.
+     * @default 60
+     * At most 600 (RFC 6749 §4.1.2).
+     */
+    code?: number
   }
   /**
    * Optionally, configure the UI that's displayed when the user visits the root URL of the
@@ -666,7 +679,8 @@ export interface RefreshHookInput {
 
 /** Result of {@link IssuerInput.refresh}. */
 export type RefreshHookResult =
-  { properties: any; revoke?: undefined } | { revoke: true; reason?: string }
+  | { properties: any; revoke?: undefined }
+  | { revoke: true; reason?: string }
 
 export type RefreshHook = (
   input: RefreshHookInput,
@@ -696,7 +710,11 @@ export function issuer<
   // so tokens stored before the atomic store existed are not misread as reuse.
   const DEFAULT_REFRESH_REUSE_WINDOW = 120 // seconds
   const DEFAULT_REFRESH_RETENTION = 0 // No retention
-  const AUTHORIZATION_CODE_TTL = 60 // 60 seconds
+  // Seconds; `ttl.code` raises it (at most 10 minutes, RFC 6749 §4.1.2)
+  const AUTHORIZATION_CODE_TTL = Math.min(
+    Math.max(input.ttl?.code ?? 60, 1),
+    600,
+  )
   const AUTHORIZATION_COOKIE_TTL = 60 * 60 * 24 // 24 hours
 
   const error =
@@ -715,6 +733,18 @@ export function issuer<
     }
   const configuredIssuer = normalizeIssuer(input.issuer)
   const ttlAccess = input.ttl?.access ?? DEFAULT_ACCESS_TOKEN_TTL
+
+  /**
+   * RFC 8176 `amr` for a provider that reports none: password → pwd, email
+   * code → otp, passkey → passkey, anything else (OAuth/OIDC) → fed.
+   */
+  function defaultAmr(providerKey: string | undefined): string[] {
+    const type = providerKey ? input.providers[providerKey]?.type : undefined
+    if (type === "password") return ["pwd"]
+    if (type === "code") return ["otp"]
+    if (type === "passkey") return ["passkey"]
+    return ["fed"]
+  }
   const ttlRefresh = input.ttl?.refresh ?? DEFAULT_REFRESH_TOKEN_TTL
   const ttlRefreshReuse = input.ttl?.reuse ?? DEFAULT_REFRESH_REUSE_WINDOW
   const ttlRefreshRetention = input.ttl?.retention ?? DEFAULT_REFRESH_RETENTION
@@ -785,6 +815,7 @@ export function issuer<
 
   const auth: Omit<ProviderOptions<any>, "name"> = {
     async success(ctx: Context, properties: any, successOpts) {
+      const providerAmr = successOpts?.amr ?? defaultAmr(ctx.get("provider"))
       return await input.success(
         {
           async subject(type, properties, subjectOpts) {
@@ -807,6 +838,7 @@ export function issuer<
                   refresh: subjectOpts?.ttl?.refresh ?? ttlRefresh,
                 },
                 authTime: Date.now(),
+                amr: subjectOpts?.amr ?? providerAmr,
               })
               location.hash = new URLSearchParams({
                 access_token: tokens.access,
@@ -835,6 +867,7 @@ export function issuer<
                   },
                   // The user just authenticated (OIDC auth_time)
                   authTime: Date.now(),
+                  amr: subjectOpts?.amr ?? providerAmr,
                 },
                 AUTHORIZATION_CODE_TTL,
               )
@@ -852,6 +885,7 @@ export function issuer<
         },
         {
           provider: ctx.get("provider"),
+          amr: providerAmr,
           ...properties,
         },
         ctx.req.raw,
@@ -1037,7 +1071,8 @@ export function issuer<
       // Storage may lag right after /authorize: accept the legacy cookie, but
       // only when it was written for this same flow (it is browser-bound).
       const cookie = (await auth.get(ctx, "authorization")) as
-        AuthorizationState | undefined
+        | AuthorizationState
+        | undefined
       if (cookie?.flow && cookie.flow === flow.id) return cookie
       throw flowError(
         flow.record ? "mismatch" : "expired",
@@ -1073,7 +1108,8 @@ export function issuer<
       await saveFlow(flow.id, flow.record)
     }
     const cookie = (await auth.get(ctx, "authorization")) as
-      AuthorizationState | undefined
+      | AuthorizationState
+      | undefined
     if (cookie?.flow === flow.id) deleteCookie(ctx, "authorization")
   }
 
@@ -1150,6 +1186,8 @@ export function issuer<
        * Absent for tokens issued before it was recorded and for clients.
        */
       authTime?: number
+      /** How the user authenticated (RFC 8176), kept on the refresh token. */
+      amr?: string[]
     },
     opts?: {
       generateRefreshToken?: boolean
@@ -1193,6 +1231,10 @@ export function issuer<
         // sign-in for sensitive actions (e.g. account deletion)
         ...(value.authTime
           ? { auth_time: Math.floor(value.authTime / 1000) }
+          : {}),
+        // RFC 8176 authentication methods (pwd, otp, passkey, fed)
+        ...(Array.isArray(value.amr) && value.amr.length
+          ? { amr: value.amr }
           : {}),
       })
         .setIssuedAt(accessTimeUsed)
@@ -1401,6 +1443,7 @@ export function issuer<
               subject: string
               ttl: { access: number; refresh: number }
               authTime?: number
+              amr?: string[]
             })
           | undefined
         if (!payload) {
@@ -1939,7 +1982,10 @@ export function issuer<
     const lang = c.req.query("lang")
     if (lang) flowQuery.set("lang", lang)
     if (provider) return c.redirect(`/${provider}/authorize?${flowQuery}`)
-    const providers = Object.keys(input.providers)
+    // Embedded providers (passkeys) start from another provider's page
+    const providers = Object.keys(input.providers).filter(
+      (key) => !input.providers[key].embedded,
+    )
     if (providers.length === 1)
       return c.redirect(`/${providers[0]}/authorize?${flowQuery}`)
     // The selection page links to /{provider}/authorize: let it see the flow.
@@ -1949,10 +1995,9 @@ export function issuer<
       c,
       await select()(
         Object.fromEntries(
-          Object.entries(input.providers).map(([key, value]) => [
-            key,
-            value.type,
-          ]),
+          Object.entries(input.providers)
+            .filter(([, value]) => !value.embedded)
+            .map(([key, value]) => [key, value.type]),
         ),
         new Request(selectUrl.toString(), c.req.raw),
         renderOptions(c),
