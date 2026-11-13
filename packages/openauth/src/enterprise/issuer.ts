@@ -88,6 +88,7 @@ import {
   createSessionMiddleware,
   createSessionCookieHeader,
 } from "../session/middleware.js"
+import { isLocalhostUrl } from "../session/cookie.js"
 import { sessionRoutes, adminSessionRoutes } from "../session/routes.js"
 
 import { rbacEndpoints } from "../rbac/endpoints.js"
@@ -339,6 +340,8 @@ export function createMultiTenantIssuer<
         browserSession,
         config.sessionSecret,
         sessionConfig.cookieName,
+        undefined,
+        !isLocalhostUrl(req.url),
       )
     }
 
@@ -1307,6 +1310,8 @@ export function createMultiTenantIssuer<
       browserSession,
       config.sessionSecret,
       sessionConfig.cookieName,
+      undefined,
+      !isLocalhostUrl(ctx.req.url),
     )
     ctx.header("Set-Cookie", cookieHeader)
   }

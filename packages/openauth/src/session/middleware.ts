@@ -21,6 +21,7 @@ import {
   encryptSessionCookie,
   createCookieOptions,
   createCookiePayload,
+  isLocalhostUrl,
 } from "./cookie.js"
 
 /**
@@ -157,7 +158,10 @@ export function createSessionMiddleware(
       })
 
       const newCookie = await encryptSessionCookie(newPayload, secret)
-      const cookieOptions = createCookieOptions(options.cookieDomain)
+      const cookieOptions = createCookieOptions(
+        options.cookieDomain,
+        !isLocalhostUrl(c.req.url),
+      )
 
       // Build cookie string
       let cookieString = `${cookieName}=${newCookie}; Path=${cookieOptions.path}; Max-Age=${cookieOptions.maxAge}`
@@ -351,6 +355,7 @@ export function requireActiveAccountMiddleware(): MiddlewareHandler<{
  * @param secret - 256-bit secret key for cookie encryption
  * @param cookieName - Cookie name (default: "__session")
  * @param domain - Optional cookie domain
+ * @param secure - `Secure` attribute (default true); pass `!isLocalhostUrl(request.url)`
  * @returns Cookie header string
  *
  * @example
@@ -370,6 +375,7 @@ export async function createSessionCookieHeader(
   secret: Uint8Array,
   cookieName: string = DEFAULT_SESSION_CONFIG.cookieName,
   domain?: string,
+  secure: boolean = true,
 ): Promise<string> {
   const payload = createCookiePayload({
     sessionId: session.id,
@@ -378,7 +384,7 @@ export async function createSessionCookieHeader(
   })
 
   const encryptedCookie = await encryptSessionCookie(payload, secret)
-  const cookieOptions = createCookieOptions(domain)
+  const cookieOptions = createCookieOptions(domain, secure)
 
   let cookieString = `${cookieName}=${encryptedCookie}; Path=${cookieOptions.path}; Max-Age=${cookieOptions.maxAge}`
   if (cookieOptions.httpOnly) cookieString += "; HttpOnly"
@@ -394,6 +400,7 @@ export async function createSessionCookieHeader(
  *
  * @param cookieName - Cookie name (default: "__session")
  * @param domain - Optional cookie domain
+ * @param secure - `Secure` attribute (default true); must match the cookie being cleared
  * @returns Cookie header string to clear the cookie
  *
  * @example
@@ -405,9 +412,12 @@ export async function createSessionCookieHeader(
 export function clearSessionCookieHeader(
   cookieName: string = DEFAULT_SESSION_CONFIG.cookieName,
   domain?: string,
+  secure: boolean = true,
 ): string {
   let cookieString = `${cookieName}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`
-  cookieString += "; HttpOnly; Secure; SameSite=Lax"
+  cookieString += secure
+    ? "; HttpOnly; Secure; SameSite=Lax"
+    : "; HttpOnly; SameSite=Lax"
   if (domain) cookieString += `; Domain=${domain}`
 
   return cookieString
