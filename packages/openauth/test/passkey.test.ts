@@ -251,6 +251,64 @@ describe("passkey provider", () => {
     expect(html).toContain("../passkey/options?")
   })
 
+  test("autofill that resolves after the button was pressed never submits a second time", async () => {
+    const browser = new Browser(await createApp())
+    const page = await browser.loginPage()
+    const html = await (await browser.go(page.pathname + page.search)).text()
+    const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1])
+      .find((s) => s.includes("data-passkey-button"))!
+    expect(script).toBeDefined()
+
+    const submitted: string[] = []
+    let click: () => void = () => {}
+    let resolveAutofill: (c: unknown) => void = () => {}
+    const field = { value: "" }
+    const form = {
+      querySelector: () => field,
+      submit: () => submitted.push(field.value),
+    }
+    const btn = {
+      disabled: false,
+      addEventListener: (_: string, fn: () => void) => (click = fn),
+    }
+    const root = {
+      hidden: true,
+      getAttribute: () => "../passkey/options",
+      querySelector: (sel: string) => (sel === "form" ? form : btn),
+    }
+    const window = {
+      oaPasskey: {
+        supported: () => true,
+        autofillSupported: () => Promise.resolve(true),
+        get: (_: unknown, opts?: { conditional?: boolean }) =>
+          opts?.conditional
+            ? new Promise((r) => (resolveAutofill = r))
+            : Promise.resolve({ id: "from-button" }),
+      },
+    }
+    const document = {
+      querySelector: (sel: string) => (sel === "[data-passkey]" ? root : null),
+    }
+    const fetch = () =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ challenge: "c" }),
+      })
+    new Function("window", "document", "fetch", script)(window, document, fetch)
+    const tick = () => new Promise((r) => setTimeout(r, 0))
+    await tick()
+
+    // The user presses the button while conditional UI is pending; then the
+    // conditional request resolves too (as a virtual authenticator does)
+    click()
+    resolveAutofill({ id: "from-autofill" })
+    await tick()
+    await tick()
+
+    expect(submitted).toEqual([JSON.stringify({ id: "from-button" })])
+  })
+
   test("Arabic page: Arabic passkey copy", async () => {
     const browser = new Browser(await createApp())
     const start = await browser.authorize(A, "&lang=ar")
