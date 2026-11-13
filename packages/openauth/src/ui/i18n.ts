@@ -63,6 +63,10 @@ export interface Translations {
   client_error_title: string
   client_error_description: string
   client_error_button: string
+  server_error_title: string
+  server_error_description: string
+  server_error_reference: string
+  server_error_button: string
 
   // Device activation (RFC 8628)
   device_title: string
@@ -128,6 +132,11 @@ export const en: Translations = {
   client_error_description:
     "The app that sent you here isn't set up to use this sign-in page. Please go back and try again. If it keeps happening, contact support.",
   client_error_button: "Go to the home page",
+  server_error_title: "Something went wrong",
+  server_error_description:
+    "Sign-in hit a problem on our side. Please try again in a moment. If it keeps happening, contact support and quote the reference below.",
+  server_error_reference: "Reference:",
+  server_error_button: "Try again",
   device_title: "Sign in on your device",
   device_description:
     "Enter the code shown on your TV or other device to sign it in to your account.",
@@ -215,6 +224,11 @@ export const ar: Translations = {
   client_error_description:
     "التطبيق الذي أرسلك إلى هنا غير مُعدّ لاستخدام صفحة تسجيل الدخول هذه. يُرجى الرجوع والمحاولة مرة أخرى، وإذا تكرر ذلك فتواصل مع الدعم.",
   client_error_button: "الذهاب إلى الصفحة الرئيسية",
+  server_error_title: "حدث خطأ ما",
+  server_error_description:
+    "واجه تسجيل الدخول مشكلة من جهتنا. يُرجى المحاولة مرة أخرى بعد قليل، وإذا تكرر ذلك فتواصل مع الدعم واذكر رقم المرجع أدناه.",
+  server_error_reference: "رقم المرجع:",
+  server_error_button: "حاول مرة أخرى",
   device_title: "تسجيل الدخول على جهازك",
   device_description:
     "أدخل الرمز الظاهر على التلفاز أو الجهاز الآخر لتسجيل دخوله إلى حسابك.",
