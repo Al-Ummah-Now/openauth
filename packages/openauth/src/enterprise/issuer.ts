@@ -313,7 +313,14 @@ export function createMultiTenantIssuer<
      * the session so a chain of silent sign-ons can't refresh auth_time.
      */
     silentAuthenticatedAt?: number,
+    /** Silent SSO: how this account session was authenticated (RFC 8176). */
+    silentAmr?: string[],
   ): Promise<Response> {
+    // How the user authenticated: the provider's report, or for silent SSO
+    // the account session's (a silent hop never upgrades it)
+    const amr: string[] | undefined = Array.isArray(value?.amr)
+      ? (value.amr as string[])
+      : silentAmr
     const ctx = c ? enterpriseContext(c) : undefined
     if (!ctx?.tenant) {
       // No enterprise context - delegate directly to base
@@ -363,6 +370,7 @@ export function createMultiTenantIssuer<
     const enterpriseResult: EnterpriseAuthResult = {
       ...(value as Record<string, unknown>),
       provider: value.provider as string,
+      ...(amr ? { amr } : {}),
       tenantId: tenant.id,
       roles: rbacClaims.roles,
       permissions: rbacClaims.permissions,
@@ -420,7 +428,10 @@ export function createMultiTenantIssuer<
               browserSessionId: session.id,
               userId: String(userId),
               subjectType: type as string,
-              subjectProperties: enrichedProperties,
+              // amr rides on the session so silent SSO can reuse it
+              subjectProperties: amr
+                ? { ...enrichedProperties, amr }
+                : enrichedProperties,
               refreshToken: sessionRefreshToken,
               clientId: authorization?.client_id || "default",
               ttl: sessionConfig.sessionLifetimeSeconds,
@@ -438,7 +449,7 @@ export function createMultiTenantIssuer<
         const response = await responder.subject(
           type as any,
           enrichedProperties as any,
-          opts,
+          amr ? { ...opts, amr: opts?.amr ?? amr } : opts,
         )
 
         // Add session cookie if we created a new session
@@ -526,6 +537,7 @@ export function createMultiTenantIssuer<
 
     let appRoles: string[] = []
     let appPermissions: string[] = []
+    let appProperties: Record<string, unknown> = {}
     if (config.onRefresh) {
       if (!tenantId) throw new Error("refresh: the token has no tenant")
       const decision = await config.onRefresh(
@@ -545,11 +557,22 @@ export function createMultiTenantIssuer<
         appPermissions = Array.isArray(decision.permissions)
           ? decision.permissions
           : []
+        if (decision.properties && typeof decision.properties === "object")
+          appProperties = decision.properties
       }
     }
 
+    // The app's property patch (onRefresh `properties`); `undefined` removes a key
+    const patched: Record<string, unknown> = { ...properties }
+    for (const [key, val] of Object.entries(appProperties)) {
+      if (val === undefined) delete patched[key]
+      else patched[key] = val
+    }
+    const patchedAny = Object.keys(appProperties).length > 0
+
     // Nothing to recompute from: no RBAC, or a subject without a user
-    if (!config.rbacService || !userId) return { properties: input.properties }
+    if (!config.rbacService || !userId)
+      return { properties: patchedAny ? patched : input.properties }
     if (!tenantId) throw new Error("refresh: the token has no tenant")
 
     const claims = await config.rbacService.enrichTokenClaims({
@@ -580,7 +603,7 @@ export function createMultiTenantIssuer<
       }
     }
 
-    return { properties: { ...properties, tenantId, roles, permissions } }
+    return { properties: { ...patched, tenantId, roles, permissions } }
   }
 
   const baseIssuer = createBaseIssuer({
@@ -1032,6 +1055,7 @@ export function createMultiTenantIssuer<
               // this account session was authenticated, so "sign in again"
               // checks can't be satisfied without a real sign-in.
               authTime: account.authenticated_at,
+              amr: opts?.amr ?? sessionAmr(account.subject_properties),
             },
             AUTHORIZATION_CODE_TTL,
           )
@@ -1047,6 +1071,7 @@ export function createMultiTenantIssuer<
         c.req.raw,
         c,
         account.authenticated_at,
+        sessionAmr(account.subject_properties),
       )
     }
 
@@ -1872,9 +1897,21 @@ function sessionIdentity(properties: unknown): Record<string, unknown> {
     properties && typeof properties === "object"
       ? (properties as Record<string, unknown>)
       : {}
-  const { roles, permissions, tenantId, ...identity } = source
+  const { roles, permissions, tenantId, amr, ...identity } = source
+  void amr
   void roles
   void permissions
   void tenantId
   return identity
+}
+
+/** The RFC 8176 `amr` kept on an account session, if any. */
+function sessionAmr(properties: unknown): string[] | undefined {
+  const amr =
+    properties && typeof properties === "object"
+      ? (properties as Record<string, unknown>).amr
+      : undefined
+  return Array.isArray(amr) && amr.every((m) => typeof m === "string")
+    ? (amr as string[])
+    : undefined
 }

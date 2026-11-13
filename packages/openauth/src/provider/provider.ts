@@ -5,6 +5,11 @@ export type ProviderRoute = Hono
 
 export interface Provider<Properties = any> {
   type: string
+  /**
+   * Embedded providers (e.g. passkeys, started from another provider's page)
+   * are never on the provider-select page and never chosen by `/authorize`.
+   */
+  embedded?: boolean
   init: (route: ProviderRoute, options: ProviderOptions<Properties>) => void
   client?: (input: {
     clientID: string
@@ -20,6 +25,8 @@ export interface ProviderOptions<Properties> {
     properties: Properties,
     opts?: {
       invalidate?: (subject: string) => Promise<void>
+      /** How the user authenticated (RFC 8176), e.g. ["passkey"] */
+      amr?: string[]
     },
   ) => Promise<Response>
   forward: (ctx: Context, response: Response) => Response
