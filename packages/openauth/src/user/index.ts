@@ -19,3 +19,10 @@ export type { UserService, UserServiceConfig } from "./service.js"
 export { createD1UserAdapter, D1UserAdapter } from "./d1-adapter.js"
 export type { D1UserAdapterConfig } from "./d1-adapter.js"
 export { userApiRoutes, createUserApi } from "./api.js"
+export {
+  SYSTEM_USER_ID,
+  SYSTEM_USER_IDS,
+  isSystemUserId,
+  isSystemMetadata,
+  isSystemUser,
+} from "./system.js"
