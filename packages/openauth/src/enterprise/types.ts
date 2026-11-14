@@ -171,6 +171,11 @@ export interface EnterpriseIssuerConfig<
    */
   device?: import("../device.js").DeviceFlowOptions
   /**
+   * Native passkey sign-in for native apps (`/native/passkey/*`). See
+   * `IssuerInput.nativePasskey`. No browser session is created for it.
+   */
+  nativePasskey?: import("../native-passkey.js").NativePasskeyOptions
+  /**
    * PKCE policy (only `S256` is ever accepted). See `IssuerInput.pkce`.
    */
   pkce?: {
@@ -186,7 +191,9 @@ export interface EnterpriseIssuerConfig<
      * @default false
      */
     requireForCodeExchange?:
-      boolean | readonly string[] | ((clientId: string) => boolean)
+      | boolean
+      | readonly string[]
+      | ((clientId: string) => boolean)
   }
 
   /**
