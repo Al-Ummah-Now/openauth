@@ -1,6 +1,6 @@
 {
   "name": "api-gateway-example",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "API Gateway with optional enterprise features (introspection, revocation)",
   "type": "module",
   "scripts": {
