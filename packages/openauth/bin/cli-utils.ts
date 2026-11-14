@@ -178,3 +178,13 @@ export function migrationRecordExistsInOutput(
 ): boolean {
   return output.includes(migrationName)
 }
+
+/**
+ * The clients bootstrap-secrets gives a generated secret: those without one, except
+ * native apps (`metadata.type` "native"). A native app is a public client (RFC 8252
+ * §8.5: an installed app cannot keep a secret); it authenticates with PKCE, and code
+ * that admits only public clients (no `client_secret_hash`) must keep admitting it.
+ * Metadata that is NULL or not JSON counts as not native.
+ */
+export const CLIENTS_WITHOUT_SECRET_SQL =
+  "SELECT id, name, tenant_id FROM oauth_clients WHERE (client_secret_hash IS NULL OR client_secret_hash = '') AND COALESCE(CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.type') END, '') <> 'native'"
