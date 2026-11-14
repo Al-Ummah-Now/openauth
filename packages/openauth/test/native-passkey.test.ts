@@ -166,7 +166,10 @@ async function createApp() {
       },
       client: async (id) =>
         id === STUDIO.id
-          ? { redirectURI: STUDIO.redirect }
+          ? {
+              redirectURI: STUDIO.redirect,
+              redirectURIs: [STUDIO.redirect, "http://127.0.0.1/auth/callback"],
+            }
           : id === ADMIN.id
             ? { redirectURI: ADMIN.redirect }
             : undefined,
@@ -580,6 +583,74 @@ describe("native passkey verify", () => {
     expect(
       (await Storage.atomic(storage).get(["oauth:code", code])).redirectURI,
     ).toBe(STUDIO.redirect)
+  })
+})
+
+describe("native passkey redirect_uri", () => {
+  async function optionsWith(app: App, redirect_uri: unknown) {
+    return post(app, "/native/passkey/options", {
+      client_id: STUDIO.id,
+      code_challenge: await s256(VERIFIER),
+      code_challenge_method: "S256",
+      redirect_uri,
+    })
+  }
+
+  test("a registered loopback redirect on another port binds the code to exactly that redirect", async () => {
+    const app = await createApp()
+    const a = await addAuthenticator()
+    const loopback = "http://127.0.0.1:49152/auth/callback"
+    const res = await optionsWith(app, loopback)
+    expect(res.status).toBe(200)
+    const { challenge_id, publicKey } = (await res.json()) as any
+    const verify = await post(app, "/native/passkey/verify", {
+      challenge_id,
+      client_id: STUDIO.id,
+      credential: await a.assert(publicKey.challenge),
+    })
+    expect(verify.status).toBe(200)
+    const { code } = (await verify.json()) as { code: string }
+    expect(
+      (await Storage.atomic(storage).get(["oauth:code", code])).redirectURI,
+    ).toBe(loopback)
+    expect(
+      (await exchange(app, code, { id: STUDIO.id, redirect: STUDIO.redirect }))
+        .status,
+    ).toBe(400)
+  })
+
+  test("the loopback code exchanges with the same redirect", async () => {
+    const app = await createApp()
+    const a = await addAuthenticator()
+    const loopback = "http://127.0.0.1:50000/auth/callback"
+    const { challenge_id, publicKey } = (await (
+      await optionsWith(app, loopback)
+    ).json()) as any
+    const { code } = (await (
+      await post(app, "/native/passkey/verify", {
+        challenge_id,
+        client_id: STUDIO.id,
+        credential: await a.assert(publicKey.challenge),
+      })
+    ).json()) as { code: string }
+    expect(
+      (await exchange(app, code, { id: STUDIO.id, redirect: loopback })).status,
+    ).toBe(200)
+  })
+
+  test("an unregistered or malformed redirect_uri is invalid_request", async () => {
+    const app = await createApp()
+    for (const uri of [
+      "https://evil.example/cb",
+      "http://127.0.0.1:1234/elsewhere",
+      "alummahnow-admin://auth/callback",
+      "",
+      42,
+    ]) {
+      const res = await optionsWith(app, uri)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as any).error).toBe("invalid_request")
+    }
   })
 })
 

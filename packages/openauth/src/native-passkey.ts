@@ -4,9 +4,11 @@
  * webauthn.dll on Windows) instead of a browser, then get an ordinary
  * authorization code they exchange at `/token` with PKCE.
  *
- * - `POST /native/passkey/options` `{ client_id, code_challenge, code_challenge_method: "S256" }`
+ * - `POST /native/passkey/options` `{ client_id, code_challenge, code_challenge_method: "S256", redirect_uri? }`
  *   → `{ challenge_id, publicKey }` (request options, discoverable, UV required, 2 min).
- *   The challenge is single use and bound to the client and the code challenge.
+ *   The challenge is single use and bound to the client, the code challenge and
+ *   the redirect (`redirect_uri` when sent: one of the client's registered
+ *   redirects, loopback ports as in the browser flow; else the client's default).
  * - `POST /native/passkey/verify` `{ challenge_id, client_id, credential }`
  *   → `{ code }`, bound to the client, its native redirect and the code challenge.
  *
@@ -27,6 +29,7 @@ import {
   type PasskeyCredential,
 } from "./passkey.js"
 import { Storage, type StorageAdapter } from "./storage/storage.js"
+import { redirectUriMatches } from "./client/native.js"
 
 export interface NativePasskeyOptions {
   /** RP id for this request (the same as the web's, e.g. `alummahnow.net`). */
@@ -44,14 +47,15 @@ export interface NativePasskeyOptions {
     touch: (credentialID: string, counter: number) => Promise<void>
   }
   /**
-   * The native client and the redirect its codes are bound to (the app sends
-   * the same `redirect_uri` at `/token`), or undefined when the client may not
-   * use native passkey sign-in.
+   * The native client, or undefined when it may not use native passkey
+   * sign-in. `redirectURI` is the default redirect codes are bound to (the app
+   * sends the same `redirect_uri` at `/token`); `redirectURIs` are all its
+   * registered redirects, any of which the app may name on options.
    */
   client: (
     clientID: string,
     req: Request,
-  ) => Promise<{ redirectURI: string } | undefined>
+  ) => Promise<{ redirectURI: string; redirectURIs?: string[] } | undefined>
   /**
    * Counts one request; false refuses it with `429 rate_limited`. Called for
    * both routes before any other work.
@@ -104,6 +108,8 @@ interface ChallengeRecord {
   challenge: string
   clientID: string
   codeChallenge: string
+  /** The redirect the code is bound to. */
+  redirectURI: string
   /** The issuer host (tenants resolve by host): verify must come to the same one. */
   host: string
   expires: number
@@ -227,13 +233,36 @@ export function registerNativePasskey(
           "invalid_request",
           "code_challenge is missing or malformed.",
         )
-      if (!(await options.client(clientID, c.req.raw)))
+      const redirectParam = input?.redirect_uri
+      if (
+        redirectParam !== undefined &&
+        (typeof redirectParam !== "string" || !redirectParam)
+      )
+        return error(c, 400, "invalid_request", "redirect_uri is malformed.")
+      const client = await options.client(clientID, c.req.raw)
+      if (!client)
         return error(
           c,
           400,
           "invalid_client",
           "This app cannot sign in with a passkey here.",
         )
+      let redirectURI = client.redirectURI
+      if (typeof redirectParam === "string") {
+        if (
+          !redirectUriMatches(
+            client.redirectURIs ?? [client.redirectURI],
+            redirectParam,
+          )
+        )
+          return error(
+            c,
+            400,
+            "invalid_request",
+            "redirect_uri is not registered for this app.",
+          )
+        redirectURI = redirectParam
+      }
 
       const publicKey = await authenticationOptions({
         rpID: options.rpID(c.req.raw),
@@ -246,6 +275,7 @@ export function registerNativePasskey(
           challenge: publicKey.challenge,
           clientID,
           codeChallenge,
+          redirectURI,
           host: new URL(c.req.url).host,
           expires: Date.now() + ttl * 1000,
         } satisfies ChallengeRecord,
@@ -347,14 +377,14 @@ export function registerNativePasskey(
         {
           response_type: "code",
           client_id: clientID,
-          redirect_uri: client.redirectURI,
+          redirect_uri: state.redirectURI,
           state: "",
           pkce: { challenge: state.codeChallenge, method: "S256" },
         },
         { userID: stored.userID, credentialID: stored.id },
         provider,
       )
-      const code = codeFrom(response, client.redirectURI)
+      const code = codeFrom(response, state.redirectURI)
       // Anything but a redirect with a code: the app refused the account
       // (suspended, deleted). Same generic answer as a bad passkey.
       if (!code) return refused(c, "account_refused")
