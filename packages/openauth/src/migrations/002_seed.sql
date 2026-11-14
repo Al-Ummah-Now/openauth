@@ -297,7 +297,9 @@ VALUES
 -- Note: In production, users should be created through the authentication flow.
 -- These are placeholder entries for development environments.
 
--- System user (for automated operations)
+-- System user: only labels automatic actions (assigned_by of the Member role
+-- every new account gets). It can never sign in and holds no role
+-- (src/user/system.ts); consumers refuse it at sign-in and on role grants.
 INSERT OR IGNORE INTO users (
     id, tenant_id, email, name, metadata, status, created_at, updated_at
 ) VALUES (
@@ -305,20 +307,10 @@ INSERT OR IGNORE INTO users (
     'default',
     'system@openauth.local',
     'System',
-    '{"type": "system", "description": "Automated system operations"}',
+    '{"type": "system", "description": "Labels automatic actions; cannot sign in or hold roles"}',
     'active',
     strftime('%s', 'now') * 1000,
     strftime('%s', 'now') * 1000
-);
-
--- Assign super admin role to system user
-INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, tenant_id, assigned_at, assigned_by)
-VALUES (
-    'user_system',
-    'role_super_admin',
-    'default',
-    strftime('%s', 'now') * 1000,
-    'system'
 );
 
 -- ============================================================================

@@ -21,6 +21,7 @@ import type {
 import { DEFAULT_RBAC_CONFIG, RBACError } from "../contracts/types.js"
 import type { RBACAdapter } from "./d1-adapter.js"
 import type { CachedPermissions } from "./types.js"
+import { isSystemUserId } from "../user/system.js"
 
 /**
  * RBAC Service Implementation
@@ -408,6 +409,14 @@ export class RBACServiceImpl implements RBACService {
     assignedBy: string
     expiresAt?: number
   }): Promise<UserRole> {
+    // System accounts (user/system.ts) only label automatic actions: never a role
+    if (isSystemUserId(params.userId)) {
+      throw new RBACError(
+        "system_account_role_denied",
+        "System accounts cannot hold roles",
+      )
+    }
+
     // Security check: Prevent self-assignment
     if (params.userId === params.assignedBy) {
       throw new RBACError(

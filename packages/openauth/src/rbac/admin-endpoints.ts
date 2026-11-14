@@ -420,7 +420,8 @@ export function rbacAdminEndpoints(service: RBACService): Hono<AdminContext> {
         }
         if (
           error.code === "privilege_escalation_denied" ||
-          error.code === "self_assignment_denied"
+          error.code === "self_assignment_denied" ||
+          error.code === "system_account_role_denied"
         ) {
           return c.json({ error: "Forbidden", message: error.message }, 403)
         }
