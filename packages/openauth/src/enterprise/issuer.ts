@@ -116,6 +116,7 @@ import {
 
 import {
   issuer as createBaseIssuer,
+  NATIVE_AUTHORIZATION_KEY,
   normalizeIssuer,
   type OnSuccessResponder,
   type RefreshHookInput,
@@ -328,14 +329,19 @@ export function createMultiTenantIssuer<
     }
 
     const tenant = ctx.tenant
-    let browserSession = ctx.browserSession
-    const authorization = ctx.authorization
+    // A native passkey sign-in (native-passkey.ts) brings its own
+    // authorization and never gets a browser session: the app has no cookies
+    const nativeAuthorization = c?.get(NATIVE_AUTHORIZATION_KEY as never) as
+      | EnterpriseAuthorizationState
+      | undefined
+    let browserSession = nativeAuthorization ? null : ctx.browserSession
+    const authorization = nativeAuthorization ?? ctx.authorization
 
     // Track if we need to set a session cookie
     let sessionCookieHeader: string | null = null
 
     // Create browser session if one doesn't exist
-    if (!browserSession) {
+    if (!browserSession && !nativeAuthorization) {
       browserSession = await config.sessionService.createBrowserSession({
         tenantId: tenant.id,
         userAgent: req.headers.get("User-Agent") || "unknown",
@@ -617,6 +623,7 @@ export function createMultiTenantIssuer<
     pkce: config.pkce,
     clientDb: config.clientDb,
     device: config.device,
+    nativePasskey: config.nativePasskey,
     audit: config.audit,
     error: config.error,
     restart: config.restart,
@@ -758,7 +765,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       ctx.set(ENTERPRISE_CONTEXT_KEY, {
@@ -1282,7 +1290,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1311,7 +1320,8 @@ export function createMultiTenantIssuer<
     }
     if (wantsHtml(c.req.raw)) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       let locale: string | undefined
       try {
         locale = authorization?.redirect_uri

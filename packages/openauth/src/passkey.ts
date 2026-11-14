@@ -65,12 +65,14 @@ export function rpIdForHost(host: string): string {
 /** Options for a sign-in ceremony with discoverable credentials. */
 export async function authenticationOptions(input: {
   rpID: string
+  /** Ceremony timeout in ms. @default PASSKEY_TIMEOUT_MS */
+  timeout?: number
 }): Promise<PublicKeyCredentialRequestOptionsJSON> {
   return generateAuthenticationOptions({
     rpID: input.rpID,
     allowCredentials: [],
     userVerification: "required",
-    timeout: PASSKEY_TIMEOUT_MS,
+    timeout: input.timeout ?? PASSKEY_TIMEOUT_MS,
   })
 }
 
@@ -96,7 +98,8 @@ export async function verifyAuthentication(input: {
       publicKey: isoBase64URL.toBuffer(input.credential.publicKey),
       counter: input.credential.counter,
       transports: input.credential.transports as
-        AuthenticatorTransportFuture[] | undefined,
+        | AuthenticatorTransportFuture[]
+        | undefined,
     },
   })
   if (!result.verified) throw new Error("passkey assertion not verified")
@@ -114,6 +117,8 @@ export async function registrationOptions(input: {
   userDisplayName?: string
   /** The account's passkeys, so the same authenticator is not added twice. */
   exclude?: { id: string; transports?: string[] }[]
+  /** Ceremony timeout in ms. @default PASSKEY_TIMEOUT_MS */
+  timeout?: number
 }): Promise<PublicKeyCredentialCreationOptionsJSON> {
   return generateRegistrationOptions({
     rpID: input.rpID,
@@ -122,7 +127,7 @@ export async function registrationOptions(input: {
     userName: input.userName,
     userDisplayName: input.userDisplayName ?? input.userName,
     attestationType: "none",
-    timeout: PASSKEY_TIMEOUT_MS,
+    timeout: input.timeout ?? PASSKEY_TIMEOUT_MS,
     excludeCredentials: (input.exclude ?? []).map((c) => ({
       id: c.id,
       transports: c.transports as AuthenticatorTransportFuture[] | undefined,
