@@ -405,14 +405,18 @@ describe("CLIENTS_WITHOUT_SECRET_SQL (bootstrap-secrets)", () => {
     db.run(
       "CREATE TABLE oauth_clients (id TEXT PRIMARY KEY, name TEXT, tenant_id TEXT, client_secret_hash TEXT, metadata TEXT)",
     )
-    const add = db.prepare("INSERT INTO oauth_clients VALUES (?, ?, 'default', ?, ?)")
+    const add = db.prepare(
+      "INSERT INTO oauth_clients VALUES (?, ?, 'default', ?, ?)",
+    )
     add.run("web", "Web", null, '{"type":"web"}')
     add.run("no-meta", "No metadata", null, null)
     add.run("bad-meta", "Not JSON", "", "{not json")
     add.run("hashed", "Has a secret", "pbkdf2$abc", null)
     add.run("studio", "Studio app", null, '{"type":"native","pkce":"required"}')
     add.run("admin-ios", "Admin app", "", '{"type":"native"}')
-    const ids = (db.query(CLIENTS_WITHOUT_SECRET_SQL).all() as { id: string }[]).map((r) => r.id).sort()
+    const ids = (db.query(CLIENTS_WITHOUT_SECRET_SQL).all() as { id: string }[])
+      .map((r) => r.id)
+      .sort()
     expect(ids).toEqual(["bad-meta", "no-meta", "web"])
   })
 })
