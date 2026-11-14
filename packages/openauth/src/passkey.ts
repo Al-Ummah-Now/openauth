@@ -98,8 +98,7 @@ export async function verifyAuthentication(input: {
       publicKey: isoBase64URL.toBuffer(input.credential.publicKey),
       counter: input.credential.counter,
       transports: input.credential.transports as
-        | AuthenticatorTransportFuture[]
-        | undefined,
+        AuthenticatorTransportFuture[] | undefined,
     },
   })
   if (!result.verified) throw new Error("passkey assertion not verified")

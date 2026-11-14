@@ -249,8 +249,7 @@ export function registerNativePasskey(
       const clientID = input?.client_id
       const challengeID = input?.challenge_id
       const credential = input?.credential as
-        | AuthenticationResponseJSON
-        | undefined
+        AuthenticationResponseJSON | undefined
       if (typeof clientID !== "string" || !clientID)
         return error(c, 400, "invalid_request", "client_id is required.")
       if (options.rateLimit) {
@@ -296,8 +295,7 @@ export function registerNativePasskey(
 
       // Single use: whoever takes the challenge first is the only one to see it
       const state = (await atomic().take(nativeChallengeKey(challengeID))) as
-        | ChallengeRecord
-        | undefined
+        ChallengeRecord | undefined
       if (!state) return refused(c, "no_challenge")
       if (Date.now() > state.expires) return refused(c, "expired_challenge")
       if (state.clientID !== clientID) return refused(c, "wrong_client")
