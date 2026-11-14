@@ -116,6 +116,7 @@ import {
 
 import {
   issuer as createBaseIssuer,
+  NATIVE_AUTHORIZATION_KEY,
   normalizeIssuer,
   type OnSuccessResponder,
   type RefreshHookInput,
@@ -328,14 +329,18 @@ export function createMultiTenantIssuer<
     }
 
     const tenant = ctx.tenant
-    let browserSession = ctx.browserSession
-    const authorization = ctx.authorization
+    // A native passkey sign-in (native-passkey.ts) brings its own
+    // authorization and never gets a browser session: the app has no cookies
+    const nativeAuthorization = c?.get(NATIVE_AUTHORIZATION_KEY as never) as
+      EnterpriseAuthorizationState | undefined
+    let browserSession = nativeAuthorization ? null : ctx.browserSession
+    const authorization = nativeAuthorization ?? ctx.authorization
 
     // Track if we need to set a session cookie
     let sessionCookieHeader: string | null = null
 
     // Create browser session if one doesn't exist
-    if (!browserSession) {
+    if (!browserSession && !nativeAuthorization) {
       browserSession = await config.sessionService.createBrowserSession({
         tenantId: tenant.id,
         userAgent: req.headers.get("User-Agent") || "unknown",
@@ -617,6 +622,7 @@ export function createMultiTenantIssuer<
     pkce: config.pkce,
     clientDb: config.clientDb,
     device: config.device,
+    nativePasskey: config.nativePasskey,
     audit: config.audit,
     error: config.error,
     restart: config.restart,
