@@ -191,9 +191,7 @@ export interface EnterpriseIssuerConfig<
      * @default false
      */
     requireForCodeExchange?:
-      | boolean
-      | readonly string[]
-      | ((clientId: string) => boolean)
+      boolean | readonly string[] | ((clientId: string) => boolean)
   }
 
   /**
