@@ -9,7 +9,9 @@ import {
   buildRecordMigrationSql,
   buildVerifyMigrationSql,
   migrationRecordExistsInOutput,
+  CLIENTS_WITHOUT_SECRET_SQL,
 } from "./cli-utils.js"
+import { Database } from "bun:sqlite"
 
 describe("calculateChecksum", () => {
   test("returns consistent hash for same content", () => {
@@ -394,5 +396,27 @@ describe("migrationRecordExistsInOutput", () => {
     const output = `{"name": "002_seed.sql"}`
     expect(migrationRecordExistsInOutput(output, "002_seed")).toBe(true)
     expect(migrationRecordExistsInOutput(output, "003_other.sql")).toBe(false)
+  })
+})
+
+describe("CLIENTS_WITHOUT_SECRET_SQL (bootstrap-secrets)", () => {
+  test("picks clients without a secret, never native apps", () => {
+    const db = new Database(":memory:")
+    db.run(
+      "CREATE TABLE oauth_clients (id TEXT PRIMARY KEY, name TEXT, tenant_id TEXT, client_secret_hash TEXT, metadata TEXT)",
+    )
+    const add = db.prepare(
+      "INSERT INTO oauth_clients VALUES (?, ?, 'default', ?, ?)",
+    )
+    add.run("web", "Web", null, '{"type":"web"}')
+    add.run("no-meta", "No metadata", null, null)
+    add.run("bad-meta", "Not JSON", "", "{not json")
+    add.run("hashed", "Has a secret", "pbkdf2$abc", null)
+    add.run("studio", "Studio app", null, '{"type":"native","pkce":"required"}')
+    add.run("admin-ios", "Admin app", "", '{"type":"native"}')
+    const ids = (db.query(CLIENTS_WITHOUT_SECRET_SQL).all() as { id: string }[])
+      .map((r) => r.id)
+      .sort()
+    expect(ids).toEqual(["bad-meta", "no-meta", "web"])
   })
 })
