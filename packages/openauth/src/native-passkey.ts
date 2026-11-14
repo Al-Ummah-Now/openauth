@@ -101,6 +101,8 @@ interface ChallengeRecord {
   challenge: string
   clientID: string
   codeChallenge: string
+  /** The issuer host (tenants resolve by host): verify must come to the same one. */
+  host: string
   expires: number
 }
 
@@ -235,6 +237,7 @@ export function registerNativePasskey(
           challenge: publicKey.challenge,
           clientID,
           codeChallenge,
+          host: new URL(c.req.url).host,
           expires: Date.now() + ttl * 1000,
         } satisfies ChallengeRecord,
         new Date(Date.now() + ttl * 1000),
@@ -299,6 +302,8 @@ export function registerNativePasskey(
       if (!state) return refused(c, "no_challenge")
       if (Date.now() > state.expires) return refused(c, "expired_challenge")
       if (state.clientID !== clientID) return refused(c, "wrong_client")
+      if (state.host !== new URL(c.req.url).host)
+        return refused(c, "wrong_host")
 
       const stored = await options.store.get(credential.id)
       if (!stored) return refused(c, "unknown_credential")

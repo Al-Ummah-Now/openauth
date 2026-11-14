@@ -445,6 +445,27 @@ describe("native passkey verify", () => {
     expect(successValues).toHaveLength(0)
   })
 
+  test("a challenge is only good on the host (tenant) that issued it", async () => {
+    const app = await createApp()
+    const a = await addAuthenticator()
+    const { challenge_id, publicKey } = await options(app)
+    const key = nativeChallengeKey(challenge_id)
+    const record = await Storage.atomic(storage).get(key)
+    expect(record.host).toBe(HOST)
+    await Storage.atomic(storage).set(key, {
+      ...record,
+      host: "auth.other-tenant.example",
+    })
+    const res = await post(app, "/native/passkey/verify", {
+      challenge_id,
+      client_id: STUDIO.id,
+      credential: await a.assert(publicKey.challenge),
+    })
+    expect(res.status).toBe(401)
+    expect(failures).toContain("wrong_host")
+    expect(successValues).toHaveLength(0)
+  })
+
   test("an expired challenge is refused", async () => {
     const app = await createApp()
     const a = await addAuthenticator()
