@@ -38,6 +38,7 @@ import {
   type AppliedMigration,
   type ParsedArgs,
   type WranglerOptions,
+  CLIENTS_WITHOUT_SECRET_SQL,
 } from "./cli-utils.js"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -417,7 +418,8 @@ Migrations are tracked in the _openauth_migrations table.
 Only pending migrations are applied (safe to run multiple times).
 
 The bootstrap-secrets command generates client secrets for seeded clients
-that don't have secrets configured. This solves the chicken-and-egg problem
+that don't have secrets configured (native app clients, metadata.type "native",
+are public and never get one). This solves the chicken-and-egg problem
 where you need a secret to authenticate, but can't get a secret without auth.
 `)
 }
@@ -883,8 +885,8 @@ async function bootstrapSecrets(args: string[]) {
     }
   }
 
-  const sql =
-    "SELECT id, name, tenant_id FROM oauth_clients WHERE client_secret_hash IS NULL OR client_secret_hash = ''"
+  // Native apps are public clients and never get one (see CLIENTS_WITHOUT_SECRET_SQL)
+  const sql = CLIENTS_WITHOUT_SECRET_SQL
 
   if (parsed.debug) {
     console.log("\n[DEBUG] SQL Query:", sql)
