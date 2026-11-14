@@ -582,3 +582,43 @@ describe("native passkey verify", () => {
     ).toBe(STUDIO.redirect)
   })
 })
+
+describe("native passkey errors", () => {
+  test("an unexpected error is a JSON 500 with the app's report reference", async () => {
+    const tenantService = new TenantServiceImpl(storage)
+    await tenantService.createTenant({ id: "default", name: "Default" })
+    const reported: unknown[] = []
+    const { app } = createMultiTenantIssuer({
+      tenantService,
+      sessionService: new SessionServiceImpl(storage),
+      storage,
+      sessionSecret: new Uint8Array(32).fill(4),
+      subjects: createSubjects({ user: object({ email: string() }) }),
+      tenantResolver: { customDomains: new Map([[HOST, "default"]]) },
+      issuer: ISSUER,
+      providers: { dummy: { type: "dummy", init() {} } },
+      nativePasskey: {
+        rpID: () => RP_ID,
+        origins: () => [RP_ORIGIN],
+        store: { get: async () => undefined, touch: async () => undefined },
+        client: async () => {
+          throw new Error("D1 down")
+        },
+        onError: (err) => {
+          reported.push(err)
+          return "ref-123"
+        },
+      },
+      onSuccess: async (ctx) => ctx.subject("user", { email: "x" } as any),
+    })
+    const res = await post(app, "/native/passkey/options", {
+      client_id: STUDIO.id,
+      code_challenge: await s256(VERIFIER),
+      code_challenge_method: "S256",
+    })
+    expect(res.status).toBe(500)
+    expect(res.headers.get("x-error-ref")).toBe("ref-123")
+    expect(((await res.json()) as any).error).toBe("server_error")
+    expect(reported).toHaveLength(1)
+  })
+})

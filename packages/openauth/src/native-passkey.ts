@@ -69,8 +69,11 @@ export interface NativePasskeyOptions {
   provider?: string
   /** Called with the reason whenever a sign-in is refused (logging). */
   onFailure?: (reason: string, req: Request) => void
-  /** Called for unexpected errors (the app reports them). */
-  onError?: (error: unknown, req: Request) => void
+  /**
+   * Called for unexpected errors (the app reports them). A returned string is
+   * the report's reference: sent as `X-Error-Ref`.
+   */
+  onError?: (error: unknown, req: Request) => string | void
 }
 
 /** What the issuer gives the routes to finish a sign-in. */
@@ -179,8 +182,14 @@ export function registerNativePasskey(
     try {
       return await run()
     } catch (err) {
-      options.onError?.(err, c.req.raw)
-      return error(c, 500, "server_error", "Something went wrong.")
+      const ref = options.onError?.(err, c.req.raw)
+      return error(
+        c,
+        500,
+        "server_error",
+        "Something went wrong.",
+        typeof ref === "string" ? { "X-Error-Ref": ref } : {},
+      )
     }
   }
 
@@ -252,7 +261,8 @@ export function registerNativePasskey(
       const clientID = input?.client_id
       const challengeID = input?.challenge_id
       const credential = input?.credential as
-        AuthenticationResponseJSON | undefined
+        | AuthenticationResponseJSON
+        | undefined
       if (typeof clientID !== "string" || !clientID)
         return error(c, 400, "invalid_request", "client_id is required.")
       if (options.rateLimit) {
@@ -298,7 +308,8 @@ export function registerNativePasskey(
 
       // Single use: whoever takes the challenge first is the only one to see it
       const state = (await atomic().take(nativeChallengeKey(challengeID))) as
-        ChallengeRecord | undefined
+        | ChallengeRecord
+        | undefined
       if (!state) return refused(c, "no_challenge")
       if (Date.now() > state.expires) return refused(c, "expired_challenge")
       if (state.clientID !== clientID) return refused(c, "wrong_client")
