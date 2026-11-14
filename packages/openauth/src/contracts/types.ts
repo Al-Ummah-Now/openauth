@@ -483,3 +483,4 @@ export type RBACErrorCode =
   | "cannot_modify_system_role"
   | "privilege_escalation_denied"
   | "self_assignment_denied"
+  | "system_account_role_denied"
