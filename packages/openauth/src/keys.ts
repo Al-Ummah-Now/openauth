@@ -367,8 +367,7 @@ export async function listSigningKeys(
   // Creates or adopts the first key when the index is still empty
   await signingKeys(storage)
   const index = (await Storage.atomic(storage).get([...INDEX.signing])) as
-    | KeyIndex
-    | undefined
+    KeyIndex | undefined
   return (index?.keys ?? []).map(info).sort((a, b) => b.created - a.created)
 }
 
