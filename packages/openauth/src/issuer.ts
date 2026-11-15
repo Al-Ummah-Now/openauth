@@ -124,6 +124,7 @@
  *
  * @packageDocumentation
  */
+import { parseInstallId } from "./session/token-id.js"
 import { Provider, ProviderOptions } from "./provider/provider.js"
 import { SubjectPayload, SubjectSchema } from "./subject.js"
 import { Hono } from "hono/tiny"
@@ -164,6 +165,12 @@ export interface OnSuccessResponder<
        * token. Defaults to what the provider reported.
        */
       amr?: string[]
+      /**
+       * Session id (`sid`) of this sign-in, see `sessionTokenId`: kept on the
+       * code and refresh token and written to every access token, so the
+       * application can revoke one device's sign-in.
+       */
+      sid?: string
     },
   ): Promise<Response>
 }
@@ -693,6 +700,12 @@ export interface RefreshHookInput {
   properties: any
   subject: string
   clientID: string
+  /** Session id of the sign-in (browser sign-ins only). */
+  sid?: string
+  /** Native app install id sent at the code exchange (`install_id`). */
+  installId?: string
+  /** When the user signed in (ms), if recorded. */
+  authTime?: number
 }
 
 /** Result of {@link IssuerInput.refresh}. */
@@ -856,6 +869,7 @@ export function issuer<
                 },
                 authTime: Date.now(),
                 amr: subjectOpts?.amr ?? providerAmr,
+                ...(subjectOpts?.sid ? { sid: subjectOpts.sid } : {}),
               })
               location.hash = new URLSearchParams({
                 access_token: tokens.access,
@@ -885,6 +899,7 @@ export function issuer<
                   // The user just authenticated (OIDC auth_time)
                   authTime: Date.now(),
                   amr: subjectOpts?.amr ?? providerAmr,
+                  ...(subjectOpts?.sid ? { sid: subjectOpts.sid } : {}),
                 },
                 AUTHORIZATION_CODE_TTL,
               )
@@ -1209,6 +1224,10 @@ export function issuer<
       authTime?: number
       /** How the user authenticated (RFC 8176), kept on the refresh token. */
       amr?: string[]
+      /** Session id of the sign-in: kept on the refresh token, `sid` claim. */
+      sid?: string
+      /** Native app install id: kept on the refresh token only. */
+      installId?: string
     },
     opts?: {
       generateRefreshToken?: boolean
@@ -1256,6 +1275,10 @@ export function issuer<
         // RFC 8176 authentication methods (pwd, otp, passkey, fed)
         ...(Array.isArray(value.amr) && value.amr.length
           ? { amr: value.amr }
+          : {}),
+        // Session id (OIDC `sid`): which sign-in the token belongs to
+        ...(typeof value.sid === "string" && value.sid
+          ? { sid: value.sid }
           : {}),
       })
         .setIssuedAt(accessTimeUsed)
@@ -1572,10 +1595,13 @@ export function issuer<
             400,
           )
         }
+        // Native apps name their install, so one device's tokens can be revoked
+        const installId = parseInstallId(form.get("install_id"))
         const tokens = await generateTokens(c, {
           ...payload,
           family: grant.family,
           jti: grant.jti,
+          ...(installId ? { installId } : {}),
         })
         return c.json({
           access_token: tokens.access,
@@ -1650,6 +1676,15 @@ export function issuer<
                 properties: payload.properties,
                 subject: payload.subject,
                 clientID: payload.clientID,
+                ...(typeof payload.sid === "string"
+                  ? { sid: payload.sid }
+                  : {}),
+                ...(typeof payload.installId === "string"
+                  ? { installId: payload.installId }
+                  : {}),
+                ...(typeof payload.authTime === "number"
+                  ? { authTime: payload.authTime }
+                  : {}),
               },
               c.req.raw,
               c,

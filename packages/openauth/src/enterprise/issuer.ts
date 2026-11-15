@@ -53,6 +53,7 @@
  * ```
  */
 
+import { sessionTokenId } from "../session/token-id.js"
 import { Hono } from "hono/tiny"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
@@ -450,11 +451,24 @@ export function createMultiTenantIssuer<
           }
         }
 
+        // The sign-in's session id rides on the tokens, so the application
+        // can end this one browser's sign-in (sessionTokenId)
+        const sid =
+          opts?.sid ??
+          (session && userId
+            ? await sessionTokenId(session.id, String(userId))
+            : undefined)
+        const subjectOpts = {
+          ...opts,
+          ...(amr ? { amr: opts?.amr ?? amr } : {}),
+          ...(sid ? { sid } : {}),
+        }
+
         // Delegate to base responder for actual token generation
         const response = await responder.subject(
           type as any,
           enrichedProperties as any,
-          amr ? { ...opts, amr: opts?.amr ?? amr } : opts,
+          subjectOpts,
         )
 
         // Add session cookie if we created a new session
@@ -553,6 +567,9 @@ export function createMultiTenantIssuer<
           clientID: input.clientID,
           tenantId,
           userId,
+          ...(input.sid ? { sid: input.sid } : {}),
+          ...(input.installId ? { installId: input.installId } : {}),
+          ...(input.authTime !== undefined ? { authTime: input.authTime } : {}),
         },
         req,
       )
@@ -1062,6 +1079,7 @@ export function createMultiTenantIssuer<
               // checks can't be satisfied without a real sign-in.
               authTime: account.authenticated_at,
               amr: opts?.amr ?? sessionAmr(account.subject_properties),
+              ...(opts?.sid ? { sid: opts.sid } : {}),
             },
             AUTHORIZATION_CODE_TTL,
           )
