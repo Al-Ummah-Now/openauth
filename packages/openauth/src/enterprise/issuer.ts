@@ -821,19 +821,6 @@ export function createMultiTenantIssuer<
     const browserSession = c.get("browserSession") as BrowserSession | null
     const activeAccount = c.get("activeAccount") as AccountSession | null
 
-    // Debug: Log prompt=none handling
-    console.log("[authorize] OIDC params:", {
-      prompt,
-      hasBrowserSession: !!browserSession,
-      browserSessionId: browserSession?.id,
-      activeUserId: browserSession?.active_user_id,
-      hasActiveAccount: !!activeAccount,
-      activeAccountUserId: activeAccount?.user_id,
-      activeAccountExpiresAt: activeAccount?.expires_at,
-      now: Date.now(),
-      cookieHeader: c.req.header("Cookie")?.substring(0, 50) + "...",
-    })
-
     // Build enterprise authorization state for context
     const authorization: EnterpriseAuthorizationState = {
       redirect_uri: c.req.query("redirect_uri") || "",
@@ -994,15 +981,6 @@ export function createMultiTenantIssuer<
       effectiveActiveAccount,
       { singleSignOn: config.singleSignOn },
     )
-
-    // Debug: Log prompt result
-    console.log("[authorize] promptResult:", {
-      proceed: promptResult.proceed,
-      hasSilentAuth: !!promptResult.silentAuth,
-      silentAuthUserId: promptResult.silentAuth?.user_id,
-      forceReauth: promptResult.forceReauth,
-      hasResponse: !!promptResult.response,
-    })
 
     if (!promptResult.proceed) {
       if (promptResult.response) {
