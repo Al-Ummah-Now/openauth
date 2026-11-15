@@ -244,6 +244,12 @@ export interface EnterpriseIssuerConfig<
       tenantId: string
       /** The user id read from the properties (`id`, `userId` or `userID`). */
       userId?: string
+      /** Session id of the sign-in (browser sign-ins; see sessionTokenId). */
+      sid?: string
+      /** Native app install id sent at the code exchange. */
+      installId?: string
+      /** When the user signed in (ms), if recorded. */
+      authTime?: number
     },
     req: Request,
   ) => Promise<
@@ -508,6 +514,8 @@ export interface EnterpriseSuccessContext<
       subject?: string
       /** How the user authenticated (RFC 8176); defaults to the provider's. */
       amr?: string[]
+      /** Session id of the sign-in; defaults to the browser session's (sessionTokenId). */
+      sid?: string
     },
   ): Promise<Response>
 }
