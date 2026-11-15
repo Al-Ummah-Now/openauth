@@ -101,10 +101,16 @@ async function code(auth: Auth, clientID: string) {
   }
 }
 
-function token(body: Record<string, string>, headers: Record<string, string> = {}) {
+function token(
+  body: Record<string, string>,
+  headers: Record<string, string> = {},
+) {
   return {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", ...headers },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      ...headers,
+    },
     body: new URLSearchParams(body).toString(),
   }
 }
@@ -162,14 +168,22 @@ describe("authorization_code", () => {
   test("unlisted clients keep PKCE-only exchange", async () => {
     const auth = makeIssuer(["conf"])
     const c = await code(auth, "spa")
-    const ok = await clientFor(auth, "spa").exchange(c.code, REDIRECT, c.verifier)
+    const ok = await clientFor(auth, "spa").exchange(
+      c.code,
+      REDIRECT,
+      c.verifier,
+    )
     expect(ok.err).toBe(false)
   })
 
   test("the rule can be a function", async () => {
     const auth = makeIssuer((id: string) => id === "conf")
     const c = await code(auth, "conf")
-    const res = await clientFor(auth, "conf").exchange(c.code, REDIRECT, c.verifier)
+    const res = await clientFor(auth, "conf").exchange(
+      c.code,
+      REDIRECT,
+      c.verifier,
+    )
     expect(res.err).toBeTruthy()
   })
 })

@@ -1692,7 +1692,11 @@ export function issuer<
         }
         // A confidential client proves itself before the token is spent
         if (clientAuthRequired(payload.clientID)) {
-          const clientError = await requireClientSecret(c, form, payload.clientID)
+          const clientError = await requireClientSecret(
+            c,
+            form,
+            payload.clientID,
+          )
           if (clientError) return clientError
         }
         // Tokens from before families existed start one at their first use
