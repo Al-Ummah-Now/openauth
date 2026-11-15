@@ -218,7 +218,14 @@ import {
 } from "./error.js"
 import { compactDecrypt, CompactEncrypt, jwtVerify, SignJWT } from "jose"
 import { Storage, StorageAdapter } from "./storage/storage.js"
-import { encryptionKeys, legacySigningKeys, signingKeys } from "./keys.js"
+import {
+  activeSigningKey,
+  encryptionKeys,
+  keyState,
+  legacySigningKeys,
+  signingKeys,
+  verificationKeys,
+} from "./keys.js"
 import { validatePKCE } from "./pkce.js"
 import {
   type AuthorizationCodePayload,
@@ -818,13 +825,27 @@ export function issuer<
       "Store is not configured. Either set the `storage` option or set `OPENAUTH_STORAGE` environment variable.",
     )
   const flowStorage: StorageAdapter = storage
-  const allSigning = lazy(() =>
+  // Not memoized per issuer: a long-lived issuer must see rotated keys. The
+  // key loaders cache per storage scope (KEY_CACHE_TTL_MS) instead.
+  const allSigning = () =>
     Promise.all([signingKeys(storage), legacySigningKeys(storage)]).then(
       ([a, b]) => [...a, ...b],
-    ),
-  )
+    )
   const allEncryption = lazy(() => encryptionKeys(storage))
-  const signingKey = lazy(() => allSigning().then((all) => all[0]))
+  // Chosen per call: a pending key starts signing at its activation time
+  const signingKey = () => allSigning().then((all) => activeSigningKey(all))
+  /**
+   * The public key a token names in its kid, among the keys that are not
+   * retired (rotation overlap: the previous key's tokens still verify).
+   * Tokens without a kid were signed by the active key.
+   */
+  const verifyKey = async (header: { kid?: string }) => {
+    const all = await allSigning()
+    if (!header.kid) return activeSigningKey(all).public
+    const key = verificationKeys(all).find((k) => k.id === header.kid)
+    if (!key) throw new Error("Token signed by an unknown or retired key")
+    return key.public
+  }
   const encryptionKey = lazy(() => allEncryption().then((all) => all[0]))
 
   // Initialize client authentication if clientDb is provided
@@ -1418,7 +1439,10 @@ export function issuer<
       credentials: false,
     }),
     async (c) => {
-      const all = await allSigning()
+      // Retired keys are left out: their tokens must stop verifying everywhere
+      const all = (await allSigning()).filter(
+        (item) => keyState(item) !== "retired",
+      )
       return c.json({
         keys: all.map((item) => ({
           ...item.jwk,
@@ -2116,7 +2140,7 @@ export function issuer<
       mode: "access"
       type: keyof SubjectSchema
       properties: v1.InferInput<SubjectSchema[keyof SubjectSchema]>
-    }>(token, () => signingKey().then((item) => item.public), {
+    }>(token, verifyKey, {
       issuer: issuer(c),
     })
 
@@ -2418,7 +2442,7 @@ export function issuer<
         mode: "access"
         type: keyof SubjectSchema
         properties: v1.InferInput<SubjectSchema[keyof SubjectSchema]>
-      }>(token, () => signingKey().then((item) => item.public), {
+      }>(token, verifyKey, {
         issuer: issuer(c),
       })
 
@@ -2580,7 +2604,7 @@ export function issuer<
         mode: "access"
         type: keyof SubjectSchema
         properties: v1.InferInput<SubjectSchema[keyof SubjectSchema]>
-      }>(token, () => signingKey().then((item) => item.public), {
+      }>(token, verifyKey, {
         issuer: issuer(c),
       })
 
