@@ -60,6 +60,13 @@ interface SerializedKeyPair {
   privateKey: string
   created: number
   alg: string
+  /**
+   * Signing keys only: when the key starts signing (rotation). Until then it
+   * is published in JWKS so verifiers already hold it when tokens use it.
+   * Absent: in use from `created`.
+   */
+  activates?: number
+  /** Retired: no longer published, signs nothing and verifies nothing. */
   expired?: number
 }
 
@@ -69,8 +76,44 @@ export interface KeyPair {
   public: KeyLike
   private: KeyLike
   created: Date
+  activates?: Date
   expired?: Date
   jwk: JWK
+}
+
+/** A key's state at `now`: pending (published, not yet signing), live, or retired. */
+export function keyState(
+  key: { activates?: Date; expired?: Date },
+  now = Date.now(),
+): "pending" | "live" | "retired" {
+  if (key.expired && key.expired.getTime() <= now) return "retired"
+  if (key.activates && key.activates.getTime() > now) return "pending"
+  return "live"
+}
+
+/**
+ * The key that signs at `now`: the newest live key. Keys are created live or
+ * pending, so one is live unless every key is pending (a store edited by
+ * hand); then the oldest pending key signs rather than nothing.
+ */
+export function activeSigningKey(keys: KeyPair[], now = Date.now()): KeyPair {
+  const live = keys
+    .filter((k) => keyState(k, now) === "live")
+    .sort((a, b) => b.created.getTime() - a.created.getTime())
+  if (live[0]) return live[0]
+  const pending = keys
+    .filter((k) => keyState(k, now) === "pending")
+    .sort((a, b) => a.activates!.getTime() - b.activates!.getTime())
+  return pending[0] ?? keys[0]
+}
+
+/**
+ * Keys a token of this issuer may be signed with: every key that is not
+ * retired. Rotation overlap: tokens of the previous key verify until it is
+ * retired; pending keys are listed so a verifier that sees one early agrees.
+ */
+export function verificationKeys(keys: KeyPair[], now = Date.now()) {
+  return keys.filter((k) => keyState(k, now) !== "retired")
 }
 
 /**
@@ -92,6 +135,7 @@ async function deserializeKeyPair(
     id: value.id,
     alg,
     created: new Date(value.created),
+    activates: value.activates ? new Date(value.activates) : undefined,
     expired: value.expired ? new Date(value.expired) : undefined,
     public: publicKey,
     private: privateKey,
@@ -237,6 +281,8 @@ async function deserializeAll(
 ): Promise<KeyPair[]> {
   const out = [] as KeyPair[]
   for (const value of keys) {
+    // Retired by rotation: key material dropped, nothing to load
+    if (value.expired && !value.privateKey) continue
     try {
       out.push(await deserializeKeyPair(value, alg, use))
     } catch (err) {
@@ -295,4 +341,124 @@ async function loadOrCreate(
     // Another process created a key first: use theirs
   }
   throw new Error(`[openauth:keys] Could not load or create ${kind} keys`)
+}
+
+/** A signing key as the rotation tooling sees it (no key material). */
+export interface SigningKeyInfo {
+  id: string
+  alg: string
+  created: number
+  activates?: number
+  expired?: number
+}
+
+const info = (k: SerializedKeyPair): SigningKeyInfo => ({
+  id: k.id,
+  alg: k.alg,
+  created: k.created,
+  ...(k.activates ? { activates: k.activates } : {}),
+  ...(k.expired ? { expired: k.expired } : {}),
+})
+
+/** Every signing key in the index, newest first (no key material). */
+export async function listSigningKeys(
+  storage: StorageAdapter,
+): Promise<SigningKeyInfo[]> {
+  // Creates or adopts the first key when the index is still empty
+  await signingKeys(storage)
+  const index = (await Storage.atomic(storage).get([...INDEX.signing])) as
+    | KeyIndex
+    | undefined
+  return (index?.keys ?? []).map(info).sort((a, b) => b.created - a.created)
+}
+
+/** Apply `change` to the signing key index with compare-and-set (retried). */
+async function updateSigningIndex<T>(
+  storage: StorageAdapter,
+  change: (index: KeyIndex) => { next: KeyIndex; result: T } | null,
+): Promise<T | null> {
+  await signingKeys(storage)
+  const atomic = Storage.atomic(storage)
+  const indexKey = [...INDEX.signing]
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const index = (await atomic.get(indexKey)) as KeyIndex | undefined
+    if (!index) throw new Error("[openauth:keys] No signing key index")
+    const out = change(index)
+    if (!out) return null
+    if (await atomic.replace(indexKey, index, out.next)) {
+      keyCache.clear()
+      return out.result
+    }
+  }
+  throw new Error("[openauth:keys] The signing key index kept changing")
+}
+
+/**
+ * Rotation step 1: add a signing key that starts signing at `activates`.
+ * It is published in JWKS from now on, so every verifier's cache holds it
+ * before the first token uses it. Returns null when a pending key already
+ * exists (one rotation at a time).
+ */
+export async function addPendingSigningKey(
+  storage: StorageAdapter,
+  activates: number,
+): Promise<SigningKeyInfo | null> {
+  const pair = await generateKeyPair(signingAlg, { extractable: true })
+  const fresh: SerializedKeyPair = {
+    id: crypto.randomUUID(),
+    publicKey: await exportSPKI(pair.publicKey),
+    privateKey: await exportPKCS8(pair.privateKey),
+    created: Date.now(),
+    alg: signingAlg,
+    activates,
+  }
+  const added = await updateSigningIndex(storage, (index) => {
+    const now = Date.now()
+    if (index.keys.some((k) => !k.expired && k.activates && k.activates > now))
+      return null
+    return { next: { keys: [fresh, ...index.keys] }, result: info(fresh) }
+  })
+  if (added)
+    await Storage.set(storage, [...LEGACY_PREFIX.signing, fresh.id], fresh)
+  return added
+}
+
+/**
+ * Rotation step 3: retire a signing key that is no longer the one signing.
+ * It leaves JWKS and its tokens stop verifying, so call it only once every
+ * token it signed has expired. Its private key is dropped from the index
+ * and from the plain store. Returns false when the key is unknown, already
+ * retired, or still the active key (never retire the key in use).
+ */
+export async function retireSigningKey(
+  storage: StorageAdapter,
+  kid: string,
+  at = Date.now(),
+): Promise<boolean> {
+  const done = await updateSigningIndex(storage, (index) => {
+    const target = index.keys.find((k) => k.id === kid)
+    if (!target || target.expired) return null
+    const now = Date.now()
+    const live = index.keys
+      .filter((k) => !k.expired && !(k.activates && k.activates > now))
+      .sort((a, b) => b.created - a.created)
+    if (live[0]?.id === kid || !live.some((k) => k.id !== kid)) return null
+    return {
+      next: {
+        keys: index.keys.map((k) =>
+          k.id === kid ? { ...k, privateKey: "", expired: at } : k,
+        ),
+      },
+      result: true,
+    }
+  })
+  if (!done) return false
+  await Storage.remove(storage, [...LEGACY_PREFIX.signing, kid])
+  const primary = await Storage.get<SerializedKeyPair>(storage, [
+    ...LEGACY_PREFIX.signing,
+    "primary",
+  ])
+  if (primary?.id === kid)
+    await Storage.remove(storage, [...LEGACY_PREFIX.signing, "primary"])
+  return true
 }
