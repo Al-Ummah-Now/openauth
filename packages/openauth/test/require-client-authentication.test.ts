@@ -237,3 +237,69 @@ describe("refresh_token", () => {
     expect(ok.err).toBe(false)
   })
 })
+
+describe("multi-tenant issuer", () => {
+  test("passes the rule to the token endpoint", async () => {
+    const { createMultiTenantIssuer } = await import(
+      "../src/enterprise/issuer.js"
+    )
+    const { TenantServiceImpl } = await import("../src/tenant/service.js")
+    const { SessionServiceImpl } = await import("../src/session/service.js")
+    const { storeRefreshToken, refreshKey } = await import(
+      "../src/refresh-token.js"
+    )
+    const enterprise = async (rule?: string[]) => {
+      const storage = MemoryStorage()
+      const tenantService = new TenantServiceImpl(storage)
+      await tenantService.createTenant({ id: "default", name: "Default" })
+      await storeRefreshToken(
+        storage,
+        refreshKey("user:u1", "tok"),
+        {
+          type: "user",
+          properties: { userID: "u1", tenantId: "default" },
+          clientID: "conf",
+          subject: "user:u1",
+          ttl: { access: 900, refresh: 86400 },
+          nextToken: "",
+        },
+        86400,
+      )
+      return createMultiTenantIssuer({
+        tenantService,
+        sessionService: new SessionServiceImpl(storage),
+        storage,
+        sessionSecret: new Uint8Array(32).fill(3),
+        subjects,
+        tenantResolver: {
+          customDomains: new Map([["auth.example.com", "default"]]),
+        },
+        clientDb: db as any,
+        ...(rule ? { requireClientAuthentication: rule } : {}),
+        providers: { dummy: { type: "dummy", init() {} } },
+        onSuccess: async (ctx: any) => ctx.subject("user", { userID: "u1" }),
+      } as any).app
+    }
+    const post = (app: any, headers: Record<string, string> = {}) =>
+      app.request(`${HOST}/token`, {
+        ...token(
+          { grant_type: "refresh_token", refresh_token: "user:u1:tok" },
+          headers,
+        ),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          host: "auth.example.com",
+          ...headers,
+        },
+      })
+    const strict = await enterprise(["conf"])
+    const bare = await post(strict)
+    expect(bare.status).toBe(401)
+    expect(((await bare.json()) as any).error).toBe("invalid_client")
+    expect(
+      (await post(strict, { Authorization: `Basic ${btoa("conf:s3cret")}` }))
+        .status,
+    ).toBe(200)
+    expect((await post(await enterprise())).status).toBe(200)
+  })
+})
