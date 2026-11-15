@@ -637,6 +637,7 @@ export function createMultiTenantIssuer<
     ttl: config.ttl,
     issuer: configuredIssuer,
     pkce: config.pkce,
+    requireClientAuthentication: config.requireClientAuthentication,
     clientDb: config.clientDb,
     device: config.device,
     nativePasskey: config.nativePasskey,

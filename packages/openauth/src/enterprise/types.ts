@@ -193,6 +193,13 @@ export interface EnterpriseIssuerConfig<
     requireForCodeExchange?:
       boolean | readonly string[] | ((clientId: string) => boolean)
   }
+  /**
+   * Confidential clients that must authenticate with their secret on the
+   * authorization_code and refresh_token grants. See
+   * `IssuerInput.requireClientAuthentication`.
+   */
+  requireClientAuthentication?:
+    readonly string[] | ((clientId: string) => boolean)
 
   /**
    * TTL configuration for access and refresh tokens (in seconds)
