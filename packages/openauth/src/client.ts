@@ -159,6 +159,13 @@ export interface ClientInput {
    * @default 600000 (10 minutes)
    */
   cacheTTL?: number
+  /**
+   * The client secret of a confidential client. When set, the authorization
+   * code exchange and refresh requests authenticate with HTTP Basic
+   * (`client_id:client_secret`). Only for server-side clients: never ship a
+   * secret to a browser or an app.
+   */
+  clientSecret?: string
 }
 
 export interface AuthorizeOptions {
@@ -648,6 +655,17 @@ export function createClient(input: ClientInput): Client {
   if (!issuer) throw new Error("No issuer")
   const f: FetchLike = input.fetch ?? fetch
   const ttl = input.cacheTTL ?? DEFAULT_CACHE_TTL
+  // The issuer reads Basic credentials verbatim (no form-decoding), so the
+  // pair is sent as is.
+  const tokenHeaders: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    ...(input.clientSecret
+      ? {
+          Authorization:
+            "Basic " + btoa(`${input.clientID}:${input.clientSecret}`),
+        }
+      : {}),
+  }
 
   async function getIssuer() {
     return cached(discoveryCache, issuer!, ttl, () =>
@@ -734,9 +752,7 @@ export function createClient(input: ClientInput): Client {
     ): Promise<ExchangeSuccess | ExchangeError> {
       const tokens = await f(issuer + "/token", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: tokenHeaders,
         body: new URLSearchParams({
           code,
           redirect_uri: redirectURI,
@@ -780,9 +796,7 @@ export function createClient(input: ClientInput): Client {
       }
       const tokens = await f(issuer + "/token", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: tokenHeaders,
         body: new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: refresh,

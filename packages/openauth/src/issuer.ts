@@ -460,6 +460,15 @@ export interface IssuerInput<
       boolean | readonly string[] | ((clientId: string) => boolean)
   }
   /**
+   * Confidential clients that must authenticate with their client secret
+   * (HTTP Basic or `client_secret` in the form) on the authorization_code and
+   * refresh_token grants, PKCE or not. A stolen code or refresh token is then
+   * useless without the secret. List a client once every consumer of it
+   * sends its secret. Needs `clientDb`.
+   */
+  requireClientAuthentication?:
+    readonly string[] | ((clientId: string) => boolean)
+  /**
    * Set the TTL, in seconds, for access and refresh tokens.
    *
    * @example
@@ -1681,6 +1690,15 @@ export function issuer<
             400,
           )
         }
+        // A confidential client proves itself before the token is spent
+        if (clientAuthRequired(payload.clientID)) {
+          const clientError = await requireClientSecret(
+            c,
+            form,
+            payload.clientID,
+          )
+          if (clientError) return clientError
+        }
         // Tokens from before families existed start one at their first use
         const family = payload.family ?? token
         // Current claims, computed before the token is spent: a failure here
@@ -2173,6 +2191,48 @@ export function issuer<
     return rule === true
   }
 
+  /** `requireClientAuthentication`: the listed client ids, or as a function decides. */
+  function clientAuthRequired(clientId: string): boolean {
+    const rule = input.requireClientAuthentication
+    if (typeof rule === "function") return rule(clientId)
+    if (Array.isArray(rule)) return rule.includes(clientId)
+    return false
+  }
+
+  /**
+   * Valid client credentials for `clientId`, or an `invalid_client` error.
+   */
+  async function requireClientSecret(
+    c: Context,
+    form: FormData,
+    clientId: string,
+  ): Promise<Response | undefined> {
+    // No credentials at all is a failed client authentication too (RFC 6749 5.2)
+    const credentials = extractClientCredentials(c, form, false)
+    if (
+      credentials.error ||
+      !clientAuthenticator ||
+      !credentials.clientSecret ||
+      credentials.clientId !== clientId
+    )
+      return invalidClientResponse(c)
+    const result = await clientAuthenticator.authenticateClient(
+      credentials.clientId,
+      credentials.clientSecret!,
+    )
+    return result.client ? undefined : invalidClientResponse(c)
+  }
+
+  function invalidClientResponse(c: Context) {
+    return c.json(
+      {
+        error: "invalid_client",
+        error_description: "Client authentication failed",
+      },
+      401,
+    )
+  }
+
   /** A replayed authorization code: revoke what its first use minted. */
   async function revokeCodeGrant(grant: CodeGrant) {
     await revokeRefreshFamily(storage!, grant.family, ttlRefresh)
@@ -2192,21 +2252,17 @@ export function issuer<
    * Client authentication on the authorization_code grant. Presented
    * credentials must be valid for the code's client. With
    * `pkce.requireForCodeExchange`, a code without PKCE needs them. Returns an
-   * error response, or undefined.
+   * error response, or undefined. Clients listed in
+   * `requireClientAuthentication` always need them.
    */
   async function authenticateCodeClient(
     c: Context,
     form: FormData,
     payload: AuthorizationCodePayload,
   ): Promise<Response | undefined> {
-    const invalidClient = () =>
-      c.json(
-        {
-          error: "invalid_client",
-          error_description: "Client authentication failed",
-        },
-        401,
-      )
+    if (clientAuthRequired(payload.clientID))
+      return requireClientSecret(c, form, payload.clientID)
+    const invalidClient = () => invalidClientResponse(c)
     const credentials = extractClientCredentials(c, form, false)
     if (credentials.error) return credentials.error
     if (credentials.clientSecret) {
