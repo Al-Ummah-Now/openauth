@@ -821,7 +821,6 @@ export function createMultiTenantIssuer<
     const browserSession = c.get("browserSession") as BrowserSession | null
     const activeAccount = c.get("activeAccount") as AccountSession | null
 
-
     // Build enterprise authorization state for context
     const authorization: EnterpriseAuthorizationState = {
       redirect_uri: c.req.query("redirect_uri") || "",
@@ -982,7 +981,6 @@ export function createMultiTenantIssuer<
       effectiveActiveAccount,
       { singleSignOn: config.singleSignOn },
     )
-
 
     if (!promptResult.proceed) {
       if (promptResult.response) {
