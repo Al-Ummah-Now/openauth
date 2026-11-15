@@ -28,6 +28,10 @@ export interface RefreshTokenPayload {
   family?: string
   authTime?: number
   amr?: string[]
+  /** Session id of the sign-in (`sid` claim). */
+  sid?: string
+  /** Native app install id (`install_id` at the code exchange). */
+  installId?: string
   [key: string]: any
 }
 
