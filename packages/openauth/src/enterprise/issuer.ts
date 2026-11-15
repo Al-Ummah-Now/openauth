@@ -333,8 +333,7 @@ export function createMultiTenantIssuer<
     // A native passkey sign-in (native-passkey.ts) brings its own
     // authorization and never gets a browser session: the app has no cookies
     const nativeAuthorization = c?.get(NATIVE_AUTHORIZATION_KEY as never) as
-      | EnterpriseAuthorizationState
-      | undefined
+      EnterpriseAuthorizationState | undefined
     let browserSession = nativeAuthorization ? null : ctx.browserSession
     const authorization = nativeAuthorization ?? ctx.authorization
 
@@ -783,8 +782,7 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      | EnterpriseAuthorizationState
-      | undefined
+      EnterpriseAuthorizationState | undefined
 
     if (tenant) {
       ctx.set(ENTERPRISE_CONTEXT_KEY, {
@@ -1287,8 +1285,7 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        | EnterpriseAuthorizationState
-        | undefined
+        EnterpriseAuthorizationState | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1317,8 +1314,7 @@ export function createMultiTenantIssuer<
     }
     if (wantsHtml(c.req.raw)) {
       const authorization = c.get("authorization") as
-        | EnterpriseAuthorizationState
-        | undefined
+        EnterpriseAuthorizationState | undefined
       let locale: string | undefined
       try {
         locale = authorization?.redirect_uri

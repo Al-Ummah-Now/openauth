@@ -240,14 +240,12 @@ describe("refresh_token", () => {
 
 describe("multi-tenant issuer", () => {
   test("passes the rule to the token endpoint", async () => {
-    const { createMultiTenantIssuer } = await import(
-      "../src/enterprise/issuer.js"
-    )
+    const { createMultiTenantIssuer } =
+      await import("../src/enterprise/issuer.js")
     const { TenantServiceImpl } = await import("../src/tenant/service.js")
     const { SessionServiceImpl } = await import("../src/session/service.js")
-    const { storeRefreshToken, refreshKey } = await import(
-      "../src/refresh-token.js"
-    )
+    const { storeRefreshToken, refreshKey } =
+      await import("../src/refresh-token.js")
     const enterprise = async (rule?: string[]) => {
       const storage = MemoryStorage()
       const tenantService = new TenantServiceImpl(storage)
