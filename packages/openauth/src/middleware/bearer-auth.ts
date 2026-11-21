@@ -98,7 +98,10 @@ export function extractBearerToken(
   authHeader: string | undefined,
 ): string | null {
   if (!authHeader) return null
-  const match = authHeader.match(/^Bearer\s+(.+)$/i)
+  // The token must start with a non-space character, so `\s+` and the token
+  // never compete for the same characters. `/^Bearer\s+(.+)$/` let them
+  // overlap and backtracked quadratically on a long run of spaces (ReDoS).
+  const match = authHeader.match(/^Bearer\s+(\S.*)$/i)
   return match ? match[1] : null
 }
 
