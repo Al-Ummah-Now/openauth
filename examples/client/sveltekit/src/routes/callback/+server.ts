@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit"
-import { createAuthClient, setTokens } from "$lib/auth.server.js"
+import { createAuthClient, setTokens } from "#lib/auth.server.js"
 
 export async function GET(event) {
   const code = event.url.searchParams.get("code")

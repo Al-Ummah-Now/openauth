@@ -2,6 +2,7 @@ import * as path from "path"
 import * as fs from "fs"
 import * as TypeDoc from "typedoc"
 import config from "./config"
+import { escapeLiteralValue } from "./mdx-escape"
 
 let warnings = 0
 const OUTPUT_DIR = "src/content/docs/docs"
@@ -626,9 +627,7 @@ function renderLiteralType(type: TypeDoc.LiteralType) {
   //   "value": "arm64"
   // }
   const sanitized =
-    typeof type.value === "string"
-      ? type.value!.replace(/([*:])/g, "\\$1")
-      : type.value
+    typeof type.value === "string" ? escapeLiteralValue(type.value) : type.value
   return `<code class="symbol">&ldquo;</code><code class="primitive">${sanitized}</code><code class="symbol">&rdquo;</code>`
 }
 function renderTemplateLiteralType(type: TypeDoc.TemplateLiteralType) {

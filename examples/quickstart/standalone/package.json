@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@openauthjs/openauth": "^0.3.2",
-    "next": "15.1.4",
+    "next": "15.5.29",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "valibot": "^1.0.0-beta.11"
@@ -21,5 +21,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19"
+  },
+  "overrides": {
+    "postcss": "^8.5.23"
   }
 }

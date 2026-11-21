@@ -12,9 +12,14 @@ import { createClient } from "@openauthjs/openauth/client"
 import { cookies as getCookies } from "next/headers"
 import { subjects } from "../../../subjects"
 
+// The Client object doesn't expose its settings, so keep them here for the
+// enterprise endpoints this module calls directly.
+const CLIENT_ID = "nextjs"
+const ISSUER = "http://localhost:3000"
+
 export const client = createClient({
-  clientID: "nextjs",
-  issuer: "http://localhost:3000",
+  clientID: CLIENT_ID,
+  issuer: ISSUER,
 })
 
 /**
@@ -31,10 +36,10 @@ export async function checkIntrospectionAvailability(): Promise<boolean> {
   try {
     if (!CLIENT_SECRET) return false
 
-    const response = await fetch(`${client.issuer}/token/introspect`, {
+    const response = await fetch(`${ISSUER}/token/introspect`, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ token: "test-token" }),
@@ -56,10 +61,10 @@ export async function checkRevocationAvailability(): Promise<boolean> {
   try {
     if (!CLIENT_SECRET) return false
 
-    const response = await fetch(`${client.issuer}/token/revoke`, {
+    const response = await fetch(`${ISSUER}/token/revoke`, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ token: "test-token" }),
@@ -80,10 +85,10 @@ async function introspectToken(token: string) {
     throw new Error("Client secret not configured")
   }
 
-  const response = await fetch(`${client.issuer}/token/introspect`, {
+  const response = await fetch(`${ISSUER}/token/introspect`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+      Authorization: `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ token }),
@@ -195,10 +200,10 @@ async function revokeTokenOnServer(token: string): Promise<boolean> {
       return false
     }
 
-    const response = await fetch(`${client.issuer}/token/revoke`, {
+    const response = await fetch(`${ISSUER}/token/revoke`, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${Buffer.from(`${client.clientID}:${CLIENT_SECRET}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ token }),
