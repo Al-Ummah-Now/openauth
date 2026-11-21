@@ -66,6 +66,20 @@ describe("extractBearerToken", () => {
     expect(extractBearerToken("Bearer ")).toBeNull()
   })
 
+  test("returns null when only whitespace follows Bearer", () => {
+    expect(extractBearerToken("Bearer    ")).toBeNull()
+    expect(extractBearerToken("Bearer \t ")).toBeNull()
+  })
+
+  test("a long run of spaces does not backtrack (ReDoS)", () => {
+    const spaces = " ".repeat(100_000)
+    const started = performance.now()
+    expect(extractBearerToken(`Bearer${spaces}`)).toBeNull()
+    expect(extractBearerToken(`Bearer${spaces}x${spaces}\n`)).toBeNull()
+    expect(extractBearerToken(`Bearer${spaces}tok`)).toBe("tok")
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
   test("extracts token with multiple spaces after Bearer", () => {
     const token = "test.token"
     expect(extractBearerToken(`Bearer  ${token}`)).toBe(token)
@@ -103,13 +117,6 @@ describe("extractBearerToken", () => {
   test("handles token starting immediately after space", () => {
     const token = "token123"
     expect(extractBearerToken(`Bearer ${token}`)).toBe(token)
-  })
-
-  test("extracts single space as token when only spaces after Bearer", () => {
-    // The regex \s+ is greedy but .+ also needs to match, so it leaves one space
-    // This is edge case behavior - "Bearer    " extracts " " as the token
-    expect(extractBearerToken("Bearer    ")).toBe(" ")
-    expect(extractBearerToken("Bearer     ")).toBe(" ")
   })
 
   test("does not extract token with newlines", () => {
