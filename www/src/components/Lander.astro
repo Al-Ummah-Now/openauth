@@ -50,7 +50,7 @@ const base = import.meta.env.BASE_URL || '';
       <a href={`${base}docs/`}>View the docs</a>
       </div>
       <div class="col3">
-        <a href={config.social.github.url}>Star on GitHub</a>
+        <a href={config.social?.find((link) => link.icon === "github")?.href}>Star on GitHub</a>
       </div>
     </section>
 

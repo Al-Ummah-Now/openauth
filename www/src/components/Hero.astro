@@ -2,10 +2,12 @@
 import Default from '@astrojs/starlight/components/Hero.astro';
 import Lander from './Lander.astro';
 
-const { slug } = Astro.locals.starlightRoute.entry;
+// The route's slug ("" for the home page); content entries no longer carry
+// `slug` since the docsLoader content layer (astro 5+/starlight 0.3x).
+const { id } = Astro.locals.starlightRoute;
 ---
 
-{ slug === ""
+{ id === ""
   ? <Lander {...Astro.props} />
   : <Default {...Astro.props}><slot /></Default>
 }
