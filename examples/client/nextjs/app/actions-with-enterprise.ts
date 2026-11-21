@@ -141,7 +141,9 @@ export async function performAdminAction(action: string) {
 
   // Check if user has admin privileges
   // In a real app, you'd check subject.properties for admin role
-  console.log(`Admin action "${action}" performed by:`, subject)
+  // `action` is caller input: log it as a value, never inside the format
+  // string, so a "%s"/"%o" in it can't reshape the log line.
+  console.log("Admin action performed:", { action, performedBy: subject })
 
   return { success: true, performedBy: subject }
 }

@@ -1,3 +1,5 @@
+"use client"
+
 import { AccountSwitcher } from "../components/account-switcher"
 
 /**
