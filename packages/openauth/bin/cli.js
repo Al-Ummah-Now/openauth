@@ -103,7 +103,11 @@ function extractDbNameFromJson(config) {
 function buildWranglerArgs(dbName, options) {
   const args = ["d1", "execute", dbName]
   if (options.isLocal) args.push("--local")
-  if (options.isRemote) args.push("--remote")
+  if (options.isPreview) {
+    args.push("--remote", "--preview")
+  } else if (options.isRemote) {
+    args.push("--remote")
+  }
   if (options.configFile) args.push("--config", options.configFile)
   return args
 }
@@ -111,8 +115,10 @@ function parseArgs(args) {
   const result = {
     isLocal: false,
     isRemote: false,
+    isPreview: false,
     withSeed: true,
     force: false,
+    debug: false,
   }
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -120,12 +126,16 @@ function parseArgs(args) {
       result.isLocal = true
     } else if (arg === "--remote") {
       result.isRemote = true
+    } else if (arg === "--preview") {
+      result.isPreview = true
     } else if (arg === "--no-seed") {
       result.withSeed = false
     } else if (arg === "--seed") {
       result.withSeed = true
     } else if (arg === "--force") {
       result.force = true
+    } else if (arg === "--debug") {
+      result.debug = true
     } else if (arg === "--config" || arg === "-c") {
       result.configFile = args[++i]
     } else if (!arg.startsWith("-")) {
@@ -169,6 +179,8 @@ function buildVerifyMigrationSql(migrationName) {
 function migrationRecordExistsInOutput(output, migrationName) {
   return output.includes(migrationName)
 }
+var CLIENTS_WITHOUT_SECRET_SQL =
+  "SELECT id, name, tenant_id FROM oauth_clients WHERE (client_secret_hash IS NULL OR client_secret_hash = '') AND COALESCE(CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.type') END, '') <> 'native'"
 
 // bin/cli.ts
 var __filename2 = fileURLToPath(import.meta.url)
@@ -256,7 +268,7 @@ function executeSqlFile(dbName, filePath, options) {
 }
 function executeSql(dbName, sql, options) {
   const args = buildWranglerArgs(dbName, options)
-  args.push("--command", sql)
+  args.push("--command", sql, "--json")
   const result = spawnSync("wrangler", args, {
     encoding: "utf-8",
     shell: false,
@@ -395,14 +407,17 @@ Usage:
 Options:
   --local              Apply to local D1 database (for development)
   --remote             Apply to remote D1 database (production)
+  --preview            Apply to remote preview D1 database (implies --remote)
   --config, -c <file>  Use a specific wrangler config file
   --no-seed            Skip seed data (migrate only applies schema)
   --force              Force re-run all migrations (ignores tracking)
+  --debug              Show debug output (raw wrangler responses)
 
 Examples:
   openauth migrate                       # Auto-detect from wrangler config
   openauth migrate --local               # Local database
   openauth migrate --remote              # Remote database
+  openauth migrate --preview             # Remote preview database
   openauth migrate --no-seed --local     # Skip seed data
   openauth migrate my-auth-db --remote   # Specify database name
   openauth status --local                # Show which migrations are applied
@@ -413,7 +428,8 @@ Migrations are tracked in the _openauth_migrations table.
 Only pending migrations are applied (safe to run multiple times).
 
 The bootstrap-secrets command generates client secrets for seeded clients
-that don't have secrets configured. This solves the chicken-and-egg problem
+that don't have secrets configured (native app clients, metadata.type "native",
+are public and never get one). This solves the chicken-and-egg problem
 where you need a secret to authenticate, but can't get a secret without auth.
 `)
 }
@@ -462,18 +478,30 @@ function migrate(args) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
   }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
+  }
   const dbName = resolveDbName(parsed)
   checkWrangler()
   const options = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
     configFile: parsed.configFile,
   }
   const target = parsed.isLocal
     ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
   const migrations = getMigrationFiles()
   if (migrations.length === 0) {
     console.error("Error: No migration files found in", migrationsDir)
@@ -621,18 +649,30 @@ function status(args) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
   }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
+  }
   const dbName = resolveDbName(parsed)
   checkWrangler()
   const options = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
     configFile: parsed.configFile,
   }
   const target = parsed.isLocal
     ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
   console.log(`
 OpenAuth Migration Status - ${dbName}${target}`)
   console.log("=".repeat(50))
@@ -663,9 +703,9 @@ Migration Status:`)
     if (appliedMigration) {
       const checksumMatch = appliedMigration.checksum === migration.checksum
       const date = new Date(appliedMigration.applied_at).toISOString()
-      const status2 = checksumMatch ? "[x]" : "[!]"
+      const status = checksumMatch ? "[x]" : "[!]"
       const warning = checksumMatch ? "" : " (MODIFIED)"
-      console.log(`  ${status2} ${migration.name}${warning}`)
+      console.log(`  ${status} ${migration.name}${warning}`)
       console.log(`      Applied: ${date}`)
       if (!checksumMatch) {
         console.log(`      Applied checksum: ${appliedMigration.checksum}`)
@@ -688,6 +728,15 @@ function seed(args) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
   }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
+  }
   const dbName = resolveDbName(parsed)
   checkWrangler()
   const migrations = getMigrationFiles()
@@ -701,13 +750,16 @@ function seed(args) {
   const options = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
     configFile: parsed.configFile,
   }
   const target = parsed.isLocal
     ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
   console.log(`Applying seed data to ${dbName}${target}...`)
   const result = executeSqlFile(dbName, seedMigration.path, options)
   if (!result.success) {
@@ -725,26 +777,63 @@ async function bootstrapSecrets(args) {
     console.error("Error: Cannot specify both --local and --remote")
     process.exit(1)
   }
+  if (parsed.isLocal && parsed.isPreview) {
+    console.error(
+      "Error: --preview requires --remote (cannot use with --local)",
+    )
+    process.exit(1)
+  }
+  if (parsed.isPreview && !parsed.isRemote) {
+    parsed.isRemote = true
+  }
   const dbName = resolveDbName(parsed)
   checkWrangler()
   const options = {
     isLocal: parsed.isLocal,
     isRemote: parsed.isRemote,
+    isPreview: parsed.isPreview,
     configFile: parsed.configFile,
   }
   const target = parsed.isLocal
     ? " (local)"
-    : parsed.isRemote
-      ? " (remote)"
-      : ""
+    : parsed.isPreview
+      ? " (preview)"
+      : parsed.isRemote
+        ? " (remote)"
+        : ""
   console.log(`
 OpenAuth Bootstrap Secrets - ${dbName}${target}`)
   console.log("=".repeat(50))
-  const findResult = executeSql(
-    dbName,
-    "SELECT id, name, tenant_id FROM oauth_clients WHERE client_secret_hash IS NULL OR client_secret_hash = ''",
-    options,
-  )
+  if (parsed.debug) {
+    console.log(`
+[DEBUG] Listing all clients...`)
+    const allClientsResult = executeSql(
+      dbName,
+      "SELECT id, name, client_secret_hash FROM oauth_clients",
+      options,
+    )
+    console.log("[DEBUG] All clients query success:", allClientsResult.success)
+    console.log("[DEBUG] All clients raw output:", allClientsResult.output)
+    if (allClientsResult.error) {
+      console.log("[DEBUG] All clients error:", allClientsResult.error)
+    }
+  }
+  const sql = CLIENTS_WITHOUT_SECRET_SQL
+  if (parsed.debug) {
+    console.log(
+      `
+[DEBUG] SQL Query:`,
+      sql,
+    )
+  }
+  const findResult = executeSql(dbName, sql, options)
+  if (parsed.debug) {
+    console.log("[DEBUG] Query success:", findResult.success)
+    console.log("[DEBUG] Raw output:", findResult.output)
+    if (findResult.error) {
+      console.log("[DEBUG] Error:", findResult.error)
+    }
+  }
   if (!findResult.success) {
     console.error("Error: Failed to query clients")
     if (findResult.error) {
@@ -753,6 +842,9 @@ OpenAuth Bootstrap Secrets - ${dbName}${target}`)
     process.exit(1)
   }
   const clients = parseClientsFromOutput(findResult.output || "")
+  if (parsed.debug) {
+    console.log("[DEBUG] Parsed clients:", JSON.stringify(clients, null, 2))
+  }
   if (clients.length === 0) {
     console.log(`
 No clients found without secrets.`)
@@ -811,42 +903,37 @@ ${client.name}:`)
 }
 function parseClientsFromOutput(output) {
   const clients = []
-  const lines = output.trim().split(`
-`)
-  for (const line of lines) {
-    try {
-      const data = JSON.parse(line)
-      if (Array.isArray(data)) {
-        for (const row of data) {
-          if (row.id && row.name) {
-            clients.push({
-              id: row.id,
-              name: row.name,
-              tenant_id: row.tenant_id || "default",
-            })
+  try {
+    const data = JSON.parse(output)
+    if (Array.isArray(data)) {
+      for (const queryResult of data) {
+        if (queryResult.results && Array.isArray(queryResult.results)) {
+          for (const row of queryResult.results) {
+            if (row.id && row.name) {
+              clients.push({
+                id: row.id,
+                name: row.name,
+                tenant_id: row.tenant_id || "default",
+              })
+            }
           }
         }
-        continue
-      } else if (data.id && data.name) {
-        clients.push({
-          id: data.id,
-          name: data.name,
-          tenant_id: data.tenant_id || "default",
-        })
-        continue
       }
-    } catch {}
-    const parts = line.split("|").map((p) => p.trim())
-    if (parts.length >= 2) {
-      const id = parts[0]
-      const name = parts[1]
-      if (id && name && id !== "id" && !id.startsWith("-")) {
-        clients.push({
-          id,
-          name,
-          tenant_id: parts[2] || "default",
-        })
-      }
+    }
+  } catch {
+    const lines = output.trim().split(`
+`)
+    for (const line of lines) {
+      try {
+        const row = JSON.parse(line)
+        if (row.id && row.name) {
+          clients.push({
+            id: row.id,
+            name: row.name,
+            tenant_id: row.tenant_id || "default",
+          })
+        }
+      } catch {}
     }
   }
   return clients
