@@ -67,10 +67,10 @@ export default defineConfig({
         dark: "./src/assets/logo-dark.svg",
         replacesTitle: true,
       },
-      social: {
-        github: config.github,
-        discord: config.discord,
-      },
+      social: [
+        { icon: "github", label: "GitHub", href: config.github },
+        { icon: "discord", label: "Discord", href: config.discord },
+      ],
       lastUpdated: true,
       editLink: {
         baseUrl: `${config.github}/edit/master/www/`,
