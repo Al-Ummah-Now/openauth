@@ -121,7 +121,7 @@ describe("signing-key rotation", () => {
 
     expect(await jwksKids()).toEqual([pending!.id])
     // Refused like any token that fails verification
-    expect((await userinfo(before)).status).toBe(400)
+    expect((await userinfo(before)).status).toBe(401)
     expect((await userinfo(after)).status).toBe(200)
     const listed = await listSigningKeys(storage)
     expect(listed.find((k) => k.id === oldKid)?.expired).toBe(T0 + HOUR + 1)

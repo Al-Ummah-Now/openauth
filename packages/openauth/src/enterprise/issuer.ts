@@ -124,6 +124,7 @@ import {
   type RefreshHookResult,
   unknownStateResponse,
 } from "../issuer.js"
+import { authorizationServerMetadata } from "../discovery.js"
 import { signingKeys, SIGNING_ALG } from "../keys.js"
 import { getRelativeUrl, isDomainMatch } from "../util.js"
 import {
@@ -139,11 +140,7 @@ import {
   isAllowedRedirectScheme,
   redirectUriMatches,
 } from "../client/native.js"
-import {
-  DEVICE_CALLBACK_PATH,
-  DEVICE_CODE_GRANT,
-  deviceDiscovery,
-} from "../device.js"
+import { DEVICE_CALLBACK_PATH, DEVICE_CODE_GRANT } from "../device.js"
 import { ClientErrorPage } from "../ui/client-error.js"
 import { RESOLVED_THEME_KEY, renderOptions } from "../ui/render.js"
 import { ServerErrorPage, wantsHtml } from "../ui/server-error.js"
@@ -636,6 +633,7 @@ export function createMultiTenantIssuer<
     theme: config.theme,
     ttl: config.ttl,
     issuer: configuredIssuer,
+    documentation: config.documentation,
     pkce: config.pkce,
     requireClientAuthentication: config.requireClientAuthentication,
     clientDb: config.clientDb,
@@ -1201,50 +1199,30 @@ export function createMultiTenantIssuer<
       }
 
       return c.json({
-        issuer: iss,
-        authorization_endpoint: `${iss}/authorize`,
-        token_endpoint: `${iss}/token`,
-        userinfo_endpoint: `${iss}/userinfo`,
-        jwks_uri: `${iss}/.well-known/jwks.json`,
-        registration_endpoint: `${iss}/register`,
-        scopes_supported: ["openid", "profile", "email", "offline_access"],
-        response_types_supported: ["code", "token", "id_token", "code token"],
-        response_modes_supported: ["query", "fragment"],
-        grant_types_supported: [
-          "authorization_code",
-          "refresh_token",
-          "implicit",
-          "client_credentials",
-          ...(config.device ? [DEVICE_CODE_GRANT] : []),
-        ],
-        ...(config.device ? deviceDiscovery(iss, config.device) : {}),
+        ...authorizationServerMetadata(iss, {
+          clients: !!config.clientDb,
+          device: config.clientDb ? config.device : undefined,
+          documentation: config.documentation,
+        }),
+        // Required by OpenID Connect Discovery. The algorithms are those of the
+        // access tokens: this issuer signs no id_token (see response_types).
         subject_types_supported: ["public"],
         id_token_signing_alg_values_supported: signingAlgs,
-        token_endpoint_auth_methods_supported: [
-          "client_secret_basic",
-          "client_secret_post",
-          "none",
-        ],
+        // Top-level access-token claims. The subject's own fields (roles,
+        // permissions, tenant) are under `properties`.
         claims_supported: [
           "sub",
           "iss",
           "aud",
           "exp",
           "iat",
-          "nonce",
-          "email",
-          "email_verified",
-          "name",
-          "picture",
-          "roles",
-          "permissions",
-          "tenant_id",
+          "auth_time",
+          "amr",
+          "sid",
         ],
-        code_challenge_methods_supported: ["S256"],
-        // Enterprise extensions
-        prompt_values_supported: ["none", "login", "consent", "select_account"],
         claim_types_supported: ["normal"],
-        service_documentation: `${iss}/docs`,
+        // prompt=consent has no consent screen, so it is not listed
+        prompt_values_supported: ["none", "login", "select_account"],
       })
     },
   )
