@@ -94,6 +94,8 @@ jobs:
       contents: write
       packages: write
       pull-requests: write
+      id-token: write # build provenance
+      attestations: write
     # One publish at a time, so two merges never pick the same version. PRs only queue
     # behind themselves.
     concurrency:
@@ -138,6 +140,9 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: steps.plan.outputs.skip != 'true'
+        with:
+          # Pinned: the same commit must build the same bytes when a release is finished later
+          bun-version: 1.4.5
 
       - name: Install and build
         if: steps.plan.outputs.skip != 'true'
@@ -200,12 +205,56 @@ jobs:
             npm publish "$FILE" --ignore-scripts --tag "$DIST_TAG"
           fi
 
+      # What consumers install is what the registry serves: the release carries those bytes,
+      # and only if this commit builds exactly them.
+      - name: Verify what the registry serves
+        if: steps.plan.outputs.skip != 'true'
+        id: served
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          FILE: ${{ steps.pack.outputs.file }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/served"
+          cd "$RUNNER_TEMP/served"
+          for attempt in 1 2 3 4 5 6; do
+            npm pack "$PACKAGE@$VERSION" --prefer-online --silent && break
+            [ "$attempt" = 6 ] && { echo "::error::$PACKAGE@$VERSION is not served by the registry"; exit 1; }
+            sleep 10
+          done
+          served=$(ls ./*.tgz)
+          if ! cmp "$served" "$FILE"; then
+            echo "::error::The registry's $VERSION is not what this commit builds; no release created"
+            exit 1
+          fi
+          # A stable name: npm's own file name
+          echo "tgz=$RUNNER_TEMP/served/$(basename "$served")" >> "$GITHUB_OUTPUT"
+          sha256sum "$(basename "$served")" > SHA256SUMS
+          {
+            echo "### Verify"
+            echo
+            echo "\`$(basename "$served")\` below is the published package, byte for byte."
+            echo
+            echo "- npm integrity: \`sha512-$(openssl dgst -sha512 -binary "$served" | base64 -w0)\`"
+            echo "- SHA-256: \`$(cut -d' ' -f1 SHA256SUMS)\`"
+            [ "$GITHUB_EVENT_NAME" = pull_request ] || echo "- Built from this tag: \`gh attestation verify $(basename "$served") -R $GITHUB_REPOSITORY\`"
+          } >> "$RUNNER_TEMP/release_notes.md"
+
+      # Stable releases only: an attestation means "built from master"
+      - name: Attest build provenance
+        if: steps.plan.outputs.skip != 'true' && github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.served.outputs.tgz }}
+
       - name: GitHub release
         if: steps.plan.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.plan.outputs.tag }}
           PRERELEASE: ${{ github.event_name == 'pull_request' }}
+          TGZ: ${{ steps.served.outputs.tgz }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -214,7 +263,7 @@ jobs:
           fi
           args=(--title "$TAG" --notes-file "$RUNNER_TEMP/release_notes.md" --verify-tag)
           if [ "$PRERELEASE" = true ]; then args+=(--prerelease --title "$TAG (Pre-release)"); else args+=(--latest); fi
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" "${args[@]}"
+          gh release create "$TAG" "$TGZ" "$RUNNER_TEMP/served/SHA256SUMS" -R "$GITHUB_REPOSITORY" "${args[@]}"
 
       - name: Comment on PR
         if: steps.plan.outputs.skip != 'true' && github.event_name == 'pull_request'

@@ -35,8 +35,9 @@ How `@al-ummah-now/openauth` is released. Everything is done by
 5. **Version** = the step above on top of the newest of the stable tags and `version` in
    `packages/openauth/package.github.json` (a floor).
 
-Then: checkout of that commit, build, pack, tag, publish the packed file, GitHub Release with the
-notes. Releases run one at a time; a PR's pre-releases queue behind each other.
+Then: checkout of that commit, build, pack, tag, publish the packed file, download it back from the
+registry and compare it byte for byte, attest its build provenance (stable releases), GitHub Release
+with the notes, the package file and `SHA256SUMS`. Releases run one at a time; a PR's pre-releases queue behind each other.
 
 ## `package.json` vs `package.github.json`
 
@@ -93,6 +94,19 @@ npm install @al-ummah-now/openauth@1.0.48-pr.7.42
 The registry is GitHub Packages: consumers need `@al-ummah-now:registry=https://npm.pkg.github.com`
 in their `.npmrc` and a token with `read:packages`.
 
+## Verifying or installing without a registry token
+
+GitHub Packages asks for a token even for public packages. Each GitHub Release also carries the
+published file itself:
+
+```bash
+gh release download v1.1.0 -R Al-Ummah-Now/openauth -p '*.tgz'
+gh attestation verify al-ummah-now-openauth-1.1.0.tgz -R Al-Ummah-Now/openauth
+```
+
+The npm integrity in the release notes is the value lockfiles need. Pre-releases have the file and
+the hashes, but no attestation: an attestation means the package was built from `master`.
+
 ## Troubleshooting
 
 - **No release after a merge:** look at the `gate` job (did both checks pass on that commit?) and at
@@ -100,6 +114,9 @@ in their `.npmrc` and a token with `read:packages`.
 - **A step failed half-way:** re-run the failed job, or run the workflow manually on `master` while
   that commit is still its head. It finishes the same version. If `master` has moved on, the next
   release takes over the notes and the unfinished number stays unused.
+- **"The registry's X.Y.Z is not what this commit builds":** a run finished a release that another run
+  had published, and the bytes differ (for example a different Node). Merge the next change; its
+  release takes over the notes.
 - **"Tag vX.Y.Z is on ..., not ...":** the version belongs to another commit; nothing was published.
 - **Force a minor or major:** run the workflow manually on `master` with `bump`. One release per
   commit still holds, so this needs a commit that is not released yet (a merge that published nothing
