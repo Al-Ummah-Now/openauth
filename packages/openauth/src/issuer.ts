@@ -216,13 +216,7 @@ import {
   UnauthorizedClientError,
   UnknownStateError,
 } from "./error.js"
-import {
-  compactDecrypt,
-  CompactEncrypt,
-  errors,
-  jwtVerify,
-  SignJWT,
-} from "jose"
+import { compactDecrypt, CompactEncrypt, jwtVerify, SignJWT } from "jose"
 import { Storage, StorageAdapter } from "./storage/storage.js"
 import {
   activeSigningKey,
@@ -859,17 +853,17 @@ export function issuer<
    * retired (rotation overlap: the previous key's tokens still verify).
    * Tokens without a kid were signed by the active key.
    */
-  const verifyKey = async (header: { kid?: string }) => {
-    const all = await allSigning()
+  const pickVerifyKey = (
+    all: Awaited<ReturnType<typeof allSigning>>,
+    header: { kid?: string },
+  ) => {
     if (!header.kid) return activeSigningKey(all).public
     const key = verificationKeys(all).find((k) => k.id === header.kid)
-    // A JOSE error, so callers tell a bad token from a failure of ours
-    if (!key)
-      throw new errors.JWKSNoMatchingKey(
-        "Token signed by an unknown or retired key",
-      )
+    if (!key) throw new Error("Token signed by an unknown or retired key")
     return key.public
   }
+  const verifyKey = async (header: { kid?: string }) =>
+    pickVerifyKey(await allSigning(), header)
   const encryptionKey = lazy(() => allEncryption().then((all) => all[0]))
 
   // Initialize client authentication if clientDb is provided
@@ -2163,7 +2157,7 @@ export function issuer<
     }
 
     // RFC 6750 §3.1: a token that can't be used is the caller's problem (401),
-    // never a server error. Failing to read our own keys still throws.
+    // never a server error.
     const invalidToken = () =>
       c.json(
         {
@@ -2174,15 +2168,39 @@ export function issuer<
         { "WWW-Authenticate": 'Bearer error="invalid_token"' },
       )
 
+    // Ours, so a failure here is a server error. Answered here: thrown, it would
+    // reach onError, which looks for a sign-in flow, finds none and tells the
+    // caller (400) to start signing in again.
+    let keys: Awaited<ReturnType<typeof allSigning>>
+    try {
+      keys = await allSigning()
+    } catch (err) {
+      console.error("Failed to load signing keys for userinfo:", err)
+      return c.json(
+        {
+          error: "server_error",
+          error_description: "The token could not be checked",
+        },
+        500,
+      )
+    }
+    // Past this point only the caller's token can be at fault, whatever the
+    // error: jose throws its own, WebCrypto a TypeError for a header whose alg
+    // doesn't match the key.
+    const iss = issuer(c)
+
     type Claims = { mode?: string; type?: string; properties?: unknown }
     let payload: Claims
     try {
       payload = (
-        await jwtVerify<Claims>(token, verifyKey, { issuer: issuer(c) })
+        await jwtVerify<Claims>(
+          token,
+          (tokenHeader) => pickVerifyKey(keys, tokenHeader),
+          { issuer: iss, algorithms: [...new Set(keys.map((k) => k.alg))] },
+        )
       ).payload
-    } catch (err) {
-      if (err instanceof errors.JOSEError) return invalidToken()
-      throw err
+    } catch {
+      return invalidToken()
     }
 
     const schema =

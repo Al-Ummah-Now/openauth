@@ -8,10 +8,10 @@ import {
   test,
 } from "bun:test"
 import { object, string } from "valibot"
-import { SignJWT } from "jose"
+import { base64url, SignJWT } from "jose"
 import { issuer } from "../src/issuer.js"
 import { createMultiTenantIssuer } from "../src/enterprise/issuer.js"
-import { signingKeys } from "../src/keys.js"
+import { clearKeyCache, signingKeys } from "../src/keys.js"
 import { SessionServiceImpl } from "../src/session/service.js"
 import { MemoryStorage } from "../src/storage/memory.js"
 import { createSubjects } from "../src/subject.js"
@@ -47,7 +47,6 @@ const providers = {
 } as any
 
 let storage: ReturnType<typeof MemoryStorage>
-let serverErrors: unknown[]
 
 function base(extra: Record<string, any> = {}) {
   return issuer({
@@ -74,10 +73,6 @@ function enterprise(extra: Record<string, any> = {}) {
       customDomains: new Map([["auth.example.com", "default"]]),
     },
     onSuccess: async (ctx: any) => ctx.subject("user", { userID: "123" }),
-    onServerError: (err: unknown) => {
-      serverErrors.push(err)
-      return undefined
-    },
     ...extra,
   } as any).app
 }
@@ -86,7 +81,6 @@ let tenantService: TenantServiceImpl
 
 beforeEach(async () => {
   storage = MemoryStorage()
-  serverErrors = []
   tenantService = new TenantServiceImpl(storage)
   await tenantService.createTenant({ id: "default", name: "Default" })
 })
@@ -209,6 +203,17 @@ describe("/userinfo refuses a bad token as the caller's error", () => {
       .setExpirationTime(exp)
       .sign(key!.private)
   }
+  /** A token whose header names `alg`, with a signature that can't be right. */
+  async function forge(alg: string, withKid: boolean) {
+    const [key] = await signingKeys(storage)
+    const part = (v: unknown) => base64url.encode(JSON.stringify(v))
+    const now = Math.floor(Date.now() / 1000)
+    return [
+      part({ alg, ...(withKid ? { kid: key!.id } : {}) }),
+      part({ ...user, iss: HOST, iat: now, exp: now + 3600 }),
+      alg === "none" ? "" : base64url.encode("x".repeat(64)),
+    ].join(".")
+  }
   const user = {
     mode: "access",
     type: "user",
@@ -263,6 +268,12 @@ describe("/userinfo refuses a bad token as the caller's error", () => {
             .sign(key!.private)
         },
       ],
+      ...["HS256", "RS256", "ES384", "EdDSA", "none"].flatMap((alg) =>
+        [false, true].map((withKid): [string, () => Promise<string>] => [
+          `alg ${alg}, ${withKid ? "the active kid" : "no kid"}`,
+          () => forge(alg, withKid),
+        ]),
+      ),
     ] as [string, () => Promise<string>][]) {
       test(`${name}: ${what} → 401`, async () => {
         const res = await ask(make(), await token())
@@ -271,8 +282,28 @@ describe("/userinfo refuses a bad token as the caller's error", () => {
           'Bearer error="invalid_token"',
         )
         expect((await res.json()).error).toBe("invalid_token")
-        expect(serverErrors).toEqual([])
       })
     }
+
+    test(`${name}: failing to read our own keys is a server error, not 401`, async () => {
+      const token = await sign(user)
+      const down = new Error("storage down")
+      // Only the keys (the atomic store): the tenant lookup still works
+      const atomic = storage.atomic!
+      const get = atomic.get
+      atomic.get = async (path) => {
+        if (path.join("/").includes("keys:")) throw down
+        return get(path)
+      }
+      clearKeyCache()
+      try {
+        const res: Response = await ask(make(), token)
+        expect(res.status).toBe(500)
+        expect((await res.json()).error).toBe("server_error")
+      } finally {
+        atomic.get = get
+        clearKeyCache()
+      }
+    })
   }
 })
