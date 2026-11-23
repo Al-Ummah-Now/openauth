@@ -153,6 +153,30 @@ describe("what is published", () => {
   })
 })
 
+test("a pull request's merge commit is compared with its own parent, not an older base", () => {
+  const oldBase = git("rev-parse", "HEAD")
+  git("checkout", "-qb", "topic")
+  commit("ci: workflow only", ".github/workflows/x.yml")
+  git("checkout", "-q", "master")
+  commit("fix: source on master, after the PR was opened")
+  git("merge", "-q", "--no-ff", "-m", "Merge topic", "topic")
+  const pr = (base: string) =>
+    plan({
+      event: "pr",
+      sha: git("rev-parse", "HEAD"),
+      base,
+      prNumber: "7",
+      runNumber: "1",
+      releases: released,
+      cwd,
+    }) as any
+  expect(pr(`${git("rev-parse", "HEAD")}^1`).skip).toContain(
+    "no published file",
+  )
+  // What the event's older base would have done
+  expect(pr(oldBase).version).toBe("1.0.63-pr.7.1")
+})
+
 describe("one release per commit, and a half-done one is finished", () => {
   test("a released commit is skipped", () => {
     const sha = commit("fix: a")
