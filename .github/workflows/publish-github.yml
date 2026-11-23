@@ -1,10 +1,12 @@
 name: Publish to GitHub Packages
 
+# docs/RELEASING.md describes what this does; scripts/release/plan.mjs decides it.
+#
 # Security: workflow_run's `branches: master` filter matches the *head branch name*,
-# so a fork PR from a branch called "master" would trigger it. The publish job
-# therefore only accepts runs started by a push to this repository.
+# so a fork PR from a branch called "master" would trigger it. Every job therefore
+# only accepts runs started by a push to this repository. Values from events reach
+# scripts through `env` only.
 on:
-  # Run after other workflows complete on main
   workflow_run:
     workflows: ["test", "format"]
     types:
@@ -14,64 +16,101 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - 'packages/openauth/**'
+      - "packages/openauth/**"
+      - "scripts/release/**"
+      - ".github/workflows/publish-github.yml"
   workflow_dispatch:
     inputs:
       bump:
-        description: "Version bump type"
+        description: "Version bump (auto: from the commits; also finishes a half-done release)"
         type: choice
         options:
+          - auto
           - patch
           - minor
           - major
-        default: patch
-
-# One publish per commit at a time: `test` and `format` both trigger a run for the
-# same master commit, and the second must see the first's tag and skip.
-concurrency:
-  group: publish-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
-  cancel-in-progress: false
+        default: auto
 
 permissions:
-  contents: write
-  packages: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  # For PRs: wait for checks to pass first
-  wait-for-checks:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+  # Publish only a commit of master on which BOTH test and format passed. The workflow
+  # that finishes first finds the other still running and stops here; the second goes on.
+  gate:
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'master' &&
+        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    outputs:
+      ready: ${{ steps.gate.outputs.ready }}
+      sha: ${{ steps.gate.outputs.sha }}
     steps:
+      # PRs: the merge of the head into the base, what master would be
       - name: Wait for checks to pass
+        if: github.event_name == 'pull_request'
         uses: lewagon/wait-on-check-action@ccfb013c15c8afb7bf2b7c028fb74dc5a068cccc # v1.3.4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
-          running-workflow-name: 'wait-for-checks'
           check-regexp: ^(test|format)$
 
-  publish:
-    runs-on: ubuntu-latest
-    needs: [wait-for-checks]
-    if: |
-      always() &&
-      (needs.wait-for-checks.result == 'success' || needs.wait-for-checks.result == 'skipped') &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
-      (github.event_name != 'workflow_run' || (
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_repository.full_name == github.repository))
-    steps:
+      - name: Both checks passed on the commit?
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          ready=true
+          if [ "$EVENT" != pull_request ]; then
+            for workflow in test format; do
+              conclusion=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow.yml/runs?head_sha=$SHA&event=push&branch=master&per_page=1" \
+                --jq '.workflow_runs[0] | if . == null then "missing" elif .status == "completed" then .conclusion else .status end')
+              echo "$workflow on ${SHA::7}: $conclusion"
+              [ "$conclusion" = success ] || ready=false
+            done
+            [ "$ready" = true ] || echo "::notice::Not publishing ${SHA::7}: test and format have not both passed on it (yet)."
+          fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
 
+  publish:
+    needs: gate
+    if: needs.gate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+    # One publish at a time, so two merges never pick the same version. PRs only queue
+    # behind themselves.
+    concurrency:
+      group: publish-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
+      cancel-in-progress: false
+    env:
+      PACKAGE: "@al-ummah-now/openauth"
+    steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+          ref: ${{ needs.gate.outputs.sha }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: On master?
+        if: github.event_name != 'pull_request'
+        run: git merge-base --is-ancestor HEAD origin/master
 
       - uses: actions/setup-node@v4
         with:
@@ -79,245 +118,113 @@ jobs:
           registry-url: "https://npm.pkg.github.com"
           scope: "@al-ummah-now"
 
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build package
-        run: bun run --filter="@openauthjs/openauth" build
-
-      - name: Determine version
-        id: version
+      - name: Plan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name == 'workflow_run' && 'release' || github.event_name == 'workflow_dispatch' && 'dispatch' || 'pr' }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          PR: ${{ github.event.pull_request.number }}
+          BUMP: ${{ inputs.bump }}
         run: |
-          cd packages/openauth
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' > "$RUNNER_TEMP/releases.txt"
+          node scripts/release/plan.mjs --event "$EVENT" --sha "$SHA" --base "$BASE" --pr "$PR" \
+            --run "$GITHUB_RUN_NUMBER" --bump "$BUMP" --repository "$GITHUB_REPOSITORY" \
+            --releases "$RUNNER_TEMP/releases.txt" --notes "$RUNNER_TEMP/release_notes.md" >> "$GITHUB_OUTPUT"
 
-          # The released version lives in the git tags, not in a commit on master:
-          # master's ruleset requires a pull request, so this workflow never pushes
-          # to it. Base = the newer of the latest stable tag and package.github.json.
-          FILE_VERSION=$(node -e "console.log(require('./package.github.json').version)")
-          TAG_VERSION=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -ve '-' | head -1 | sed 's/^v//')
-          CURRENT_VERSION=$(printf '%s\n%s\n' "$FILE_VERSION" "${TAG_VERSION:-0.0.0}" | sort -V | tail -1)
-          echo "Current version: $CURRENT_VERSION (file $FILE_VERSION, tag ${TAG_VERSION:-none})"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.plan.outputs.skip != 'true'
 
-          # A commit is released once: a second trigger for the same commit skips
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            RELEASED=$(git tag --points-at HEAD -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -ve '-' | head -1)
-            if [ -n "$RELEASED" ]; then
-              echo "HEAD is already released as $RELEASED; nothing to publish"
-              echo "skip=true" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-          fi
-          echo "skip=false" >> $GITHUB_OUTPUT
-
-          # Parse version components
-          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
-          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
-          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3 | cut -d- -f1)
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # PR: prerelease version like 1.0.7-pr.5.123
-            PR_NUMBER=${{ github.event.pull_request.number }}
-            RUN_NUMBER=${{ github.run_number }}
-            # Use next patch version for prereleases
-            NEXT_PATCH=$((PATCH + 1))
-            VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}-pr.${PR_NUMBER}.${RUN_NUMBER}"
-            TAG="pr"
-            SHOULD_UPDATE_VERSION="false"
-            echo "Publishing PR prerelease: $VERSION"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual: bump based on input
-            BUMP_TYPE="${{ github.event.inputs.bump }}"
-            case $BUMP_TYPE in
-              major)
-                VERSION="$((MAJOR + 1)).0.0"
-                ;;
-              minor)
-                VERSION="${MAJOR}.$((MINOR + 1)).0"
-                ;;
-              *)
-                VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-                ;;
-            esac
-            TAG="latest"
-            SHOULD_UPDATE_VERSION="true"
-            echo "Publishing manual $BUMP_TYPE bump: $VERSION"
-          else
-            # Push to main after checks pass: auto bump patch
-            VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-            TAG="latest"
-            SHOULD_UPDATE_VERSION="true"
-            echo "Publishing release (auto patch bump): $VERSION"
-          fi
-
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "should_update=$SHOULD_UPDATE_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Prepare GitHub Packages release
-        if: steps.version.outputs.skip != 'true'
+      - name: Install and build
+        if: steps.plan.outputs.skip != 'true'
         run: |
-          cd packages/openauth
-          # Backup original package.json
-          cp package.json package.npm.json
-          # Use GitHub Packages config
-          cp package.github.json package.json
-          # Set the computed version for publishing
-          node -e "
-            const fs = require('fs');
-            const pkg = require('./package.json');
-            pkg.version = '${{ steps.version.outputs.version }}';
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-          echo "Package version: $(node -e "console.log(require('./package.json').version)")"
+          bun install --frozen-lockfile
+          bun run --filter="@openauthjs/openauth" build
 
-      - name: Generate release notes
-        if: steps.version.outputs.skip != 'true'
-        id: release_notes
+      - name: Pack
+        if: steps.plan.outputs.skip != 'true'
+        id: pack
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        working-directory: packages/openauth
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          IS_PRERELEASE="${{ github.event_name == 'pull_request' }}"
+          set -euo pipefail
+          # package.json is upstream's metadata; package.github.json is what we publish
+          node -e '
+            const fs = require("fs")
+            const pkg = JSON.parse(fs.readFileSync("package.github.json", "utf8"))
+            pkg.version = process.env.VERSION
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n")
+          '
+          file=$(npm pack --json --ignore-scripts --pack-destination "$RUNNER_TEMP" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8"))[0].filename')
+          echo "file=$RUNNER_TEMP/$file" >> "$GITHUB_OUTPUT"
 
-          # Get the previous stable tag (skip pre-release tags)
-          PREV_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname | grep -v "-" | head -1 || echo "")
-
-          if [ "$IS_PRERELEASE" = "true" ]; then
-            # For PRs, get commits in this PR
-            PR_BASE="${{ github.event.pull_request.base.sha }}"
-            PR_HEAD="${{ github.event.pull_request.head.sha }}"
-            COMMITS=$(git log ${PR_BASE}..${PR_HEAD} --pretty=format:"- %s (%h)" --no-merges | grep -v "\[skip ci\]" || echo "")
-            COMPARE_BASE="${{ github.event.pull_request.base.ref }}"
-          else
-            # For releases, get commits since last tag
-            if [ -n "$PREV_TAG" ]; then
-              COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges | grep -v "\[skip ci\]" || echo "")
-              COMPARE_BASE="$PREV_TAG"
-            else
-              COMMITS=$(git log -20 --pretty=format:"- %s (%h)" --no-merges | grep -v "\[skip ci\]" || echo "")
-              COMPARE_BASE=""
-            fi
-          fi
-
-          # Categorize commits
-          FEATURES=$(echo "$COMMITS" | grep -iE "^- (feat|feature)" || echo "")
-          FIXES=$(echo "$COMMITS" | grep -iE "^- fix" || echo "")
-          DOCS=$(echo "$COMMITS" | grep -iE "^- doc" || echo "")
-          OTHER=$(echo "$COMMITS" | grep -ivE "^- (feat|feature|fix|doc|chore|refactor|style|test|ci|auto)" | grep -v "^$" || echo "")
-
-          # Build release notes
-          if [ "$IS_PRERELEASE" = "true" ]; then
-            NOTES="## 🧪 Pre-release v${VERSION}\n\n"
-            NOTES="${NOTES}> This is a pre-release from PR #${{ github.event.pull_request.number }}\n\n"
-          else
-            NOTES="## What's Changed in v${VERSION}\n\n"
-          fi
-
-          if [ -n "$FEATURES" ]; then
-            NOTES="${NOTES}### ✨ Features\n${FEATURES}\n\n"
-          fi
-
-          if [ -n "$FIXES" ]; then
-            NOTES="${NOTES}### 🐛 Bug Fixes\n${FIXES}\n\n"
-          fi
-
-          if [ -n "$DOCS" ]; then
-            NOTES="${NOTES}### 📚 Documentation\n${DOCS}\n\n"
-          fi
-
-          if [ -n "$OTHER" ]; then
-            NOTES="${NOTES}### 🔧 Other Changes\n${OTHER}\n\n"
-          fi
-
-          if [ -n "$COMPARE_BASE" ]; then
-            NOTES="${NOTES}---\n\n**Full Changelog**: https://github.com/${{ github.repository }}/compare/${COMPARE_BASE}...v${VERSION}"
-          fi
-
-          # Save to file to handle multiline
-          echo -e "$NOTES" > release_notes.md
-          cat release_notes.md
-          echo "Generated release notes"
-
-      - name: Create Git Tag
-        if: steps.version.outputs.skip != 'true'
+      # The tag ties the version to this commit before anything is published. If a later
+      # step fails, the next run for the commit finds the tag without a GitHub release and
+      # finishes the same version (plan.mjs, "resume").
+      - name: Tag
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ needs.gate.outputs.sha }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          TAG_NAME="v${VERSION}"
-
-          # Tag before publishing: the tag is the record of the release (master is
-          # never pushed to), so an existing tag means this version is taken.
-          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG_NAME already exists; refusing to publish over it"
-            exit 1
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            at=$(git rev-parse "$TAG^{commit}")
+            [ "$at" = "$SHA" ] || { echo "::error::Tag $TAG is on $at, not $SHA; refusing to publish"; exit 1; }
+            echo "$TAG is already on ${SHA::7}"
           else
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
             git config --local user.name "github-actions[bot]"
-            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-            git push origin "$TAG_NAME"
-            echo "Created and pushed tag $TAG_NAME"
+            git tag -a "$TAG" -m "Release $TAG" "$SHA"
+            git push "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "refs/tags/$TAG"
           fi
 
-      - name: Publish to GitHub Packages
-        if: steps.version.outputs.skip != 'true'
-        run: |
-          cd packages/openauth
-          npm publish --tag ${{ steps.version.outputs.tag }}
+      - name: Publish
+        if: steps.plan.outputs.skip != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Restore original package.json
-        if: always()
+          VERSION: ${{ steps.plan.outputs.version }}
+          DIST_TAG: ${{ steps.plan.outputs.dist_tag }}
+          FILE: ${{ steps.pack.outputs.file }}
         run: |
-          cd packages/openauth
-          if [ -f package.npm.json ]; then
-            mv package.npm.json package.json
+          set -euo pipefail
+          if published=$(npm view "$PACKAGE@$VERSION" version 2>/dev/null) && [ "$published" = "$VERSION" ]; then
+            echo "$PACKAGE@$VERSION is already on the registry (an earlier run published it)"
+          else
+            npm publish "$FILE" --ignore-scripts --tag "$DIST_TAG"
           fi
 
-      - name: Create GitHub Release
-        if: steps.version.outputs.skip != 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const version = '${{ steps.version.outputs.version }}';
-            const tagName = `v${version}`;
-            const isPrerelease = '${{ github.event_name }}' === 'pull_request';
-
-            // Read release notes
-            let body = '';
-            try {
-              body = fs.readFileSync('release_notes.md', 'utf8');
-            } catch (e) {
-              body = `## Release v${version}\n\nPublished to GitHub Packages.`;
-            }
-
-            // Create the release
-            try {
-              await github.rest.repos.createRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag_name: tagName,
-                name: isPrerelease ? `v${version} (Pre-release)` : `v${version}`,
-                body: body,
-                draft: false,
-                prerelease: isPrerelease,
-                target_commitish: '${{ github.sha }}'
-              });
-              console.log(`Created ${isPrerelease ? 'pre-release' : 'release'} ${tagName}`);
-            } catch (error) {
-              if (error.status === 422) {
-                console.log(`Release ${tagName} already exists, skipping`);
-              } else {
-                throw error;
-              }
-            }
+      - name: GitHub release
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          PRERELEASE: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 0
+          fi
+          args=(--title "$TAG" --notes-file "$RUNNER_TEMP/release_notes.md" --verify-tag)
+          if [ "$PRERELEASE" = true ]; then args+=(--prerelease --title "$TAG (Pre-release)"); else args+=(--latest); fi
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" "${args[@]}"
 
       - name: Comment on PR
-        if: steps.version.outputs.skip != 'true' && (github.event_name == 'pull_request')
+        if: steps.plan.outputs.skip != 'true' && github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
         with:
           script: |
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `📦 Published prerelease to GitHub Packages!\n\n\`\`\`bash\nnpm install @al-ummah-now/openauth@${{ steps.version.outputs.version }}\n\`\`\`\n\nThis is a prerelease version for testing. After merging, a stable version will be published.`
+              body: `📦 Published prerelease to GitHub Packages!\n\n\`\`\`bash\nnpm install @al-ummah-now/openauth@${process.env.VERSION}\n\`\`\`\n\nThis is a prerelease version for testing. After merging, a stable version will be published.`
             })
