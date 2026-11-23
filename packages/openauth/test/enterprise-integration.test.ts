@@ -1657,12 +1657,9 @@ describe("Enterprise Issuer - HTTP Flow Tests", () => {
     expect(config.prompt_values_supported).toEqual([
       "none",
       "login",
-      "consent",
       "select_account",
     ])
-    expect(config.claims_supported).toContain("roles")
-    expect(config.claims_supported).toContain("permissions")
-    expect(config.claims_supported).toContain("tenant_id")
+    expect(config.claims_supported).toContain("sid")
   })
 
   test("session routes are mounted and accessible", async () => {

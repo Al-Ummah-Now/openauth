@@ -166,6 +166,12 @@ export interface EnterpriseIssuerConfig<
   issuer?: string
 
   /**
+   * Developer documentation, `service_documentation` in the discovery
+   * documents. See `IssuerInput.documentation`.
+   */
+  documentation?: string
+
+  /**
    * Device authorization grant (RFC 8628). See `IssuerInput.device`.
    * Requires `clientDb`.
    */
