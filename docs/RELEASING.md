@@ -44,28 +44,19 @@ notes. Releases run one at a time; a PR's pre-releases queue behind each other.
 That is the upstream fork's metadata, **not** the published package, and the publish workflow never
 reads its version:
 
-- The published name and version come from `package.github.json` plus the computed version (step 4).
+- The published name and version come from `package.github.json` plus the computed version.
 - The `name` is still load-bearing inside the repo: the workflow builds with
-  `bun run --filter="@openauthjs/openauth" build`, the examples depend on `@openauthjs/openauth`
-  as a workspace package, and `.changeset/config.json` names it. Do not rename it in passing.
-- The `version` in `package.json` is only bumped by the upstream changesets workflow (below).
+  `bun run --filter="@openauthjs/openauth" build`, and the examples depend on `@openauthjs/openauth`
+  as a workspace package. Do not rename it in passing.
+- Its `version` is never bumped. Upstream's own release flow (Changesets) was removed from the fork.
 
 To find the current release, look at the tags or the
 [releases page](https://github.com/Al-Ummah-Now/openauth/releases), not at any `package.json`.
 
-## The upstream changesets workflow (`release.yml`)
-
-`.github/workflows/release.yml` is inherited from upstream openauth. On every push to `master` it runs
-`changesets/action`, which keeps a "Version Packages" PR open that bumps the upstream
-`@openauthjs/openauth` version in `package.json` (`0.4.3` → `0.4.4`) and writes
-`packages/openauth/CHANGELOG.md` from `.changeset/*.md`. It does not publish
-`@al-ummah-now/openauth`. **Do not merge that PR**: it would only change upstream metadata, and with
-no changesets left the action switches to `changeset publish` (the npm registry, upstream name).
-
 ## CHANGELOG.md
 
 `packages/openauth/CHANGELOG.md` stops at 1.0.32. Later releases are recorded only as tags and
-GitHub Releases. Changesets in `.changeset/` are not needed for a release.
+GitHub Releases.
 
 ## Commit messages
 
