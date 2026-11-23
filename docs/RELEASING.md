@@ -5,56 +5,38 @@ How `@al-ummah-now/openauth` is released. Everything is done by
 
 ## The short version
 
-- **Merge a PR to `master`** → once `test` and `format` pass on that commit, the workflow publishes
-  the next patch version (`1.0.47` → `1.0.48`) to GitHub Packages with the `latest` dist-tag, pushes
-  the tag `v1.0.48` and creates a GitHub Release.
-- **Open or update a PR** that touches `packages/openauth/**` → a pre-release
-  `1.0.48-pr.{PR#}.{run#}` with the `pr` dist-tag, its tag, a pre-release GitHub Release and a PR
-  comment with the install command.
-- **The released version lives in git tags, never in a commit on `master`.** Since openauth#27 the
-  workflow never pushes to `master` (the branch ruleset requires a pull request), so it does not
-  commit a version bump and does not update `CHANGELOG.md`.
+- **Merge a PR to `master`** → once `test` **and** `format` have both passed on that commit, and only
+  if something that ends up in the package changed, the workflow publishes the next version to GitHub
+  Packages with the `latest` dist-tag, the tag `vX.Y.Z` and a GitHub Release.
+- **The size of the step comes from the commits** since the last release: `feat!:` (any type with `!`)
+  or a `BREAKING CHANGE:` footer → major, `feat:` → minor, anything else → patch.
+- **Open or update a PR** that changes a published file → a pre-release `X.Y.Z-pr.{PR#}.{run#}` with
+  the `pr` dist-tag, its tag, a pre-release GitHub Release and a PR comment with the install command.
+- **The released version lives in git tags, never in a commit on `master`.** The workflow never
+  pushes to `master` (the branch ruleset requires a pull request).
 
-## Where the version comes from
+## How a run decides
 
-The `Determine version` step works it out on every run:
+`scripts/release/plan.mjs` decides everything from git tags and GitHub releases, and
+`scripts/release/plan.test.ts` tests it on scratch repositories (`bun test ./scripts/release`).
 
-1. **Base** = the newer of
-   - the latest stable tag (`vX.Y.Z` with no `-suffix`), and
-   - `version` in `packages/openauth/package.github.json` (a floor; only matters if it is ever set
-     above the tags).
-2. **Next version** from the base:
+1. **Gate.** Both `test` and `format` must have succeeded on the exact commit. Each of them triggers a
+   run; the first one finds the other unfinished and stops. A manual run (`workflow_dispatch`) must be
+   on `master` and passes the same gate.
+2. **Already released?** A commit whose tag has a GitHub release, or that is part of a newer release,
+   publishes nothing.
+3. **Half done?** A commit that has a stable tag but no GitHub release is finished under the same
+   version: the tag stays, `npm publish` is skipped if the version is on the registry, and the release
+   is created.
+4. **Anything to publish?** Compared with the last release: `src/`, `bin/*.ts`, `script/`,
+   `tsconfig.json`, or the consumer-visible part of `package.github.json` (not its version, scripts or
+   dev dependencies). Tests, docs, examples and lockfile changes publish nothing; they go out with the
+   next release. A manual run publishes anyway.
+5. **Version** = the step above on top of the newest of the stable tags and `version` in
+   `packages/openauth/package.github.json` (a floor).
 
-   | Trigger                                                    | Version                                 | npm dist-tag |
-   | ---------------------------------------------------------- | --------------------------------------- | ------------ |
-   | `test` / `format` completed on a push to `master`          | `X.Y.(Z+1)`                             | `latest`     |
-   | `pull_request` (same repo, `packages/openauth/**` changed) | `X.Y.(Z+1)-pr.{PR#}.{run#}`             | `pr`         |
-   | `workflow_dispatch` with `bump` = patch / minor / major    | `X.Y.(Z+1)` / `X.(Y+1).0` / `(X+1).0.0` | `latest`     |
-
-3. **One release per commit.** Both `test` and `format` trigger a run for the same `master` commit
-   (serialised by the per-commit `concurrency` group). A non-PR run whose `HEAD` already carries a
-   stable tag skips everything, so the second trigger, a re-run or a dispatch on an already
-   released commit publishes nothing.
-
-## What a run does
-
-1. PRs only: wait for the `test` and `format` checks on the PR head.
-2. `bun install`, then build the workspace package `@openauthjs/openauth`.
-3. Determine the version (above).
-4. Swap `package.json` for `package.github.json` and write the computed version into it. **This is
-   what gets published**: name `@al-ummah-now/openauth`, the GitHub Packages registry, the computed
-   version.
-5. Generate release notes from the commits since the previous stable tag (PR: the PR's commits),
-   grouped into Features (`feat`), Bug Fixes (`fix`), Documentation (`docs`) and Other Changes.
-6. Create and push the annotated tag `vVERSION`. An existing tag fails the run instead of
-   publishing over it.
-7. `npm publish --tag latest|pr` to GitHub Packages.
-8. Restore the original `package.json` (always).
-9. Create the GitHub Release with the notes (a pre-release for PRs).
-10. PRs only: comment the install command.
-
-The job only runs for pushes and PRs from this repository (a fork PR, even from a branch called
-`master`, never publishes).
+Then: checkout of that commit, build, pack, tag, publish the packed file, GitHub Release with the
+notes. Releases run one at a time; a PR's pre-releases queue behind each other.
 
 ## `package.json` vs `package.github.json`
 
@@ -87,11 +69,13 @@ GitHub Releases. Changesets in `.changeset/` are not needed for a release.
 
 ## Commit messages
 
-Use conventional commits; the release notes are grouped by prefix:
+Use conventional commits. They set the version (above) and group the release notes:
 
 ```
 feat: add new feature description
+feat!: remove or change something consumers use
 fix: resolve issue with X
+security: patch Y
 docs: update API documentation
 chore: update dependencies
 ```
@@ -111,14 +95,13 @@ in their `.npmrc` and a token with `read:packages`.
 
 ## Troubleshooting
 
-- **No release after a merge:** the publish job runs only when `test` or `format` _succeeds_ for a
-  push to `master`. Check those runs first, then the `Publish to GitHub Packages` run.
-- **"Tag vX.Y.Z already exists":** the version is taken; the run refuses to publish over it. The next
-  merge publishes the following patch.
-- **Tag pushed but `npm publish` failed:** that commit now counts as released (its tag exists), so a
-  re-run skips. Delete the tag `vX.Y.Z` (no package was published under it) and re-run the failed
-  run, or let the next merge publish the next patch.
-- **Need a minor or major:** run the workflow manually (`workflow_dispatch`) on `master` with `bump`
-  = minor or major. It skips if `master`'s `HEAD` is already released, so this needs an untagged
-  commit (for example, dispatch while the merge's `test`/`format` runs are still going).
+- **No release after a merge:** look at the `gate` job (did both checks pass on that commit?) and at
+  the `Plan` step, which says why nothing was published.
+- **A step failed half-way:** re-run the failed job, or run the workflow manually on `master` while
+  that commit is still its head. It finishes the same version. If `master` has moved on, the next
+  release takes over the notes and the unfinished number stays unused.
+- **"Tag vX.Y.Z is on ..., not ...":** the version belongs to another commit; nothing was published.
+- **Force a minor or major:** run the workflow manually on `master` with `bump`. One release per
+  commit still holds, so this needs a commit that is not released yet (a merge that published nothing
+  will do).
 - **Never** commit a version bump or a hand-edited release to `master`, and never move a tag.

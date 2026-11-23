@@ -22,3 +22,4 @@ jobs:
       - run: cd packages/openauth && bun run build
       - run: cd packages/openauth && bun test
       - run: bun test ./www/mdx-escape.test.ts
+      - run: bun test ./scripts/release
