@@ -174,6 +174,10 @@ export function plan({
     const own = stableTags("--points-at", sha)[0]
     if (own && releases.includes(own))
       return { skip: `${sha.slice(0, 7)} is already released as ${own}` }
+    // Before resuming: a newer release already holds this commit's changes, and finishing
+    // the old version now would move `latest` back to it.
+    const newer = finished.find((t) => isAncestor(sha, t))
+    if (newer) return { skip: `${sha.slice(0, 7)} is part of ${newer}` }
     if (own) {
       // Tagged by an earlier run that did not finish: same version again.
       const previousTag = finished.find(
@@ -189,8 +193,6 @@ export function plan({
         commits: commitsSince(previousTag),
       }
     }
-    const newer = finished.find((t) => isAncestor(sha, t))
-    if (newer) return { skip: `${sha.slice(0, 7)} is part of ${newer}` }
   }
 
   const previousTag = finished[0] ?? null
