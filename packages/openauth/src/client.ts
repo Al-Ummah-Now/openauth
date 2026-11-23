@@ -48,6 +48,7 @@ import {
 import { SubjectSchema } from "./subject.js"
 import type { v1 } from "@standard-schema/spec"
 import {
+  AuthRequestError,
   InvalidAccessTokenError,
   InvalidAuthorizationCodeError,
   InvalidRefreshTokenError,
@@ -359,6 +360,81 @@ export interface VerifyError {
 }
 
 /**
+ * Returned by `clientCredentials`, `device`, `revoke` and `userinfo` when they fail.
+ */
+export interface RequestFailure {
+  /**
+   * What went wrong. `err.error` is the OAuth error code.
+   */
+  err: AuthRequestError
+}
+
+export interface ClientCredentialsOptions {
+  /**
+   * The scopes to ask for. The server refuses scopes the client isn't registered with.
+   */
+  scopes?: string[]
+}
+
+/**
+ * Returned when the client credentials call is successful.
+ */
+export interface ClientCredentialsSuccess {
+  err: false
+  token: {
+    /**
+     * The access token. There's no refresh token; ask for a new one when it expires.
+     */
+    access: string
+    /**
+     * The number of seconds until the token expires.
+     */
+    expiresIn: number
+    /**
+     * The scopes the server granted.
+     */
+    scopes: string[]
+  }
+}
+
+/**
+ * A device authorization the user still has to approve.
+ */
+export interface DeviceAuthorization {
+  /**
+   * The secret the device polls with. Never show it.
+   */
+  deviceCode: string
+  /**
+   * The code the user types, e.g. `BCDF-GHJK`.
+   */
+  userCode: string
+  /**
+   * Where the user types the code. Show it next to the code.
+   */
+  verificationURI: string
+  /**
+   * The same page with the code filled in, for a QR code.
+   */
+  verificationURIComplete?: string
+  /**
+   * When the codes expire, in milliseconds since the epoch.
+   */
+  expiresAt: number
+  /**
+   * The least number of seconds between polls.
+   */
+  interval: number
+}
+
+export interface DevicePollOptions {
+  /**
+   * Stop waiting, for example when the user leaves the sign-in screen.
+   */
+  signal?: AbortSignal
+}
+
+/**
  * An instance of the OpenAuth client contains the following methods.
  */
 export interface Client {
@@ -555,6 +631,91 @@ export interface Client {
     token: string,
     options?: VerifyOptions,
   ): Promise<VerifyResult<T> | VerifyError>
+  /**
+   * Get an access token for the client itself, with no user: one server calling another.
+   * Needs a `clientSecret`.
+   *
+   * ```ts
+   * const granted = await client.clientCredentials({ scopes: ["users:read"] })
+   *
+   * if (granted.err) {
+   *   console.log(granted.err.error) // "invalid_client", "invalid_scope", ...
+   * } else {
+   *   const { access, expiresIn } = granted.token
+   * }
+   * ```
+   *
+   * Keep the token until it's about to expire rather than asking for one per request.
+   */
+  clientCredentials(
+    opts?: ClientCredentialsOptions,
+  ): Promise<ClientCredentialsSuccess | RequestFailure>
+  /**
+   * Sign in on a device with no browser or keyboard, like a TV.
+   */
+  device: {
+    /**
+     * Get a code for the user to type on their phone or computer.
+     *
+     * ```ts
+     * const started = await client.device.start()
+     * if (started.err) return
+     *
+     * show(started.device.userCode, started.device.verificationURI)
+     * ```
+     */
+    start(opts?: {
+      scopes?: string[]
+    }): Promise<{ err: false; device: DeviceAuthorization } | RequestFailure>
+    /**
+     * Wait until the user approves, then get the tokens.
+     *
+     * ```ts
+     * const approved = await client.device.poll(started.device)
+     *
+     * if (approved.err) {
+     *   console.log(approved.err.error) // "access_denied", "expired_token", ...
+     * } else {
+     *   const { access, refresh } = approved.tokens
+     * }
+     * ```
+     *
+     * This polls no faster than the server allows, slows down when told to, and keeps
+     * going through network failures until the code expires.
+     */
+    poll(
+      device: DeviceAuthorization,
+      opts?: DevicePollOptions,
+    ): Promise<ExchangeSuccess | RequestFailure>
+  }
+  /**
+   * End a sign-in by revoking its refresh token.
+   *
+   * ```ts
+   * await client.revoke(<refresh_token>)
+   * ```
+   *
+   * The server answers the same for a token it doesn't know, so revoking twice is fine.
+   */
+  revoke(
+    token: string,
+    opts?: { hint?: "refresh_token" | "access_token" },
+  ): Promise<{ err: false } | RequestFailure>
+  /**
+   * Ask the server who an access token belongs to.
+   *
+   * ```ts
+   * const info = await client.userinfo(subjects.user, <access_token>)
+   *
+   * if (!info.err) console.log(info.properties.userID)
+   * ```
+   *
+   * To check a token on every request use `verify`, which needs no call to the server.
+   */
+  userinfo<T extends v1.StandardSchema>(
+    subject: T,
+    access: string,
+  ): Promise<{ err: false; properties: v1.InferOutput<T> } | RequestFailure>
 }
 
 type JWKSGetKey = ReturnType<typeof createLocalJWKSet>
@@ -569,6 +730,28 @@ interface CacheEntry<T> {
 const DEFAULT_CACHE_TTL = 10 * 60 * 1000
 /** Minimum gap between JWKS re-fetches forced by a token the cached keys reject. */
 const JWKS_FORCED_REFETCH_GAP = 30 * 1000
+
+const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+/** How much longer to wait between polls when told to slow down (RFC 8628 §3.5). */
+const DEVICE_SLOW_DOWN = 5
+
+/** Resolves after `ms`, or at once when `signal` is aborted. */
+function wait(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal?.aborted) return resolve()
+    const done = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener("abort", done)
+      resolve()
+    }
+    const timer = setTimeout(done, ms)
+    signal?.addEventListener("abort", done, { once: true })
+  })
+}
+
+const isString = (v: unknown): v is string => typeof v === "string" && v !== ""
+const isSeconds = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v) && v >= 0
 
 /**
  * Discovery documents and JWKS, shared by every client in this process or
@@ -700,7 +883,213 @@ export function createClient(input: ClientInput): Client {
     return getJWKS(true)
   }
 
+  /** Send a request; every way it can fail comes back as an `AuthRequestError`. */
+  async function send(
+    path: string,
+    init: {
+      method: string
+      headers: Record<string, string>
+      body?: string
+      signal?: AbortSignal
+    },
+  ): Promise<{ err: false; json: Record<string, unknown> } | RequestFailure> {
+    let response: ResponseLike
+    try {
+      response = await f(issuer + path, init)
+    } catch (cause) {
+      return {
+        err: new AuthRequestError(
+          "network_error",
+          "The auth server could not be reached",
+          undefined,
+          { cause },
+        ),
+      }
+    }
+    const status = (response as { status?: number }).status
+    // An error page or an empty body is not JSON; the status still says enough
+    const body = await response.json().catch(() => undefined)
+    const json = (
+      body && typeof body === "object" && !Array.isArray(body) ? body : {}
+    ) as Record<string, unknown>
+    if (response.ok) return { err: false, json }
+    return {
+      err: new AuthRequestError(
+        isString(json.error) ? json.error : "invalid_response",
+        isString(json.error_description) ? json.error_description : undefined,
+        status,
+      ),
+    }
+  }
+
+  const post = (
+    path: string,
+    form: Record<string, string>,
+    signal?: AbortSignal,
+  ) =>
+    send(path, {
+      method: "POST",
+      headers: tokenHeaders,
+      body: new URLSearchParams(form).toString(),
+      ...(signal ? { signal } : {}),
+    })
+
+  const malformed = (what: string): RequestFailure => ({
+    err: new AuthRequestError("invalid_response", what),
+  })
+
+  function tokensFrom(
+    json: Record<string, unknown>,
+  ): ExchangeSuccess | RequestFailure {
+    if (
+      !isString(json.access_token) ||
+      !isString(json.refresh_token) ||
+      !isSeconds(json.expires_in)
+    )
+      return malformed("The token response is incomplete")
+    return {
+      err: false,
+      tokens: {
+        access: json.access_token,
+        refresh: json.refresh_token,
+        expiresIn: json.expires_in,
+      },
+    }
+  }
+
+  const device: Client["device"] = {
+    async start(opts) {
+      const asked = Date.now()
+      const res = await post("/device_authorization", {
+        client_id: input.clientID,
+        ...(opts?.scopes?.length ? { scope: opts.scopes.join(" ") } : {}),
+      })
+      if (res.err) return res
+      const { json } = res
+      if (
+        !isString(json.device_code) ||
+        !isString(json.user_code) ||
+        !isString(json.verification_uri) ||
+        !isSeconds(json.expires_in)
+      )
+        return malformed("The device authorization response is incomplete")
+      return {
+        err: false,
+        device: {
+          deviceCode: json.device_code,
+          userCode: json.user_code,
+          verificationURI: json.verification_uri,
+          ...(isString(json.verification_uri_complete)
+            ? { verificationURIComplete: json.verification_uri_complete }
+            : {}),
+          expiresAt: asked + json.expires_in * 1000,
+          // RFC 8628 §3.2: 5 when the server doesn't say
+          interval: isSeconds(json.interval) ? json.interval : 5,
+        },
+      }
+    },
+    async poll(authorization, opts) {
+      const signal = opts?.signal
+      const aborted = (): RequestFailure => ({
+        err: new AuthRequestError("aborted"),
+      })
+      // At least a second apart, whatever the server says
+      let interval = Math.max(1, authorization.interval)
+      while (true) {
+        if (signal?.aborted) return aborted()
+        const left = authorization.expiresAt - Date.now()
+        if (left <= 0)
+          return {
+            err: new AuthRequestError(
+              "expired_token",
+              "The device code has expired",
+            ),
+          }
+        // The last wait ends with the code, so a late approval still counts
+        await wait(Math.min(interval * 1000, left), signal)
+        if (signal?.aborted) return aborted()
+        const res = await post(
+          "/token",
+          {
+            grant_type: DEVICE_CODE_GRANT,
+            device_code: authorization.deviceCode,
+            client_id: input.clientID,
+          },
+          signal,
+        )
+        if (!res.err) return tokensFrom(res.json)
+        if (signal?.aborted) return aborted()
+        const { error, status } = res.err
+        if (error === "authorization_pending") continue
+        if (error === "slow_down") {
+          interval += DEVICE_SLOW_DOWN
+          continue
+        }
+        // Lost connection or a server in trouble: the user may be approving
+        // right now, so keep the code alive and back off (RFC 8628 §3.5)
+        if (
+          error === "network_error" ||
+          status === 429 ||
+          (status ?? 0) >= 500
+        ) {
+          interval = Math.min(interval * 2, 60)
+          continue
+        }
+        return res
+      }
+    },
+  }
+
   const result = {
+    device,
+    async clientCredentials(
+      opts?: ClientCredentialsOptions,
+    ): Promise<ClientCredentialsSuccess | RequestFailure> {
+      const res = await post("/token", {
+        grant_type: "client_credentials",
+        ...(opts?.scopes?.length ? { scope: opts.scopes.join(" ") } : {}),
+      })
+      if (res.err) return res
+      const { json } = res
+      if (!isString(json.access_token) || !isSeconds(json.expires_in))
+        return malformed("The token response is incomplete")
+      return {
+        err: false,
+        token: {
+          access: json.access_token,
+          expiresIn: json.expires_in,
+          scopes: isString(json.scope) ? json.scope.split(" ") : [],
+        },
+      }
+    },
+    async revoke(
+      token: string,
+      opts?: { hint?: "refresh_token" | "access_token" },
+    ): Promise<{ err: false } | RequestFailure> {
+      const res = await post("/token/revoke", {
+        token,
+        client_id: input.clientID,
+        ...(opts?.hint ? { token_type_hint: opts.hint } : {}),
+      })
+      return res.err ? res : { err: false }
+    },
+    async userinfo<T extends v1.StandardSchema>(
+      subject: T,
+      access: string,
+    ): Promise<{ err: false; properties: v1.InferOutput<T> } | RequestFailure> {
+      const res = await send("/userinfo", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${access}` },
+      })
+      if (res.err) return res
+      // Issuers before 1.0.63 answer a bad token with 200 and an error body
+      if (res.json.error === "invalid_token")
+        return { err: new AuthRequestError("invalid_token") }
+      const validated = await subject["~standard"].validate(res.json)
+      if (validated.issues)
+        return malformed("The user info doesn't fit the subject")
+      return { err: false, properties: validated.value as v1.InferOutput<T> }
+    },
     async authorize(
       redirectURI: string,
       response: "code" | "token",

@@ -150,6 +150,31 @@ export class InvalidAuthorizationCodeError extends Error {
 }
 
 /**
+ * A request to the auth server failed. Returned (never thrown) by the client's
+ * `clientCredentials`, `device`, `revoke` and `userinfo`.
+ */
+export class AuthRequestError extends Error {
+  constructor(
+    /**
+     * The OAuth error code the server answered with, e.g. `invalid_client` or
+     * `access_denied`. Or one of ours:
+     *
+     * - `network_error`: no answer arrived, see `cause`.
+     * - `invalid_response`: the answer was not what the protocol defines.
+     * - `expired_token`: the device code ran out before the user approved.
+     * - `aborted`: the caller's `signal` was aborted.
+     */
+    public readonly error: string,
+    public readonly description?: string,
+    /** The HTTP status, when an answer arrived. */
+    public readonly status?: number,
+    options?: ErrorOptions,
+  ) {
+    super(description ? `${error} - ${description}` : error, options)
+  }
+}
+
+/**
  * The requested scope is not allowed for this client.
  */
 export class InvalidScopeError extends OauthError {
