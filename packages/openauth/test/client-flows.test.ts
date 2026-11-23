@@ -13,7 +13,11 @@ import {
 } from "bun:test"
 import { decodeJwt } from "jose"
 import { object, string } from "valibot"
-import { createClient, type DeviceAuthorization } from "../src/client.js"
+import {
+  clearClientCache,
+  createClient,
+  type DeviceAuthorization,
+} from "../src/client.js"
 import { hashClientSecret } from "../src/client/secret-generator.js"
 import { DEVICE_CODE_GRANT } from "../src/device.js"
 import { AuthRequestError } from "../src/error.js"
@@ -45,6 +49,7 @@ function row(id: string, hash: string | null, grants: string[], extra = {}) {
 let auth: ReturnType<typeof issuer>
 let consoleError: ReturnType<typeof spyOn>
 beforeEach(async () => {
+  clearClientCache()
   consoleError = spyOn(console, "error").mockImplementation(mock())
   const secret = await hashClientSecret("s3cret")
   const rows: Record<string, any> = {
@@ -85,7 +90,12 @@ beforeEach(async () => {
     success: async (ctx: any) => ctx.subject("user", { userID: "u1" }),
   } as any)
 })
-afterEach(() => consoleError.mockRestore())
+afterEach(() => {
+  consoleError.mockRestore()
+  // Shared by the whole process and keyed by issuer: the next file's issuer has
+  // the same URL and other keys
+  clearClientCache()
+})
 
 const onIssuer = (a: any, b?: any) =>
   Promise.resolve(
