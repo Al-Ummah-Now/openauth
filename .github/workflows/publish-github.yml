@@ -124,14 +124,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name == 'workflow_run' && 'release' || github.event_name == 'workflow_dispatch' && 'dispatch' || 'pr' }}
           SHA: ${{ needs.gate.outputs.sha }}
-          BASE: ${{ github.event.pull_request.base.sha }}
           PR: ${{ github.event.pull_request.number }}
           BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
             --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' > "$RUNNER_TEMP/releases.txt"
-          node scripts/release/plan.mjs --event "$EVENT" --sha "$SHA" --base "$BASE" --pr "$PR" \
+          # A PR's base is the parent GitHub merged it into; the event's base can be older and
+          # would count master's newer changes as the PR's own
+          node scripts/release/plan.mjs --event "$EVENT" --sha "$SHA" --base "$SHA^1" --pr "$PR" \
             --run "$GITHUB_RUN_NUMBER" --bump "$BUMP" --repository "$GITHUB_REPOSITORY" \
             --releases "$RUNNER_TEMP/releases.txt" --notes "$RUNNER_TEMP/release_notes.md" >> "$GITHUB_OUTPUT"
 
