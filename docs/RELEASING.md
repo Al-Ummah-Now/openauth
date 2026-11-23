@@ -25,8 +25,8 @@ How `@al-ummah-now/openauth` is released. Everything is done by
    on `master` and passes the same gate.
 2. **Already released?** A commit whose tag has a GitHub release, or that is part of a newer release,
    publishes nothing.
-3. **Half done?** A commit that has a stable tag but no GitHub release is finished under the same
-   version: the tag stays, `npm publish` is skipped if the version is on the registry, and the release
+3. **Half done?** A commit that has a stable tag but no GitHub release, with no newer release, is
+   finished under the same version: the tag stays, `npm publish` is skipped if the version is on the registry, and the release
    is created.
 4. **Anything to publish?** Compared with the last release: `src/`, `bin/*.ts`, `script/`,
    `tsconfig.json`, or the consumer-visible part of `package.github.json` (not its version, scripts or

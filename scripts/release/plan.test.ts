@@ -183,6 +183,25 @@ describe("one release per commit, and a half-done one is finished", () => {
     expect(p.commits.map((c: any) => c.subject)).toEqual(["fix: b", "feat: a"])
   })
 
+  test("a half-done release is not finished once a newer one shipped", () => {
+    const old = commit("fix: a")
+    git("tag", "v1.0.63")
+    commit("fix: b")
+    git("tag", "v1.0.64")
+    const releases = [...released, "v1.0.64"]
+    expect(release(old, releases).skip).toContain("part of v1.0.64")
+    for (const bump of ["auto", "major"]) {
+      const p = plan({
+        event: "dispatch",
+        sha: old,
+        bump,
+        releases,
+        cwd,
+      }) as any
+      expect(p.skip).toContain("part of v1.0.64")
+    }
+  })
+
   test("a commit older than a finished release is skipped", () => {
     const old = commit("fix: a")
     commit("fix: b")
