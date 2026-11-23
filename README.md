@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://sst.dev/discord"><img alt="Discord" src="https://img.shields.io/discord/983865673656705025?style=flat-square&label=Discord" /></a>
   <a href="https://www.npmjs.com/package/@openauthjs/openauth"><img alt="npm" src="https://img.shields.io/npm/v/%40openauthjs%2Fcore?style=flat-square" /></a>
-  <a href="https://github.com/toolbeam/openauth/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/toolbeam/openauth/release.yml?style=flat-square&branch=master" /></a>
+  <a href="https://github.com/Al-Ummah-Now/openauth/actions/workflows/publish-github.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/Al-Ummah-Now/openauth/publish-github.yml?style=flat-square&branch=master" /></a>
 </p>
 
 ---
