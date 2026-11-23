@@ -20,9 +20,7 @@ cd packages/openauth && bun test                  # Run tests
 
 ## Release
 
-```bash
-bun run release      # Build and publish with changesets
-```
+Automatic on merge to `master`; see `docs/RELEASING.md`.
 
 ## Git
 

@@ -33,4 +33,4 @@ way. Do not use it beyond what is needed to show that it exists.
 
 ## Supported versions
 
-Only the latest release (the `main` branch) receives security fixes.
+Only the latest release of `@al-ummah-now/openauth` (built from the `master` branch) receives security fixes.
