@@ -216,7 +216,13 @@ import {
   UnauthorizedClientError,
   UnknownStateError,
 } from "./error.js"
-import { compactDecrypt, CompactEncrypt, jwtVerify, SignJWT } from "jose"
+import {
+  compactDecrypt,
+  CompactEncrypt,
+  errors,
+  jwtVerify,
+  SignJWT,
+} from "jose"
 import { Storage, StorageAdapter } from "./storage/storage.js"
 import {
   activeSigningKey,
@@ -226,6 +232,7 @@ import {
   signingKeys,
   verificationKeys,
 } from "./keys.js"
+import { authorizationServerMetadata } from "./discovery.js"
 import { validatePKCE } from "./pkce.js"
 import {
   type AuthorizationCodePayload,
@@ -249,7 +256,6 @@ import {
 import { clientRequiresPkce } from "./client/native.js"
 import {
   DEVICE_CODE_GRANT,
-  deviceDiscovery,
   registerDeviceFlow,
   type DeviceFlowOptions,
 } from "./device.js"
@@ -422,6 +428,11 @@ export interface IssuerInput<
    * headers (legacy behaviour).
    */
   issuer?: string
+  /**
+   * Where developers read about this server: `service_documentation` in the
+   * discovery documents (RFC 8414). Left out when not set.
+   */
+  documentation?: string
   /**
    * Enable the device authorization grant (RFC 8628) for clients registered
    * in `clientDb` with the `urn:ietf:params:oauth:grant-type:device_code`
@@ -852,7 +863,11 @@ export function issuer<
     const all = await allSigning()
     if (!header.kid) return activeSigningKey(all).public
     const key = verificationKeys(all).find((k) => k.id === header.kid)
-    if (!key) throw new Error("Token signed by an unknown or retired key")
+    // A JOSE error, so callers tell a bad token from a failure of ours
+    if (!key)
+      throw new errors.JWKSNoMatchingKey(
+        "Token signed by an unknown or retired key",
+      )
     return key.public
   }
   const encryptionKey = lazy(() => allEncryption().then((all) => all[0]))
@@ -1474,20 +1489,13 @@ export function issuer<
     }),
     async (c) => {
       const iss = issuer(c)
-      return c.json({
-        issuer: iss,
-        authorization_endpoint: `${iss}/authorize`,
-        token_endpoint: `${iss}/token`,
-        jwks_uri: `${iss}/.well-known/jwks.json`,
-        response_types_supported: ["code", "token"],
-        grant_types_supported: [
-          "authorization_code",
-          "refresh_token",
-          "client_credentials",
-          ...(deviceToken ? [DEVICE_CODE_GRANT] : []),
-        ],
-        ...(deviceToken ? deviceDiscovery(iss, input.device!) : {}),
-      })
+      return c.json(
+        authorizationServerMetadata(iss, {
+          clients: !!clientAuthenticator,
+          device: deviceToken ? input.device! : undefined,
+          documentation: input.documentation,
+        }),
+      )
     },
   )
 
@@ -2154,26 +2162,39 @@ export function issuer<
       )
     }
 
-    const result = await jwtVerify<{
-      mode: "access"
-      type: keyof SubjectSchema
-      properties: v1.InferInput<SubjectSchema[keyof SubjectSchema]>
-    }>(token, verifyKey, {
-      issuer: issuer(c),
-    })
+    // RFC 6750 §3.1: a token that can't be used is the caller's problem (401),
+    // never a server error. Failing to read our own keys still throws.
+    const invalidToken = () =>
+      c.json(
+        {
+          error: "invalid_token",
+          error_description: "Invalid token",
+        },
+        401,
+        { "WWW-Authenticate": 'Bearer error="invalid_token"' },
+      )
 
-    const validated = await input.subjects[result.payload.type][
-      "~standard"
-    ].validate(result.payload.properties)
-
-    if (!validated.issues && result.payload.mode === "access") {
-      return c.json(validated.value as SubjectSchema)
+    type Claims = { mode?: string; type?: string; properties?: unknown }
+    let payload: Claims
+    try {
+      payload = (
+        await jwtVerify<Claims>(token, verifyKey, { issuer: issuer(c) })
+      ).payload
+    } catch (err) {
+      if (err instanceof errors.JOSEError) return invalidToken()
+      throw err
     }
 
-    return c.json({
-      error: "invalid_token",
-      error_description: "Invalid token",
-    })
+    const schema =
+      payload.mode === "access" &&
+      payload.type !== undefined &&
+      Object.hasOwn(input.subjects, payload.type)
+        ? input.subjects[payload.type]
+        : undefined
+    if (!schema) return invalidToken()
+    const validated = await schema["~standard"].validate(payload.properties)
+    if (validated.issues) return invalidToken()
+    return c.json(validated.value as SubjectSchema)
   })
 
   /**
