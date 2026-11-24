@@ -994,7 +994,9 @@ export function createClient(input: ClientInput): Client {
         err: new AuthRequestError("aborted"),
       })
       // At least a second apart, whatever the server says
-      let interval = Math.max(1, authorization.interval)
+      let interval = isSeconds(authorization.interval)
+        ? Math.max(1, authorization.interval)
+        : 5
       while (true) {
         if (signal?.aborted) return aborted()
         const left = authorization.expiresAt - Date.now()
