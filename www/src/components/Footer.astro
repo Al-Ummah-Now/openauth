@@ -1,0 +1,101 @@
+---
+// The theme's footer (toolbeam-docs-theme 0.4.8) with our own credit: the theme's
+// says its author owns the pages. The MIT notice is SST's (LICENSE). The credit and
+// the date use gray-3, at least 4.5:1 on both backgrounds; the theme's dimmed text isn't.
+import config from "virtual:starlight/user-config"
+import { Icon } from "@astrojs/starlight/components"
+
+const { id, lang, editUrl, lastUpdated, entry } = Astro.locals.starlightRoute
+const template = id === "" ? "splash" : entry.data.template
+const social = config.social || []
+const github = social.find((s) => s.icon === "github")
+const discord = social.find((s) => s.icon === "discord")
+---
+
+{
+  template === "doc" && (
+    <footer class="doc">
+      <div class="meta sl-flex">
+        <div>
+          <a href={editUrl} target="_blank" class="sl-flex">
+            <Icon name="pencil" size="1em" />
+            Edit this page
+          </a>
+          {github && (
+            <a href={`${github.href}/issues/new`} target="_blank" class="sl-flex">
+              <Icon name={github.icon} size="1em" />
+              Find a bug? Open an issue
+            </a>
+          )}
+          {discord && (
+            <a href={discord.href} target="_blank" class="sl-flex">
+              <Icon name={discord.icon} size="1em" />
+              Join our Discord community
+            </a>
+          )}
+        </div>
+        <div>
+          <p>
+            MIT, &copy; <a target="_blank" href="https://sst.dev">SST</a>; fork
+            maintained by <a target="_blank" href="https://github.com/Al-Ummah-Now/openauth">Al Ummah Now</a>
+          </p>
+          {lastUpdated && (
+            <p title="Last updated">
+              <time datetime={lastUpdated.toISOString()}>
+                {lastUpdated.toLocaleDateString(lang, { dateStyle: "medium", timeZone: "UTC" })}
+              </time>
+            </p>
+          )}
+        </div>
+      </div>
+    </footer>
+  )
+}
+
+<style>
+  footer.doc {
+    margin-top: 3rem;
+    border-top: 1px solid var(--sl-color-border);
+  }
+  .meta {
+    gap: 0.75rem 3rem;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-block: 3rem 1.5rem;
+    font-size: var(--sl-text-sm);
+  }
+  .doc a,
+  .doc p {
+    padding-block: 0.125rem;
+  }
+  .doc a {
+    gap: 0.4375rem;
+    align-items: center;
+    text-decoration: none;
+    color: var(--sl-color-text);
+    font-size: var(--sl-text-sm);
+  }
+  .doc a svg {
+    opacity: 0.85;
+  }
+  .doc p,
+  .doc p a {
+    color: var(--sl-color-gray-3);
+  }
+  .doc p a {
+    text-decoration: underline;
+    text-underline-offset: 0.1875rem;
+  }
+  .doc p a {
+    white-space: nowrap;
+  }
+  @media (min-width: 50rem) {
+    /* beside the links, wrapping there rather than below them */
+    .meta > div:last-child {
+      flex: 1 1 14rem;
+    }
+    .doc p {
+      text-align: right;
+    }
+  }
+</style>

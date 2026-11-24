@@ -1,0 +1,10 @@
+/* On a phone a table's long identifiers and paths wrap; unwrapped, they push the last column out of the page */
+@media (max-width: 50rem) {
+  .sl-markdown-content table:not(:where(.not-content *)) :is(td, th) {
+    padding-inline: 0 0.625rem;
+    font-size: var(--sl-text-sm);
+  }
+  .sl-markdown-content table:not(:where(.not-content *)) :is(td, td code) {
+    overflow-wrap: anywhere;
+  }
+}
