@@ -156,6 +156,34 @@ describe("accessTokenClaims", () => {
     expect(JSON.stringify(errors.mock.calls)).not.toContain("1990-01-02")
   })
 
+  test("machine tokens never run the hook, at first or at refresh", async () => {
+    const hook = mock(async () => ({ extra: "never" }))
+    const { auth } = makeIssuer(hook)
+    const token = async (form: Record<string, string>) => {
+      const res = await auth.request(`${ISSUER}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(form),
+      })
+      return (await res.json()) as Record<string, string>
+    }
+    const first = await token({
+      grant_type: "client_credentials",
+      provider: "dummy",
+      client_id: "machine",
+      client_secret: "any",
+    })
+    expect(decodeJwt(first.access_token).extra).toBeUndefined()
+    const again = await token({
+      grant_type: "refresh_token",
+      refresh_token: first.refresh_token,
+      client_id: "machine",
+    })
+    expect(again.access_token).toBeDefined()
+    expect(decodeJwt(again.access_token).extra).toBeUndefined()
+    expect(hook).not.toHaveBeenCalled()
+  })
+
   test("without a hook, and with one that has nothing, nothing is added", async () => {
     const plain = decodeJwt((await signIn(makeIssuer())).tokens.access)
     const empty = decodeJwt(

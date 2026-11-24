@@ -247,6 +247,34 @@ describe("client authentication", () => {
       expect((await res.json()).access_token).toBeString()
     })
 
+    test("client_credentials: a machine token never has extra claims", async () => {
+      let calls = 0
+      const hooked = issuer(
+        baseConfig({
+          clientDb: db,
+          accessTokenClaims: async () => {
+            calls++
+            return { extra: "never" }
+          },
+        }) as any,
+      )
+      const request = (app: typeof auth) =>
+        app.request(
+          "https://auth.example.com/token",
+          form({
+            grant_type: "client_credentials",
+            client_id: "conf",
+            client_secret: "s3cret",
+          }),
+        )
+      const names = async (app: typeof auth) =>
+        Object.keys(
+          decodeJwt((await (await request(app)).json()).access_token),
+        ).sort()
+      expect(await names(hooked)).toEqual(await names(auth))
+      expect(calls).toBe(0)
+    })
+
     test("client_credentials: NULL-secret client rejected", async () => {
       const res = await auth.request(
         "https://auth.example.com/token",

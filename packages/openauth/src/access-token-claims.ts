@@ -1,8 +1,10 @@
 /**
  * Extra top-level access-token claims an issuer adds (`accessTokenClaims`).
  *
- * They are computed for every access token, at sign-in and at each refresh, and stored nowhere: not on the
- * refresh token, not in the subject (whose hash is the subject id), not in `/userinfo`.
+ * Only for a person's access tokens: those of a sign-in, which carry `auth_time`, at the sign-in and at each
+ * refresh. A machine's token (`client_credentials`, with or without a provider) never runs the hook and is
+ * unchanged. What the hook returns is stored nowhere: not on the refresh token, not in the subject (whose hash
+ * is the subject id), not in `/userinfo`.
  */
 
 /** Claims the issuer itself sets, or that have a standard meaning: a hook never sets these. */
@@ -32,13 +34,14 @@ const RESERVED = new Set([
 ])
 
 export interface AccessTokenClaimsInput {
-  /** The subject's type, e.g. "user" (an M2M token has its client's type) */
+  /** The subject's type, e.g. "user" */
   type: string
   properties: any
   subject: string
   clientID: string
 }
 
+/** Extra claims for a person's access token; never called for a machine's. */
 export type AccessTokenClaims = (
   input: AccessTokenClaimsInput,
 ) => Promise<Record<string, string | number | boolean> | undefined>
