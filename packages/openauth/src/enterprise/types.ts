@@ -171,7 +171,7 @@ export interface EnterpriseIssuerConfig<
    */
   documentation?: string
 
-  /** Extra top-level access-token claims. See `IssuerInput.accessTokenClaims`. */
+  /** Extra top-level claims for a person's access tokens. See `IssuerInput.accessTokenClaims`. */
   accessTokenClaims?: import("../access-token-claims.js").AccessTokenClaims
 
   /**
