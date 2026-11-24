@@ -403,6 +403,16 @@ describe("device", () => {
     expect(failure(res).error).toBe("expired_token")
   })
 
+  test("an interval that is no number waits the default, never in a loop", async () => {
+    for (const interval of [NaN, Infinity, -1, undefined as any]) {
+      const { result, waits } = await withFastTimers(() =>
+        scripted(granted).device.poll(device({ interval })),
+      )
+      expect(result.err).toBe(false)
+      expect(waits).toEqual([5000])
+    }
+  })
+
   test("the last wait ends with the code, not an interval later", async () => {
     const { result, waits } = await withFastTimers(() =>
       scripted(granted).device.poll(
