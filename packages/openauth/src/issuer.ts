@@ -217,6 +217,10 @@ import {
   UnknownStateError,
 } from "./error.js"
 import { compactDecrypt, CompactEncrypt, jwtVerify, SignJWT } from "jose"
+import {
+  extraAccessTokenClaims,
+  type AccessTokenClaims,
+} from "./access-token-claims.js"
 import { Storage, StorageAdapter } from "./storage/storage.js"
 import {
   activeSigningKey,
@@ -427,6 +431,12 @@ export interface IssuerInput<
    * discovery documents (RFC 8414). Left out when not set.
    */
   documentation?: string
+  /**
+   * Extra top-level claims for access tokens, computed for every token at
+   * sign-in and at each refresh. Never stored, never part of the subject.
+   * A standard claim can't be set, and an error adds none.
+   */
+  accessTokenClaims?: AccessTokenClaims
   /**
    * Enable the device authorization grant (RFC 8628) for clients registered
    * in `clientDb` with the `urn:ietf:params:oauth:grant-type:device_code`
@@ -1297,8 +1307,15 @@ export function issuer<
       )
     }
     const accessTimeUsed = Math.floor((value.timeUsed ?? Date.now()) / 1000)
+    const extraClaims = await extraAccessTokenClaims(input.accessTokenClaims, {
+      type: value.type,
+      properties: value.properties,
+      subject: value.subject,
+      clientID: value.clientID,
+    })
     const tokens = {
       access: await new SignJWT({
+        ...extraClaims,
         mode: "access",
         type: value.type,
         properties: value.properties,

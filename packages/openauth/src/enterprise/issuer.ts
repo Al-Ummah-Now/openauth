@@ -634,6 +634,7 @@ export function createMultiTenantIssuer<
     ttl: config.ttl,
     issuer: configuredIssuer,
     documentation: config.documentation,
+    accessTokenClaims: config.accessTokenClaims,
     pkce: config.pkce,
     requireClientAuthentication: config.requireClientAuthentication,
     clientDb: config.clientDb,
@@ -1198,6 +1199,13 @@ export function createMultiTenantIssuer<
         console.error("Failed to load signing keys for discovery:", err)
       }
 
+      let extraClaims: string[] = []
+      try {
+        extraClaims = (await config.extraClaimsSupported?.()) ?? []
+      } catch {
+        console.error("extraClaimsSupported failed; none listed")
+      }
+
       return c.json({
         ...authorizationServerMetadata(iss, {
           clients: !!config.clientDb,
@@ -1219,6 +1227,7 @@ export function createMultiTenantIssuer<
           "auth_time",
           "amr",
           "sid",
+          ...extraClaims,
         ],
         claim_types_supported: ["normal"],
         // prompt=consent has no consent screen, so it is not listed

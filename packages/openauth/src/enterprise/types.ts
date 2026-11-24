@@ -171,6 +171,16 @@ export interface EnterpriseIssuerConfig<
    */
   documentation?: string
 
+  /** Extra top-level access-token claims. See `IssuerInput.accessTokenClaims`. */
+  accessTokenClaims?: import("../access-token-claims.js").AccessTokenClaims
+
+  /**
+   * Names of the extra claims, for `claims_supported` in the OpenID discovery
+   * document. Read for each document, so it can follow a setting; an error
+   * lists none.
+   */
+  extraClaimsSupported?: () => Promise<string[]>
+
   /**
    * Device authorization grant (RFC 8628). See `IssuerInput.device`.
    * Requires `clientDb`.
