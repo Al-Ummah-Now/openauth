@@ -66,7 +66,7 @@ If you need to know **who** performed an action, use user tokens. If you need to
 Configure M2M authentication when creating your issuer:
 
 ```ts title="issuer.ts"
-import { createMultiTenantIssuer } from "@openauthjs/openauth/enterprise"
+import { createMultiTenantIssuer } from "@al-ummah-now/openauth/enterprise"
 
 const { app } = createMultiTenantIssuer({
   // ... other config
@@ -385,7 +385,7 @@ const billing = await callAdminAPI("/admin/billing/invoices")
 ### Validating M2M Tokens in Your API
 
 ```ts title="middleware.ts"
-import { createClient } from "@openauthjs/openauth/client"
+import { createClient } from "@al-ummah-now/openauth/client"
 import { jwtVerify } from "jose"
 
 const client = createClient({
@@ -534,13 +534,13 @@ Use `verifyM2MToken` for server-side validation of M2M tokens with full error ha
 ### verifyM2MToken Function
 
 ```ts title="Import"
-import { verifyM2MToken, hasScope, hasAllScopes } from "@openauthjs/openauth/m2m"
+import { verifyM2MToken, hasScope, hasAllScopes } from "@al-ummah-now/openauth/m2m"
 ```
 
 ### Basic Usage
 
 ```ts title="verify-token.ts"
-import { verifyM2MToken } from "@openauthjs/openauth/m2m"
+import { verifyM2MToken } from "@al-ummah-now/openauth/m2m"
 import { importSPKI } from "jose"
 
 const publicKey = await importSPKI(publicKeyPem, "ES256")
@@ -610,7 +610,7 @@ interface VerifyM2MTokenError {
 ### Scope Helper Functions
 
 ```ts
-import { hasScope, hasAllScopes, hasAnyScope } from "@openauthjs/openauth/m2m"
+import { hasScope, hasAllScopes, hasAnyScope } from "@al-ummah-now/openauth/m2m"
 
 const result = await verifyM2MToken({ ... })
 
@@ -635,7 +635,7 @@ if (result.valid) {
 ### Middleware Example
 
 ```ts title="m2m-middleware.ts"
-import { verifyM2MToken, hasAllScopes } from "@openauthjs/openauth/m2m"
+import { verifyM2MToken, hasAllScopes } from "@al-ummah-now/openauth/m2m"
 import { importSPKI } from "jose"
 
 // Load public key once at startup

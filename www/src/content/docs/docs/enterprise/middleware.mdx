@@ -1,6 +1,6 @@
 ---
 title: Middleware Reference
-editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/middleware/index.ts
+editUrl: https://github.com/Al-Ummah-Now/openauth/blob/master/packages/openauth/src/middleware/index.ts
 description: Reference documentation for OpenAuth enterprise middleware including authentication, authorization, tenant isolation, and rate limiting.
 ---
 
@@ -24,7 +24,7 @@ import {
   requireTenantMatch,
   rateLimit,
   onAuthError
-} from "@openauthjs/openauth/middleware"
+} from "@al-ummah-now/openauth/middleware"
 
 const app = new Hono()
 
@@ -88,7 +88,7 @@ The Authorization header value.
 Extracts the bearer token from an Authorization header.
 
 ```ts
-import { extractBearerToken } from "@openauthjs/openauth/middleware"
+import { extractBearerToken } from "@al-ummah-now/openauth/middleware"
 
 const token = extractBearerToken("Bearer eyJhbGciOiJSUzI1NiIs...")
 // Returns: "eyJhbGciOiJSUzI1NiIs..."
@@ -122,7 +122,7 @@ Configuration options for bearer authentication.
 Creates middleware that validates JWT bearer tokens from the Authorization header.
 
 ```ts
-import { bearerAuth } from "@openauthjs/openauth/middleware"
+import { bearerAuth } from "@al-ummah-now/openauth/middleware"
 import { importSPKI } from "jose"
 
 const app = new Hono()
@@ -251,7 +251,7 @@ The required scope to check.
 Check if granted scopes include a required scope, with wildcard matching support.
 
 ```ts
-import { hasScope } from "@openauthjs/openauth/middleware"
+import { hasScope } from "@al-ummah-now/openauth/middleware"
 
 // Exact match
 hasScope(["users:read", "users:write"], "users:read")
@@ -306,7 +306,7 @@ Array of required scopes (all must be present).
 Check if granted scopes include ALL required scopes.
 
 ```ts
-import { hasAllScopes } from "@openauthjs/openauth/middleware"
+import { hasAllScopes } from "@al-ummah-now/openauth/middleware"
 
 hasAllScopes(
   ["users:read", "users:write", "posts:read"],
@@ -352,7 +352,7 @@ Array of required scopes (at least one must be present).
 Check if granted scopes include ANY of the required scopes.
 
 ```ts
-import { hasAnyScope } from "@openauthjs/openauth/middleware"
+import { hasAnyScope } from "@al-ummah-now/openauth/middleware"
 
 hasAnyScope(
   ["users:read"],
@@ -389,7 +389,7 @@ One or more required scopes. ALL must be present.
 Creates middleware that requires ALL specified scopes.
 
 ```ts
-import { requireScope } from "@openauthjs/openauth/middleware"
+import { requireScope } from "@al-ummah-now/openauth/middleware"
 
 // Single scope
 app.get("/users", requireScope("users:read"), handler)
@@ -425,7 +425,7 @@ One or more scopes. At least ONE must be present.
 Creates middleware that requires ANY of the specified scopes.
 
 ```ts
-import { requireAnyScope } from "@openauthjs/openauth/middleware"
+import { requireAnyScope } from "@al-ummah-now/openauth/middleware"
 
 // Allow either admin or moderator
 app.post("/posts/:id/approve",
@@ -461,7 +461,7 @@ Required scopes when condition is true.
 Creates middleware that conditionally requires scopes based on the request.
 
 ```ts
-import { requireScopeIf } from "@openauthjs/openauth/middleware"
+import { requireScopeIf } from "@al-ummah-now/openauth/middleware"
 
 // Require write scope only for mutating methods
 app.use("/resources/*",
@@ -507,7 +507,7 @@ Optional configuration.
 Creates middleware that ensures tenant ID matches between the token and request.
 
 ```ts
-import { requireTenantMatch } from "@openauthjs/openauth/middleware"
+import { requireTenantMatch } from "@al-ummah-now/openauth/middleware"
 
 // Basic usage - checks X-Tenant-ID header
 app.use("/api/*", requireTenantMatch())
@@ -603,7 +603,7 @@ The base domain (e.g., "example.com").
 Creates middleware that extracts tenant ID from the subdomain.
 
 ```ts
-import { tenantFromSubdomain } from "@openauthjs/openauth/middleware"
+import { tenantFromSubdomain } from "@al-ummah-now/openauth/middleware"
 
 // acme.example.com -> tenantId = "acme"
 // www.example.com -> no tenantId set
@@ -636,7 +636,7 @@ The field name in the request body. Default: `"tenant_id"`.
 Creates middleware that ensures the tenant ID in the request body matches the token.
 
 ```ts
-import { requireBodyTenantMatch } from "@openauthjs/openauth/middleware"
+import { requireBodyTenantMatch } from "@al-ummah-now/openauth/middleware"
 
 // Validates tenant_id field in JSON body
 app.post("/resources", requireBodyTenantMatch(), handler)
@@ -681,7 +681,7 @@ Optional advanced options.
 Creates rate limiting middleware.
 
 ```ts
-import { rateLimit } from "@openauthjs/openauth/middleware"
+import { rateLimit } from "@al-ummah-now/openauth/middleware"
 
 // 100 requests per 60 seconds
 app.use("/api/*", rateLimit({
@@ -772,7 +772,7 @@ const memoryStore: RateLimitStore
 Default in-memory rate limit store. Suitable for single-instance deployments.
 
 ```ts
-import { rateLimit, memoryStore } from "@openauthjs/openauth/middleware"
+import { rateLimit, memoryStore } from "@al-ummah-now/openauth/middleware"
 
 app.use("/api/*", rateLimit(
   { max: 100, window: 60 },
@@ -806,7 +806,7 @@ Cloudflare KV namespace for storing rate limit data.
 Create a KV-based rate limit store for Cloudflare Workers.
 
 ```ts
-import { rateLimit, kvStore } from "@openauthjs/openauth/middleware"
+import { rateLimit, kvStore } from "@al-ummah-now/openauth/middleware"
 
 export default {
   async fetch(request, env) {
@@ -853,7 +853,7 @@ Optional store configuration.
 Apply different rate limits to different endpoints.
 
 ```ts
-import { endpointRateLimit } from "@openauthjs/openauth/middleware"
+import { endpointRateLimit } from "@al-ummah-now/openauth/middleware"
 
 app.use("/api/*", endpointRateLimit({
   // Specific endpoint limits
@@ -893,7 +893,7 @@ import {
   InsufficientScopeError,
   TenantMismatchError,
   RateLimitExceededError
-} from "@openauthjs/openauth/middleware"
+} from "@al-ummah-now/openauth/middleware"
 ```
 
 | Error | Code | Status | Description |
@@ -921,7 +921,7 @@ authErrorHandler(): (error: Error, c: Context) => Response
 Creates an error handler for use with middleware error catching.
 
 ```ts
-import { authErrorHandler } from "@openauthjs/openauth/middleware"
+import { authErrorHandler } from "@al-ummah-now/openauth/middleware"
 
 // For catching errors in specific routes
 app.use("/api/*", async (c, next) => {
@@ -957,7 +957,7 @@ The Hono context.
 Error handler for use with Hono's `app.onError`.
 
 ```ts
-import { onAuthError } from "@openauthjs/openauth/middleware"
+import { onAuthError } from "@al-ummah-now/openauth/middleware"
 
 const app = new Hono()
 app.onError(onAuthError)
@@ -1026,7 +1026,7 @@ Combined configuration for all middleware.
 Creates a complete middleware stack for enterprise APIs.
 
 ```ts
-import { enterpriseAuth } from "@openauthjs/openauth/middleware"
+import { enterpriseAuth } from "@al-ummah-now/openauth/middleware"
 
 const middlewares = enterpriseAuth({
   getPublicKey: async () => publicKey,
@@ -1159,7 +1159,7 @@ import {
   bearerAuth,
   requireScope,
   requireTenantMatch
-} from "@openauthjs/openauth/middleware"
+} from "@al-ummah-now/openauth/middleware"
 
 const authStack = applyMiddleware(
   bearerAuth({ getPublicKey, issuer }),
@@ -1189,7 +1189,7 @@ import {
   onAuthError,
   requireScope,
   kvStore
-} from "@openauthjs/openauth/middleware"
+} from "@al-ummah-now/openauth/middleware"
 
 type Env = {
   PUBLIC_KEY: string

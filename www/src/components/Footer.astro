@@ -9,7 +9,6 @@ const { id, lang, editUrl, lastUpdated, entry } = Astro.locals.starlightRoute
 const template = id === "" ? "splash" : entry.data.template
 const social = config.social || []
 const github = social.find((s) => s.icon === "github")
-const discord = social.find((s) => s.icon === "discord")
 ---
 
 {
@@ -17,20 +16,16 @@ const discord = social.find((s) => s.icon === "discord")
     <footer class="doc">
       <div class="meta sl-flex">
         <div>
-          <a href={editUrl} target="_blank" class="sl-flex">
-            <Icon name="pencil" size="1em" />
-            Edit this page
-          </a>
-          {github && (
-            <a href={`${github.href}/issues/new`} target="_blank" class="sl-flex">
-              <Icon name={github.icon} size="1em" />
-              Find a bug? Open an issue
+          {editUrl && (
+            <a href={editUrl} target="_blank" class="sl-flex">
+              <Icon name="pencil" size="1em" />
+              Edit this page
             </a>
           )}
-          {discord && (
-            <a href={discord.href} target="_blank" class="sl-flex">
-              <Icon name={discord.icon} size="1em" />
-              Join our Discord community
+          {github && (
+            <a href={github.href} target="_blank" class="sl-flex">
+              <Icon name={github.icon} size="1em" />
+              Source on GitHub
             </a>
           )}
         </div>
@@ -85,8 +80,6 @@ const discord = social.find((s) => s.icon === "discord")
   .doc p a {
     text-decoration: underline;
     text-underline-offset: 0.1875rem;
-  }
-  .doc p a {
     white-space: nowrap;
   }
   @media (min-width: 50rem) {

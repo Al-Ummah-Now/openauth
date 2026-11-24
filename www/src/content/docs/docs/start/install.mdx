@@ -1,0 +1,53 @@
+---
+title: Install
+description: Install the fork from GitHub Packages.
+---
+
+This site documents the fork of [OpenAuth](https://github.com/toolbeam/openauth) that Al Ummah Now maintains. It is published to GitHub Packages as `@al-ummah-now/openauth`. The npm registry has upstream's package, not this one.
+
+---
+
+## 1. Point npm at GitHub Packages
+
+GitHub Packages asks for a token even for a public package. Create a [personal access token (classic)](https://github.com/settings/tokens) with only the `read:packages` scope, and put it in your environment as `NODE_AUTH_TOKEN`.
+
+Then add an `.npmrc` next to your `package.json`. It names the variable, so it is safe to commit.
+
+```ini title=".npmrc"
+@al-ummah-now:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+In GitHub Actions of an Al Ummah Now repository, the job's own token is enough.
+
+```yaml title=".github/workflows/ci.yml"
+permissions:
+  contents: read
+  packages: read
+
+steps:
+  - run: npm ci
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+---
+
+## 2. Install it
+
+```bash
+npm install @al-ummah-now/openauth
+```
+
+Pin an exact version. Releases are listed on [GitHub](https://github.com/Al-Ummah-Now/openauth/releases).
+
+---
+
+## Coming from upstream
+
+The exports have the same paths, so only the package name changes.
+
+```diff
+- import { issuer } from "@openauthjs/openauth"
++ import { issuer } from "@al-ummah-now/openauth"
+```

@@ -1,6 +1,6 @@
 ---
 title: Issuer
-editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/issuer.ts
+editUrl: https://github.com/Al-Ummah-Now/openauth/blob/master/packages/openauth/src/issuer.ts
 description: Reference doc for the OpenAuth server.
 ---
 
@@ -15,7 +15,7 @@ designed to run anywhere.
 The `issuer` function requires a few things:
 
 ```ts title="issuer.ts"
-import { issuer } from "@openauthjs/openauth"
+import { issuer } from "@al-ummah-now/openauth"
 
 const app = issuer({
   providers: { ... },
@@ -31,8 +31,8 @@ You start by specifying the auth providers you are going to use. Let's say you w
 to be able to authenticate with GitHub and with their email and password.
 
 ```ts title="issuer.ts"
-import { GithubProvider } from "@openauthjs/openauth/provider/github"
-import { PasswordProvider } from "@openauthjs/openauth/provider/password"
+import { GithubProvider } from "@al-ummah-now/openauth/provider/github"
+import { PasswordProvider } from "@al-ummah-now/openauth/provider/password"
 
 const app = issuer({
   providers: {
@@ -80,7 +80,7 @@ You define the shape of these in the `subjects` field.
 
 ```ts title="subjects.ts"
 import { object, string } from "valibot"
-import { createSubjects } from "@openauthjs/openauth/subject"
+import { createSubjects } from "@al-ummah-now/openauth/subject"
 
 const subjects = createSubjects({
   user: object({
@@ -146,9 +146,135 @@ issuer(input)
 - <p><code class="key">input</code> [<code class="type">IssuerInput</code>](#issuerinput)</p>
 </Section>
 <InlineSection>
-**Returns** <code class="type">Hono</code>
+**Returns** <code class="primitive">any</code>
 </InlineSection>
 Create an OpenAuth server, a Hono app.
+</Segment>
+### normalizeIssuer
+<Segment>
+<Section type="signature">
+```ts
+normalizeIssuer(value?)
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">value?</code> <code class="primitive">string</code></p>
+</Section>
+<InlineSection>
+**Returns** <code class="primitive">string</code>
+</InlineSection>
+Normalize a configured issuer URL: validates it and strips trailing slashes.
+Returns undefined when not configured.
+</Segment>
+### unknownStateResponse
+<Segment>
+<Section type="signature">
+```ts
+unknownStateResponse(err,req,fallbackUrl?,theme?)
+```
+</Section>
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">err</code> [<code class="type">UnknownStateError</code>](/docs/issuer#unknownstateerror)</p>
+- <p><code class="key">req</code> <code class="type">Request</code></p>
+- <p><code class="key">fallbackUrl?</code> <code class="primitive">string</code></p>
+- <p><code class="key">theme?</code> [<code class="type">Theme</code>](/docs/ui/theme#theme)</p>
+</Section>
+<InlineSection>
+**Returns** <code class="type">Response</code>
+</InlineSection>
+The response for an unrecoverable sign-in state: a completed flow sends the
+user back to the app (they are signed in); anything else renders the
+friendly, localized restart page.
+</Segment>
+## AuthorizationState
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">audience?</code>](#authorizationstate.audience) <code class="primitive">string</code></p>
+- <p>[<code class="key">client_id</code>](#authorizationstate.client_id) <code class="primitive">string</code></p>
+- <p>[<code class="key">flow?</code>](#authorizationstate.flow) <code class="primitive">string</code></p>
+- <p>[<code class="key">pkce?</code>](#authorizationstate.pkce) <code class="primitive">Object</code></p>
+  - <p>[<code class="key">challenge</code>](#pkce.challenge) <code class="primitive">string</code></p>
+  - <p>[<code class="key">method</code>](#pkce.method) <code class="symbol">&ldquo;</code><code class="primitive">S256</code><code class="symbol">&rdquo;</code></p>
+- <p>[<code class="key">redirect_uri</code>](#authorizationstate.redirect_uri) <code class="primitive">string</code></p>
+- <p>[<code class="key">response_type</code>](#authorizationstate.response_type) <code class="primitive">string</code></p>
+- <p>[<code class="key">state</code>](#authorizationstate.state) <code class="primitive">string</code></p>
+</Section>
+</Segment>
+<NestedTitle id="authorizationstate.audience" Tag="h4" parent="AuthorizationState.">audience?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="authorizationstate.client_id" Tag="h4" parent="AuthorizationState.">client_id</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="authorizationstate.flow" Tag="h4" parent="AuthorizationState.">flow?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The flow id this authorization belongs to (see `flow.ts`). Set on the
+legacy `authorization` cookie so it is only used by its own tab.
+</Segment>
+<NestedTitle id="authorizationstate.pkce" Tag="h4" parent="AuthorizationState.">pkce?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="pkce.challenge" Tag="h5" parent="AuthorizationState.pkce.">challenge</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="pkce.method" Tag="h5" parent="AuthorizationState.pkce.">method</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="symbol">&ldquo;</code><code class="primitive">S256</code><code class="symbol">&rdquo;</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="authorizationstate.redirect_uri" Tag="h4" parent="AuthorizationState.">redirect_uri</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="authorizationstate.response_type" Tag="h4" parent="AuthorizationState.">response_type</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="authorizationstate.state" Tag="h4" parent="AuthorizationState.">state</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
 </Segment>
 ## IssuerInput
 <Segment>
@@ -167,19 +293,32 @@ Create an OpenAuth server, a Hono app.
   - <p>[<code class="key">maxAge?</code>](#cors.maxage) <code class="primitive">number</code></p>
   - <p>[<code class="key">methods?</code>](#cors.methods) <code class="primitive">string</code><code class="symbol">[]</code></p>
   - <p>[<code class="key">origins</code>](#cors.origins) <code class="primitive">string</code><code class="symbol">[]</code></p>
+- <p>[<code class="key">device?</code>](#issuerinput.device) <code class="type">DeviceFlowOptions</code></p>
+- <p>[<code class="key">documentation?</code>](#issuerinput.documentation) <code class="primitive">string</code></p>
+- <p>[<code class="key">issuer?</code>](#issuerinput.issuer) <code class="primitive">string</code></p>
 - <p>[<code class="key">m2m?</code>](#issuerinput.m2m) <code class="type">M2MConfig</code></p>
+- <p>[<code class="key">nativePasskey?</code>](#issuerinput.nativepasskey) <code class="type">NativePasskeyOptions</code></p>
+- <p>[<code class="key">pkce?</code>](#issuerinput.pkce) <code class="primitive">Object</code></p>
+  - <p>[<code class="key">requireForCodeExchange?</code>](#pkce.requireforcodeexchange) <code class="primitive">boolean</code><code class="symbol"> | </code><code class="primitive">any</code><code class="symbol"> | </code><code class="primitive">(clientId: <code class="primitive">string</code>) => <code class="primitive">boolean</code></code></p>
+  - <p>[<code class="key">requireForPublicClients?</code>](#pkce.requireforpublicclients) <code class="primitive">boolean</code></p>
 - <p>[<code class="key">providers</code>](#issuerinput.providers) <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="type">Provider</code><code class="symbol">&gt;</code></p>
+- <p>[<code class="key">refresh?</code>](#issuerinput.refresh) [<code class="type">RefreshHook</code>](#refreshhook)</p>
+- <p>[<code class="key">requireClientAuthentication?</code>](#issuerinput.requireclientauthentication) <code class="primitive">any</code><code class="symbol"> | </code><code class="primitive">(clientId: <code class="primitive">string</code>) => <code class="primitive">boolean</code></code></p>
+- <p>[<code class="key">restart?</code>](#issuerinput.restart) <code class="primitive">Object</code></p>
+  - <p>[<code class="key">fallbackUrl?</code>](#restart.fallbackurl) <code class="primitive">string</code></p>
 - <p>[<code class="key">storage?</code>](#issuerinput.storage) <code class="type">StorageAdapter</code></p>
 - <p>[<code class="key">subjects</code>](#issuerinput.subjects) [<code class="type">SubjectSchema</code>](/docs/subject#subjectschema)</p>
-- <p>[<code class="key">theme?</code>](#issuerinput.theme) [<code class="type">Theme</code>](#theme)</p>
+- <p>[<code class="key">theme?</code>](#issuerinput.theme) [<code class="type">Theme</code>](/docs/ui/theme#theme)</p>
 - <p>[<code class="key">ttl?</code>](#issuerinput.ttl) <code class="primitive">Object</code></p>
   - <p>[<code class="key">access?</code>](#ttl.access) <code class="primitive">number</code></p>
+  - <p>[<code class="key">code?</code>](#ttl.code) <code class="primitive">number</code></p>
   - <p>[<code class="key">refresh?</code>](#ttl.refresh) <code class="primitive">number</code></p>
   - <p>[<code class="key">retention?</code>](#ttl.retention) <code class="primitive">number</code></p>
   - <p>[<code class="key">reuse?</code>](#ttl.reuse) <code class="primitive">number</code></p>
-- <p>[<code class="key">allow?</code>](#issuerinput.allow) <code class="primitive">(input: <code class="symbol">&lcub; </code><code class="key">audience</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">clientID</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">redirectURI</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol"> &rcub;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code></code></p>
+- <p>[<code class="key">allow?</code>](#issuerinput.allow) <code class="primitive">(input: <code class="symbol">&lcub; </code><code class="key">audience</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">clientID</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">redirectURI</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol"> &rcub;</code>, req: <code class="type">Request</code>, c?: <code class="type">Context</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code></code></p>
+- <p>[<code class="key">error?</code>](#issuerinput.error) <code class="primitive">(error: [<code class="type">UnknownStateError</code>](/docs/issuer#unknownstateerror), req: <code class="type">Request</code>, render?: <code class="type">RenderOptions</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
 - <p>[<code class="key">select?</code>](#issuerinput.select) <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
-- <p>[<code class="key">success</code>](#issuerinput.success) <code class="primitive">(response: [<code class="type">OnSuccessResponder</code>](#onsuccessresponder), input: <code class="type">Result</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
+- <p>[<code class="key">success</code>](#issuerinput.success) <code class="primitive">(response: [<code class="type">OnSuccessResponder</code>](#onsuccessresponder), input: <code class="type">Result</code>, req: <code class="type">Request</code>, c?: <code class="type">Context</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
 </Section>
 </Segment>
 <NestedTitle id="issuerinput.audit" Tag="h4" parent="IssuerInput.">audit?</NestedTitle>
@@ -327,6 +466,46 @@ issuer({
 </InlineSection>
 </Section>
 </Segment>
+<NestedTitle id="issuerinput.device" Tag="h4" parent="IssuerInput.">device?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="type">DeviceFlowOptions</code>
+</InlineSection>
+</Section>
+Enable the device authorization grant (RFC 8628) for clients registered
+in `clientDb` with the `urn:ietf:params:oauth:grant-type:device_code`
+grant. Adds `/device_authorization`, `/activate` (en/ar) and the grant
+on `/token`. Requires `clientDb`.
+</Segment>
+<NestedTitle id="issuerinput.documentation" Tag="h4" parent="IssuerInput.">documentation?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Where developers read about this server: `service_documentation` in the
+discovery documents (RFC 8414). Left out when not set.
+</Segment>
+<NestedTitle id="issuerinput.issuer" Tag="h4" parent="IssuerInput.">issuer?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Fixed issuer URL, e.g. `https://auth.example.com`.
+
+When set, it is used as the `iss` claim of issued tokens, in the
+`/.well-known/oauth-authorization-server` document and when verifying
+tokens. Request-derived values (Host, `X-Forwarded-Host`,
+`X-Forwarded-Proto`, `X-Forwarded-Port`) are then ignored for the issuer
+and for the default redirect_uri allow check.
+
+When not set, the issuer is derived from the request URL and forwarded
+headers (legacy behaviour).
+</Segment>
 <NestedTitle id="issuerinput.m2m" Tag="h4" parent="IssuerInput.">m2m?</NestedTitle>
 <Segment>
 <Section type="parameters">
@@ -348,6 +527,60 @@ issuer({
 })
 ```
 </Segment>
+<NestedTitle id="issuerinput.nativepasskey" Tag="h4" parent="IssuerInput.">nativePasskey?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="type">NativePasskeyOptions</code>
+</InlineSection>
+</Section>
+Native passkey sign-in (`/native/passkey/options` and `/verify`): native
+apps run the WebAuthn ceremony with the platform API and get an
+authorization code to exchange at `/token` with PKCE. See
+`native-passkey.ts`.
+</Segment>
+<NestedTitle id="issuerinput.pkce" Tag="h4" parent="IssuerInput.">pkce?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+PKCE policy. Only `S256` is ever accepted.
+</Segment>
+<NestedTitle id="pkce.requireforcodeexchange" Tag="h5" parent="IssuerInput.pkce.">requireForCodeExchange?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code><code class="symbol"> | </code><code class="primitive">any</code><code class="symbol"> | </code><code class="primitive">(clientId: <code class="primitive">string</code>) => <code class="primitive">boolean</code></code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** false
+</InlineSection>
+Require PKCE or client authentication on every authorization code
+exchange: a code issued without PKCE is only redeemed by a client that
+authenticates (client_secret). Turn on once every client sends PKCE.
+Independently of this flag, client credentials that are presented must
+be valid.
+</Segment>
+<NestedTitle id="pkce.requireforpublicclients" Tag="h5" parent="IssuerInput.pkce.">requireForPublicClients?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** false
+</InlineSection>
+Require PKCE on `/authorize` (response_type=code) for clients that are
+registered in `clientDb` without a client secret (public clients).
+Confidential clients and clients not registered in `clientDb` are not
+affected.
+</Segment>
 <NestedTitle id="issuerinput.providers" Tag="h4" parent="IssuerInput.">providers</NestedTitle>
 <Segment>
 <Section type="parameters">
@@ -357,7 +590,7 @@ issuer({
 </Section>
 The providers that you want your OpenAuth server to support.
 ```ts title="issuer.ts"
-import { GithubProvider } from "@openauthjs/openauth/provider/github"
+import { GithubProvider } from "@al-ummah-now/openauth/provider/github"
 
 issuer({
   providers: {
@@ -384,6 +617,59 @@ You can also specify multiple providers.
 }
 ```
 </Segment>
+<NestedTitle id="issuerinput.refresh" Tag="h4" parent="IssuerInput.">refresh?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">RefreshHook</code>](#refreshhook)
+</InlineSection>
+</Section>
+Called on every refresh grant, before the refresh token is spent, to
+recompute the subject's claims. Without it a refreshed access token
+carries the properties frozen at sign-in for the refresh token's whole
+life (a revoked role stays, a granted one never arrives).
+
+- `{ properties }`: the new access token and the rotated refresh token
+  carry these properties.
+- `{ revoke: true }`: the user may no longer refresh (deleted, suspended):
+  the token's family is revoked and the client gets `invalid_grant`.
+- throwing: the claims could not be read. The client gets a retryable
+  `503 temporarily_unavailable` and the refresh token stays unspent; stale
+  claims are never served.
+</Segment>
+<NestedTitle id="issuerinput.requireclientauthentication" Tag="h4" parent="IssuerInput.">requireClientAuthentication?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">any</code><code class="symbol"> | </code><code class="primitive">(clientId: <code class="primitive">string</code>) => <code class="primitive">boolean</code></code>
+</InlineSection>
+</Section>
+Confidential clients that must authenticate with their client secret
+(HTTP Basic or `client_secret` in the form) on the authorization_code and
+refresh_token grants, PKCE or not. A stolen code or refresh token is then
+useless without the secret. List a client once every consumer of it
+sends its secret. Needs `clientDb`.
+</Segment>
+<NestedTitle id="issuerinput.restart" Tag="h4" parent="IssuerInput.">restart?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+The friendly page shown when a sign-in can't be resumed links back to the
+app that started it (origin of the flow's redirect_uri). When that client
+is unknown (e.g. a bookmarked `/password/authorize`), it links here.
+</Segment>
+<NestedTitle id="restart.fallbackurl" Tag="h5" parent="IssuerInput.restart.">fallbackUrl?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+e.g. `https://app.example.com`. Defaults to `/`.
+</Segment>
 <NestedTitle id="issuerinput.storage" Tag="h4" parent="IssuerInput.">storage?</NestedTitle>
 <Segment>
 <Section type="parameters">
@@ -393,7 +679,7 @@ You can also specify multiple providers.
 </Section>
 The storage adapter that you want to use.
 ```ts title="issuer.ts"
-import { DynamoStorage } from "@openauthjs/openauth/storage/dynamo"
+import { DynamoStorage } from "@al-ummah-now/openauth/storage/dynamo"
 
 issuer({
   storage: DynamoStorage()
@@ -411,7 +697,7 @@ issuer({
 The shape of the subjects that you want to return.
 ```ts title="issuer.ts"
 import { object, string } from "valibot"
-import { createSubjects } from "@openauthjs/openauth/subject"
+import { createSubjects } from "@al-ummah-now/openauth/subject"
 
 issuer({
   subjects: createSubjects({
@@ -427,7 +713,7 @@ issuer({
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">Theme</code>](#theme)
+**Type** [<code class="type">Theme</code>](/docs/ui/theme#theme)
 </InlineSection>
 </Section>
 The theme you want to use for the UI.
@@ -435,7 +721,7 @@ The theme you want to use for the UI.
 This includes the UI the user sees when selecting a provider. And the `PasswordUI` and
 `CodeUI` that are used by the `PasswordProvider` and `CodeProvider`.
 ```ts title="issuer.ts"
-import { THEME_SST } from "@openauthjs/openauth/ui/theme"
+import { THEME_SST } from "@al-ummah-now/openauth/ui/theme"
 
 issuer({
   theme: THEME_SST
@@ -448,7 +734,7 @@ Or define your own.
 
 
 ```ts title="issuer.ts"
-import type { Theme } from "@openauthjs/openauth/ui/theme"
+import type { Theme } from "@al-ummah-now/openauth/ui/theme"
 
 const MY_THEME: Theme = {
   // ...
@@ -490,6 +776,20 @@ Set the TTL, in seconds, for access and refresh tokens.
 </InlineSection>
 Interval in seconds where the access token is valid.
 </Segment>
+<NestedTitle id="ttl.code" Tag="h5" parent="IssuerInput.ttl.">code?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** 60
+At most 600 (RFC 6749 §4.1.2).
+</InlineSection>
+Interval in seconds an authorization code stays redeemable.
+</Segment>
 <NestedTitle id="ttl.refresh" Tag="h5" parent="IssuerInput.ttl.">refresh?</NestedTitle>
 <Segment>
 <Section type="parameters">
@@ -525,7 +825,7 @@ Interval in seconds to retain refresh tokens for reuse detection.
 </Section>
 
 <InlineSection>
-**Default** 60s
+**Default** 120s
 </InlineSection>
 Interval in seconds where refresh token reuse is allowed. This helps mitigrate
 concurrency issues.
@@ -534,7 +834,7 @@ concurrency issues.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">(input: <code class="symbol">&lcub; </code><code class="key">audience</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">clientID</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">redirectURI</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol"> &rcub;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code></code>
+**Type** <code class="primitive">(input: <code class="symbol">&lcub; </code><code class="key">audience</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">clientID</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">redirectURI</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol"> &rcub;</code>, req: <code class="type">Request</code>, c?: <code class="type">Context</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code></code>
 </InlineSection>
 </Section>
 Override the logic for whether a client request is allowed to call the issuer.
@@ -553,6 +853,16 @@ By default, it uses the following:
 }
 ```
 </Segment>
+<NestedTitle id="issuerinput.error" Tag="h4" parent="IssuerInput.">error?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">(error: [<code class="type">UnknownStateError</code>](/docs/issuer#unknownstateerror), req: <code class="type">Request</code>, render?: <code class="type">RenderOptions</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
+</InlineSection>
+</Section>
+Render the response for an unrecoverable sign-in state. Defaults to a
+friendly, localized "Start sign-in again" page (see `restart`).
+</Segment>
 <NestedTitle id="issuerinput.select" Tag="h4" parent="IssuerInput.">select?</NestedTitle>
 <Segment>
 <Section type="parameters">
@@ -568,7 +878,7 @@ Optionally, configure the UI that's displayed when the user visits the root URL 
 of the OpenAuth server.
 
 ```ts title="issuer.ts"
-import { Select } from "@openauthjs/openauth/ui/select"
+import { Select } from "@al-ummah-now/openauth/ui/select"
 
 issuer({
   select: Select({
@@ -585,7 +895,7 @@ issuer({
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">(response: [<code class="type">OnSuccessResponder</code>](#onsuccessresponder), input: <code class="type">Result</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
+**Type** <code class="primitive">(response: [<code class="type">OnSuccessResponder</code>](#onsuccessresponder), input: <code class="type">Result</code>, req: <code class="type">Request</code>, c?: <code class="type">Context</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
 </InlineSection>
 </Section>
 The success callback that's called when the user completes the flow.
@@ -614,7 +924,7 @@ This is called after the user has been redirected back to your app after the OAu
 ## OnSuccessResponder
 <Segment>
 <Section type="parameters">
-- <p>[<code class="key">subject</code>](#onsuccessresponder.subject) <code class="primitive">(type: <code class="primitive">string</code>, properties: <code class="primitive">any</code>, opts?: <code class="symbol">&lcub; </code><code class="key">subject</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">ttl</code><code class="symbol">&colon; </code><code class="symbol">&lcub; </code><code class="key">access</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol">, </code><code class="key">refresh</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol"> &rcub;</code><code class="symbol"> &rcub;</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
+- <p>[<code class="key">subject</code>](#onsuccessresponder.subject) <code class="primitive">(type: <code class="primitive">string</code>, properties: <code class="primitive">any</code>, opts?: <code class="symbol">&lcub; </code><code class="key">amr</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">[]</code><code class="symbol">, </code><code class="key">sid</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">subject</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">ttl</code><code class="symbol">&colon; </code><code class="symbol">&lcub; </code><code class="key">access</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol">, </code><code class="key">refresh</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol"> &rcub;</code><code class="symbol"> &rcub;</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code></p>
 </Section>
 Sets the subject payload in the JWT token and returns the response.
 
@@ -628,13 +938,102 @@ ctx.subject("user", {
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">(type: <code class="primitive">string</code>, properties: <code class="primitive">any</code>, opts?: <code class="symbol">&lcub; </code><code class="key">subject</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">ttl</code><code class="symbol">&colon; </code><code class="symbol">&lcub; </code><code class="key">access</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol">, </code><code class="key">refresh</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol"> &rcub;</code><code class="symbol"> &rcub;</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
+**Type** <code class="primitive">(type: <code class="primitive">string</code>, properties: <code class="primitive">any</code>, opts?: <code class="symbol">&lcub; </code><code class="key">amr</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">[]</code><code class="symbol">, </code><code class="key">sid</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">subject</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">ttl</code><code class="symbol">&colon; </code><code class="symbol">&lcub; </code><code class="key">access</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol">, </code><code class="key">refresh</code><code class="symbol">&colon; </code><code class="primitive">number</code><code class="symbol"> &rcub;</code><code class="symbol"> &rcub;</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
 </InlineSection>
 </Section>
 The `type` is the type of the subject, that was defined in the `subjects` field.
 
 The `properties` are the properties of the subject. This is the shape of the subject that
 you defined in the `subjects` field.
+</Segment>
+## RefreshHook
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">(input: [<code class="type">RefreshHookInput</code>](#refreshhookinput), req: <code class="type">Request</code>, ctx: <code class="type">Context</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code>[<code class="type">RefreshHookResult</code>](#refreshhookresult)<code class="symbol">&gt;</code></code>
+</InlineSection>
+</Section>
+</Segment>
+## RefreshHookInput
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">authTime?</code>](#refreshhookinput.authtime) <code class="primitive">number</code></p>
+- <p>[<code class="key">clientID</code>](#refreshhookinput.clientid) <code class="primitive">string</code></p>
+- <p>[<code class="key">installId?</code>](#refreshhookinput.installid) <code class="primitive">string</code></p>
+- <p>[<code class="key">properties</code>](#refreshhookinput.properties) <code class="primitive">any</code></p>
+- <p>[<code class="key">sid?</code>](#refreshhookinput.sid) <code class="primitive">string</code></p>
+- <p>[<code class="key">subject</code>](#refreshhookinput.subject) <code class="primitive">string</code></p>
+- <p>[<code class="key">type</code>](#refreshhookinput.type) <code class="primitive">string</code></p>
+</Section>
+Input of IssuerInput.refresh: the refresh token being redeemed.
+</Segment>
+<NestedTitle id="refreshhookinput.authtime" Tag="h4" parent="RefreshHookInput.">authTime?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+When the user signed in (ms), if recorded.
+</Segment>
+<NestedTitle id="refreshhookinput.clientid" Tag="h4" parent="RefreshHookInput.">clientID</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="refreshhookinput.installid" Tag="h4" parent="RefreshHookInput.">installId?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Native app install id sent at the code exchange (`install_id`).
+</Segment>
+<NestedTitle id="refreshhookinput.properties" Tag="h4" parent="RefreshHookInput.">properties</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">any</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="refreshhookinput.sid" Tag="h4" parent="RefreshHookInput.">sid?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Session id of the sign-in (browser sign-ins only).
+</Segment>
+<NestedTitle id="refreshhookinput.subject" Tag="h4" parent="RefreshHookInput.">subject</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="refreshhookinput.type" Tag="h4" parent="RefreshHookInput.">type</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+</Segment>
+## RefreshHookResult
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="symbol">&lcub; </code><code class="key">properties</code><code class="symbol">&colon; </code><code class="primitive">any</code><code class="symbol">, </code><code class="key">revoke</code><code class="symbol">&colon; </code><code class="primitive">undefined</code><code class="symbol"> &rcub;</code><code class="symbol"> | </code><code class="symbol">&lcub; </code><code class="key">reason</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">, </code><code class="key">revoke</code><code class="symbol">&colon; </code><code class="primitive">true</code><code class="symbol"> &rcub;</code>
+</InlineSection>
+</Section>
+Result of IssuerInput.refresh.
 </Segment>
 ## Errors
 <Section type="about">
@@ -643,7 +1042,7 @@ A list of errors that can be thrown by OpenAuth.
 You can use these errors to check the type of error and handle it. For example.
 
 ```ts
-import { InvalidAuthorizationCodeError } from "@openauthjs/openauth/error"
+import { InvalidAuthorizationCodeError } from "@al-ummah-now/openauth/error"
 
 if (err instanceof InvalidAuthorizationCodeError) {
   // handle invalid code error
@@ -651,6 +1050,11 @@ if (err instanceof InvalidAuthorizationCodeError) {
 ```
 </Section>
 ---
+### AuthRequestError
+<Segment>
+A request to the auth server failed. Returned (never thrown) by the client's
+`clientCredentials`, `device`, `revoke` and `userinfo`.
+</Segment>
 ### InvalidAccessTokenError
 <Segment>
 The given access token is invalid.

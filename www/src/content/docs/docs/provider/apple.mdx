@@ -1,6 +1,6 @@
 ---
 title: AppleProvider
-editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/provider/apple.ts
+editUrl: https://github.com/Al-Ummah-Now/openauth/blob/master/packages/openauth/src/provider/apple.ts
 description: Reference doc for the `AppleProvider`.
 ---
 
@@ -14,7 +14,7 @@ Use this provider to authenticate with Apple. Supports both OAuth2 and OIDC.
 #### Using OAuth
 
 ```ts {5-8}
-import { AppleProvider } from "@openauthjs/openauth/provider/apple"
+import { AppleProvider } from "@al-ummah-now/openauth/provider/apple"
 
 export default issuer({
   providers: {
@@ -31,7 +31,7 @@ export default issuer({
 When requesting name or email scopes from Apple, you must use form_post response mode:
 
 ```ts {5-9}
-import { AppleProvider } from "@openauthjs/openauth/provider/apple"
+import { AppleProvider } from "@al-ummah-now/openauth/provider/apple"
 
 export default issuer({
   providers: {
@@ -47,7 +47,7 @@ export default issuer({
 #### Using OIDC
 
 ```ts {5-7}
-import { AppleOidcProvider } from "@openauthjs/openauth/provider/apple"
+import { AppleOidcProvider } from "@al-ummah-now/openauth/provider/apple"
 
 export default issuer({
   providers: {
