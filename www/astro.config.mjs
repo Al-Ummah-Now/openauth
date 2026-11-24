@@ -79,6 +79,7 @@ export default defineConfig({
         baseUrl: `${config.github}/edit/master/www/`,
       },
       components: {
+        Footer: "./src/components/Footer.astro",
         Hero: "./src/components/Hero.astro",
       },
       customCss: ["./src/custom.css", "./src/styles/lander.css"],
