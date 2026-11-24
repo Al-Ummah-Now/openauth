@@ -433,7 +433,7 @@ function renderInterfaces(
               ({ depth, prefix, subType }) =>
                 `${" ".repeat(depth * 2)}- <p>[<code class="key">${renderProperty(
                   subType,
-                )}</code>](#${buildLinkHash(prefix, subType.name)}) ${renderType(subType.type!)}</p>`,
+                )}</code>](#${buildLinkHash(prefix, subType.name)}) ${subType.signatures?.length ? renderSignatureAsType(subType.signatures[0]) : renderType(subType.type!)}</p>`,
             ),
           ]),
           methods.map((m) => {
@@ -460,10 +460,12 @@ function renderInterfaces(
               `<Segment>`,
               `<Section type="parameters">`,
               `<InlineSection>`,
-              `**Type** ${renderType(subType.type!)}`,
+              `**Type** ${subType.signatures?.length ? renderSignatureAsType(subType.signatures[0]) : renderType(subType.type!)}`,
               `</InlineSection>`,
               `</Section>`,
-              renderComment(subType),
+              renderComment(
+                subType.signatures?.length ? subType.signatures[0] : subType,
+              ),
               `</Segment>`,
             ],
           ),

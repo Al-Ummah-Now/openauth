@@ -21,6 +21,9 @@ export default defineConfig({
       plugins: [theme()],
       title: "OpenAuth",
       description: "Universal, standards-based auth provider.",
+      markdown: {
+        headingLinks: false,
+      },
       head: [
         {
           tag: "link",
