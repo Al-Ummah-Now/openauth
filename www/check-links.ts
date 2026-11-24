@@ -48,11 +48,17 @@ export function problems(
   return [...new Set(out)]
 }
 
-const decode = (s: string) =>
-  s
-    .replace(/&#38;|&amp;/g, "&")
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&quot;/g, '"')
+const ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&#38;": "&",
+  "&quot;": '"',
+  "&#34;": '"',
+  "&#39;": "'",
+  "&#x27;": "'",
+}
+/** Once, left to right: "&amp;quot;" is the text "&quot;", not a quote. */
+export const decode = (s: string) =>
+  s.replace(/&(?:amp|quot|#38|#34|#39|#x27);/g, (entity) => ENTITIES[entity]!)
 
 if (import.meta.main) {
   const files = new Map<string, string>()
