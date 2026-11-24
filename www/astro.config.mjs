@@ -3,9 +3,10 @@ import starlight from "@astrojs/starlight"
 import { defineConfig } from "astro/config"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
+import rehypeBase from "./rehype-base"
 import config from "./config"
 
-const url = process.env.SITE_URL || "https://openauth.js.org"
+const url = process.env.SITE_URL || "https://al-ummah-now.github.io"
 const base = process.env.BASE_PATH || ""
 
 // https://astro.build/config
@@ -20,7 +21,8 @@ export default defineConfig({
     starlight({
       plugins: [theme()],
       title: "OpenAuth",
-      description: "Universal, standards-based auth provider.",
+      description:
+        "Universal, standards-based auth provider. The fork Al Ummah Now maintains.",
       markdown: {
         headingLinks: false,
       },
@@ -72,7 +74,6 @@ export default defineConfig({
       },
       social: [
         { icon: "github", label: "GitHub", href: config.github },
-        { icon: "discord", label: "Discord", href: config.discord },
       ],
       lastUpdated: true,
       editLink: {
@@ -88,6 +89,7 @@ export default defineConfig({
         {
           label: "Quick Start",
           items: [
+            { label: "Install", slug: "docs/start/install" },
             { label: "Standalone", slug: "docs/start/standalone" },
             { label: "SST", slug: "docs/start/sst" },
           ],
@@ -165,6 +167,7 @@ export default defineConfig({
     rehypePlugins: [
       rehypeHeadingIds,
       [rehypeAutolinkHeadings, { behavior: "wrap" }],
+      [rehypeBase, { base }],
     ],
   },
 })

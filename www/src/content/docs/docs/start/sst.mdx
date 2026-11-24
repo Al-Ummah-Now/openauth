@@ -11,10 +11,12 @@ import nextAppLight from "./nextjs-light.png"
 We are going to create a new Next.js app, add authentication to it with OpenAuth, and deploy it with SST.
 
 :::tip[View source]
-You can [view the source](https://github.com/openauthjs/openauth/tree/master/examples/quickstart/sst) of this example in our repo.
+You can [view the source](https://github.com/Al-Ummah-Now/openauth/tree/master/examples/quickstart/sst) of this example in our repo.
 :::
 
 We are going to authenticate users by sending them a code to verify their email address.
+
+Before you start, [set up GitHub Packages](/docs/start/install/) in the app's folder.
 
 ---
 
@@ -55,10 +57,10 @@ Add our OpenAuth server to a `auth/index.ts` file.
 
 ```ts title="auth/index.ts"
 import { handle } from "hono/aws-lambda"
-import { issuer } from "@openauthjs/openauth"
-import { CodeUI } from "@openauthjs/openauth/ui/code"
-import { CodeProvider } from "@openauthjs/openauth/provider/code"
-import { MemoryStorage } from "@openauthjs/openauth/storage/memory"
+import { issuer } from "@al-ummah-now/openauth"
+import { CodeUI } from "@al-ummah-now/openauth/ui/code"
+import { CodeProvider } from "@al-ummah-now/openauth/provider/code"
+import { MemoryStorage } from "@al-ummah-now/openauth/storage/memory"
 import { subjects } from "./subjects"
 
 async function getUser(email: string) {
@@ -101,7 +103,7 @@ We are also going to define our subjects. Add the following to a `auth/subjects.
 
 ```ts title="auth/subjects.ts"
 import { object, string } from "valibot"
-import { createSubjects } from "@openauthjs/openauth/subject"
+import { createSubjects } from "@al-ummah-now/openauth/subject"
 
 export const subjects = createSubjects({
   user: object({
@@ -113,7 +115,7 @@ export const subjects = createSubjects({
 Let's install our dependencies.
 
 ```bash
-npm install @openauthjs/openauth valibot hono
+npm install @al-ummah-now/openauth valibot hono
 ```
 
 ---
@@ -161,7 +163,7 @@ Next, let's add our OpenAuth client to our Next.js app. Add the following to `ap
 
 ```ts title="app/auth.ts" {7}
 import { Resource } from "sst"
-import { createClient } from "@openauthjs/openauth/client"
+import { createClient } from "@al-ummah-now/openauth/client"
 import { cookies as getCookies } from "next/headers"
 
 export const client = createClient({

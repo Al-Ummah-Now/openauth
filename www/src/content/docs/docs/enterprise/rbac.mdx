@@ -22,7 +22,7 @@ User "alice" in Tenant "acme"
 ## Configuration
 
 ```ts title="issuer.ts"
-import { D1RbacAdapter } from "@openauthjs/openauth/rbac"
+import { D1RbacAdapter } from "@al-ummah-now/openauth/rbac"
 
 createMultiTenantIssuer({
   rbacAdapter: new D1RbacAdapter(env.DB),
@@ -35,7 +35,7 @@ createMultiTenantIssuer({
 Permissions are application-scoped (shared across all tenants):
 
 ```ts
-import { RbacService } from "@openauthjs/openauth/rbac"
+import { RbacService } from "@al-ummah-now/openauth/rbac"
 
 const rbac = new RbacService(adapter)
 

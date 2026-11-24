@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "bun generate.ts && astro build",
+    "build": "bun generate.ts && astro build && bun check-links.ts",
     "preview": "astro preview",
     "astro": "astro"
   },

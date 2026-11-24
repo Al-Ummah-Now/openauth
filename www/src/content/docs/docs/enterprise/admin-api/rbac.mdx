@@ -1,6 +1,6 @@
 ---
 title: RBAC REST API
-editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/rbac/admin-endpoints.ts
+editUrl: https://github.com/Al-Ummah-Now/openauth/blob/master/packages/openauth/src/rbac/admin-endpoints.ts
 description: Reference documentation for the RBAC REST API endpoints for managing roles, permissions, and assignments.
 ---
 
@@ -19,9 +19,9 @@ The RBAC REST API provides HTTP endpoints for managing Role-Based Access Control
 
 ```ts
 import { Hono } from "hono"
-import { rbacAdminEndpoints } from "@openauthjs/openauth/rbac"
-import { RBACServiceImpl } from "@openauthjs/openauth/rbac"
-import { RBACAdapter } from "@openauthjs/openauth/rbac"
+import { rbacAdminEndpoints } from "@al-ummah-now/openauth/rbac"
+import { RBACServiceImpl } from "@al-ummah-now/openauth/rbac"
+import { RBACAdapter } from "@al-ummah-now/openauth/rbac"
 
 const rbacAdapter = new RBACAdapter(env.DB)
 const rbacService = new RBACServiceImpl(rbacAdapter, storage)
@@ -113,7 +113,7 @@ When using the enterprise middleware stack, these scopes control access:
 | `rbac:write` | Create, update, and delete RBAC resources |
 
 ```ts
-import { requireScope } from "@openauthjs/openauth/middleware"
+import { requireScope } from "@al-ummah-now/openauth/middleware"
 
 // Protect read endpoints
 app.get("/admin/rbac/roles", requireScope("rbac:read"), handler)
@@ -930,8 +930,8 @@ Here's a complete example of setting up RBAC for an application:
 
 ```ts title="Setup RBAC Admin API"
 import { Hono } from "hono"
-import { rbacAdminEndpoints, createAdminMiddleware } from "@openauthjs/openauth/rbac"
-import { RBACServiceImpl, RBACAdapter } from "@openauthjs/openauth/rbac"
+import { rbacAdminEndpoints, createAdminMiddleware } from "@al-ummah-now/openauth/rbac"
+import { RBACServiceImpl, RBACAdapter } from "@al-ummah-now/openauth/rbac"
 
 // Create the RBAC service
 const rbacAdapter = new RBACAdapter(env.DB)

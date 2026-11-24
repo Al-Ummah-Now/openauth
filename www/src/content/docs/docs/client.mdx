@@ -1,6 +1,6 @@
 ---
 title: Client
-editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/client.ts
+editUrl: https://github.com/Al-Ummah-Now/openauth/blob/master/packages/openauth/src/client.ts
 description: Reference doc for the OpenAuth client.
 ---
 
@@ -15,7 +15,7 @@ and verify tokens.
 First, create a client.
 
 ```ts title="client.ts"
-import { createClient } from "@openauthjs/openauth/client"
+import { createClient } from "@al-ummah-now/openauth/client"
 
 const client = createClient({
   clientID: "my-client",
@@ -48,6 +48,18 @@ const verified = await client.verify(subjects, tokens.access)
 </Section>
 ---
 ## Methods
+### clearClientCache
+<Segment>
+<Section type="signature">
+```ts
+clearClientCache()
+```
+</Section>
+<InlineSection>
+**Returns** <code class="primitive">void</code>
+</InlineSection>
+Clear the shared discovery and JWKS cache. Mostly useful in tests.
+</Segment>
 ### createClient
 <Segment>
 <Section type="signature">
@@ -68,6 +80,53 @@ Create an OpenAuth client.
 ## Client
 <Segment>
 An instance of the OpenAuth client contains the following methods.
+</Segment>
+<NestedTitle id="client.device" Tag="h4" parent="Client.">device</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+Sign in on a device with no browser or keyboard, like a TV.
+</Segment>
+<NestedTitle id="device.poll" Tag="h5" parent="Client.device.">poll</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">(device: [<code class="type">DeviceAuthorization</code>](#deviceauthorization), opts?: [<code class="type">DevicePollOptions</code>](#devicepolloptions)) => <code class="primitive">Promise</code><code class="symbol">&lt;</code>[<code class="type">ExchangeSuccess</code>](#exchangesuccess)<code class="symbol"> | </code>[<code class="type">RequestFailure</code>](#requestfailure)<code class="symbol">&gt;</code></code>
+</InlineSection>
+</Section>
+Wait until the user approves, then get the tokens.
+
+```ts
+const approved = await client.device.poll(started.device)
+
+if (approved.err) {
+  console.log(approved.err.error) // "access_denied", "expired_token", ...
+} else {
+  const { access, refresh } = approved.tokens
+}
+```
+
+This polls no faster than the server allows, slows down when told to, and keeps
+going through network failures until the code expires.
+</Segment>
+<NestedTitle id="device.start" Tag="h5" parent="Client.device.">start</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">(opts?: <code class="symbol">&lcub; </code><code class="key">scopes</code><code class="symbol">&colon; </code><code class="primitive">string</code><code class="symbol">[]</code><code class="symbol"> &rcub;</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code>[<code class="type">RequestFailure</code>](#requestfailure)<code class="symbol"> | </code><code class="symbol">&lcub; </code><code class="key">device</code><code class="symbol">&colon; </code>[<code class="type">DeviceAuthorization</code>](#deviceauthorization)<code class="symbol">, </code><code class="key">err</code><code class="symbol">&colon; </code><code class="primitive">false</code><code class="symbol"> &rcub;</code><code class="symbol">&gt;</code></code>
+</InlineSection>
+</Section>
+Get a code for the user to type on their phone or computer.
+
+```ts
+const started = await client.device.start()
+if (started.err) return
+
+show(started.device.userCode, started.device.verificationURI)
+```
 </Segment>
 ### authorize
 <Segment>
@@ -106,6 +165,28 @@ const { challenge, url } = await client.authorize(
 ```
 
 This returns a redirect URL and a challenge that you need to use later to verify the code.
+</Segment>
+### clientCredentials
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">(opts?: [<code class="type">ClientCredentialsOptions</code>](#clientcredentialsoptions)) => <code class="primitive">Promise</code><code class="symbol">&lt;</code>[<code class="type">RequestFailure</code>](#requestfailure)<code class="symbol"> | </code>[<code class="type">ClientCredentialsSuccess</code>](#clientcredentialssuccess)<code class="symbol">&gt;</code></code>
+</InlineSection>
+</Section>
+Get an access token for the client itself, with no user: one server calling another.
+Needs a `clientSecret`.
+
+```ts
+const granted = await client.clientCredentials({ scopes: ["users:read"] })
+
+if (granted.err) {
+  console.log(granted.err.error) // "invalid_client", "invalid_scope", ...
+} else {
+  const { access, expiresIn } = granted.token
+}
+```
+
+Keep the token until it's about to expire rather than asking for one per request.
 </Segment>
 ### exchange
 <Segment>
@@ -150,7 +231,7 @@ This method returns the access and refresh tokens. Or if it fails, it returns an
 you can handle depending on the error.
 
 ```ts
-import { InvalidAuthorizationCodeError } from "@openauthjs/openauth/error"
+import { InvalidAuthorizationCodeError } from "@al-ummah-now/openauth/error"
 
 if (exchanged.err) {
   if (exchanged.err instanceof InvalidAuthorizationCodeError) {
@@ -199,7 +280,7 @@ if (next.tokens) {
 Or if it fails, it returns an error that you can handle depending on the error.
 
 ```ts
-import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
+import { InvalidRefreshTokenError } from "@al-ummah-now/openauth/error"
 
 if (next.err) {
   if (next.err instanceof InvalidRefreshTokenError) {
@@ -210,6 +291,38 @@ if (next.err) {
   }
 }
 ```
+</Segment>
+### revoke
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">(token: <code class="primitive">string</code>, opts?: <code class="symbol">&lcub; </code><code class="key">hint</code><code class="symbol">&colon; </code><code class="symbol">&ldquo;</code><code class="primitive">refresh_token</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">access_token</code><code class="symbol">&rdquo;</code><code class="symbol"> &rcub;</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code>[<code class="type">RequestFailure</code>](#requestfailure)<code class="symbol"> | </code><code class="symbol">&lcub; </code><code class="key">err</code><code class="symbol">&colon; </code><code class="primitive">false</code><code class="symbol"> &rcub;</code><code class="symbol">&gt;</code></code>
+</InlineSection>
+</Section>
+End a sign-in by revoking its refresh token.
+
+```ts
+await client.revoke(<refresh_token>)
+```
+
+The server answers the same for a token it doesn't know, so revoking twice is fine.
+</Segment>
+### userinfo
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">(subject: <code class="type">StandardSchema</code>, access: <code class="primitive">string</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code>[<code class="type">RequestFailure</code>](#requestfailure)<code class="symbol"> | </code><code class="symbol">&lcub; </code><code class="key">err</code><code class="symbol">&colon; </code><code class="primitive">false</code><code class="symbol">, </code><code class="key">properties</code><code class="symbol">&colon; </code><code class="type">InferOutput</code><code class="symbol"> &rcub;</code><code class="symbol">&gt;</code></code>
+</InlineSection>
+</Section>
+Ask the server who an access token belongs to.
+
+```ts
+const info = await client.userinfo(subjects.user, <access_token>)
+
+if (!info.err) console.log(info.properties.userID)
+```
+
+To check a token on every request use `verify`, which needs no call to the server.
 </Segment>
 ### verify
 <Segment>
@@ -255,7 +368,7 @@ if (verified.tokens) {
 Or if it fails, it returns an error that you can handle depending on the error.
 
 ```ts
-import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
+import { InvalidRefreshTokenError } from "@al-ummah-now/openauth/error"
 
 if (verified.err) {
   if (verified.err instanceof InvalidRefreshTokenError) {
@@ -359,14 +472,103 @@ location.href = url
 </Section>
 The challenge that you can use to verify the code.
 </Segment>
+## ClientCredentialsOptions
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">scopes?</code>](#clientcredentialsoptions.scopes) <code class="primitive">string</code><code class="symbol">[]</code></p>
+</Section>
+</Segment>
+<NestedTitle id="clientcredentialsoptions.scopes" Tag="h4" parent="ClientCredentialsOptions.">scopes?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code><code class="symbol">[]</code>
+</InlineSection>
+</Section>
+The scopes to ask for. The server refuses scopes the client isn't registered with.
+</Segment>
+## ClientCredentialsSuccess
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">err</code>](#clientcredentialssuccess.err) <code class="primitive">false</code></p>
+- <p>[<code class="key">token</code>](#clientcredentialssuccess.token) <code class="primitive">Object</code></p>
+  - <p>[<code class="key">access</code>](#token.access) <code class="primitive">string</code></p>
+  - <p>[<code class="key">expiresIn</code>](#token.expiresin) <code class="primitive">number</code></p>
+  - <p>[<code class="key">scopes</code>](#token.scopes) <code class="primitive">string</code><code class="symbol">[]</code></p>
+</Section>
+Returned when the client credentials call is successful.
+</Segment>
+<NestedTitle id="clientcredentialssuccess.err" Tag="h4" parent="ClientCredentialsSuccess.">err</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">false</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="clientcredentialssuccess.token" Tag="h4" parent="ClientCredentialsSuccess.">token</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+</Section>
+</Segment>
+<NestedTitle id="token.access" Tag="h5" parent="ClientCredentialsSuccess.token.">access</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The access token. There's no refresh token; ask for a new one when it expires.
+</Segment>
+<NestedTitle id="token.expiresin" Tag="h5" parent="ClientCredentialsSuccess.token.">expiresIn</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+The number of seconds until the token expires.
+</Segment>
+<NestedTitle id="token.scopes" Tag="h5" parent="ClientCredentialsSuccess.token.">scopes</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code><code class="symbol">[]</code>
+</InlineSection>
+</Section>
+The scopes the server granted.
+</Segment>
 ## ClientInput
 <Segment>
 <Section type="parameters">
+- <p>[<code class="key">cacheTTL?</code>](#clientinput.cachettl) <code class="primitive">number</code></p>
 - <p>[<code class="key">clientID</code>](#clientinput.clientid) <code class="primitive">string</code></p>
+- <p>[<code class="key">clientSecret?</code>](#clientinput.clientsecret) <code class="primitive">string</code></p>
 - <p>[<code class="key">fetch?</code>](#clientinput.fetch) <code class="type">FetchLike</code></p>
 - <p>[<code class="key">issuer?</code>](#clientinput.issuer) <code class="primitive">string</code></p>
 </Section>
 Configure the client.
+</Segment>
+<NestedTitle id="clientinput.cachettl" Tag="h4" parent="ClientInput.">cacheTTL?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** 600000 (10 minutes)
+</InlineSection>
+How long, in milliseconds, the issuer's discovery document and JWKS are
+cached before they are fetched again. The cache is shared by every client
+in the same process or isolate, keyed by issuer, so creating a client per
+request does not re-fetch them. A token signed with a key that is not in
+the cached JWKS, or whose signature the cached key rejects, triggers one
+early re-fetch (key rotation), at most once every 30 seconds.
 </Segment>
 <NestedTitle id="clientinput.clientid" Tag="h4" parent="ClientInput.">clientID</NestedTitle>
 <Segment>
@@ -383,6 +585,18 @@ If you have a web app and a mobile app, you want to use different client IDs bot
   clientID: "my-client"
 }
 ```
+</Segment>
+<NestedTitle id="clientinput.clientsecret" Tag="h4" parent="ClientInput.">clientSecret?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The client secret of a confidential client. When set, the authorization
+code exchange and refresh requests authenticate with HTTP Basic
+(`client_id:client_secret`). Only for server-side clients: never ship a
+secret to a browser or an app.
 </Segment>
 <NestedTitle id="clientinput.fetch" Tag="h4" parent="ClientInput.">fetch?</NestedTitle>
 <Segment>
@@ -410,6 +624,87 @@ The URL of your OpenAuth server.
 }
 ```
 </Segment>
+## DeviceAuthorization
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">deviceCode</code>](#deviceauthorization.devicecode) <code class="primitive">string</code></p>
+- <p>[<code class="key">expiresAt</code>](#deviceauthorization.expiresat) <code class="primitive">number</code></p>
+- <p>[<code class="key">interval</code>](#deviceauthorization.interval) <code class="primitive">number</code></p>
+- <p>[<code class="key">userCode</code>](#deviceauthorization.usercode) <code class="primitive">string</code></p>
+- <p>[<code class="key">verificationURI</code>](#deviceauthorization.verificationuri) <code class="primitive">string</code></p>
+- <p>[<code class="key">verificationURIComplete?</code>](#deviceauthorization.verificationuricomplete) <code class="primitive">string</code></p>
+</Section>
+A device authorization the user still has to approve.
+</Segment>
+<NestedTitle id="deviceauthorization.devicecode" Tag="h4" parent="DeviceAuthorization.">deviceCode</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The secret the device polls with. Never show it.
+</Segment>
+<NestedTitle id="deviceauthorization.expiresat" Tag="h4" parent="DeviceAuthorization.">expiresAt</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+When the codes expire, in milliseconds since the epoch.
+</Segment>
+<NestedTitle id="deviceauthorization.interval" Tag="h4" parent="DeviceAuthorization.">interval</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">number</code>
+</InlineSection>
+</Section>
+The least number of seconds between polls.
+</Segment>
+<NestedTitle id="deviceauthorization.usercode" Tag="h4" parent="DeviceAuthorization.">userCode</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The code the user types, e.g. `BCDF-GHJK`.
+</Segment>
+<NestedTitle id="deviceauthorization.verificationuri" Tag="h4" parent="DeviceAuthorization.">verificationURI</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+Where the user types the code. Show it next to the code.
+</Segment>
+<NestedTitle id="deviceauthorization.verificationuricomplete" Tag="h4" parent="DeviceAuthorization.">verificationURIComplete?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The same page with the code filled in, for a QR code.
+</Segment>
+## DevicePollOptions
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">signal?</code>](#devicepolloptions.signal) <code class="type">AbortSignal</code></p>
+</Section>
+</Segment>
+<NestedTitle id="devicepolloptions.signal" Tag="h4" parent="DevicePollOptions.">signal?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="type">AbortSignal</code>
+</InlineSection>
+</Section>
+Stop waiting, for example when the user leaves the sign-in screen.
+</Segment>
 ## ExchangeError
 <Segment>
 <Section type="parameters">
@@ -426,7 +721,7 @@ Returned when the exchange fails.
 </Section>
 The type of error that occurred. You can handle this by checking the type.
 ```ts
-import { InvalidAuthorizationCodeError } from "@openauthjs/openauth/error"
+import { InvalidAuthorizationCodeError } from "@al-ummah-now/openauth/error"
 
 console.log(err instanceof InvalidAuthorizationCodeError)
 ```
@@ -473,7 +768,7 @@ Returned when the refresh fails.
 </Section>
 The type of error that occurred. You can handle this by checking the type.
 ```ts
-import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
+import { InvalidRefreshTokenError } from "@al-ummah-now/openauth/error"
 
 console.log(err instanceof InvalidRefreshTokenError)
 ```
@@ -520,6 +815,22 @@ This is always `false` when the refresh is successful.
 Returns the refreshed tokens only if they've been refreshed.
 
 If they are still valid, this will be `undefined`.
+</Segment>
+## RequestFailure
+<Segment>
+<Section type="parameters">
+- <p>[<code class="key">err</code>](#requestfailure.err) [<code class="type">AuthRequestError</code>](/docs/issuer#authrequesterror)</p>
+</Section>
+Returned by `clientCredentials`, `device`, `revoke` and `userinfo` when they fail.
+</Segment>
+<NestedTitle id="requestfailure.err" Tag="h4" parent="RequestFailure.">err</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">AuthRequestError</code>](/docs/issuer#authrequesterror)
+</InlineSection>
+</Section>
+What went wrong. `err.error` is the OAuth error code.
 </Segment>
 ## Tokens
 <Segment>
@@ -573,7 +884,7 @@ Returned when the verify call fails.
 </Section>
 The type of error that occurred. You can handle this by checking the type.
 ```ts
-import { InvalidRefreshTokenError } from "@openauthjs/openauth/error"
+import { InvalidRefreshTokenError } from "@al-ummah-now/openauth/error"
 
 console.log(err instanceof InvalidRefreshTokenError)
 ```

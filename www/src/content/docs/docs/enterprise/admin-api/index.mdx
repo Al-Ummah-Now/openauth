@@ -195,8 +195,8 @@ const response = await fetch("https://auth.example.com/api/users", {
 While the Admin API can be called directly via HTTP, you can also use the TypeScript SDK:
 
 ```ts title="admin-sdk.ts"
-import { UserServiceImpl } from "@openauthjs/openauth/user"
-import { D1UserAdapter } from "@openauthjs/openauth/user"
+import { UserServiceImpl } from "@al-ummah-now/openauth/user"
+import { D1UserAdapter } from "@al-ummah-now/openauth/user"
 
 const userService = new UserServiceImpl({
   storage: env.KV,

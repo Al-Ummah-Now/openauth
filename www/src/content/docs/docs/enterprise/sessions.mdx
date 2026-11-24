@@ -160,7 +160,7 @@ This allows users to clean up their session before selecting which account to us
 For advanced use cases, use the session service directly:
 
 ```ts
-import { SessionService } from "@openauthjs/openauth/session"
+import { SessionService } from "@al-ummah-now/openauth/session"
 
 const sessionService = new SessionService(signingKey, config)
 
@@ -208,7 +208,7 @@ interface UserSessionInfo {
 View all active sessions for a user across devices:
 
 ```ts
-import { AdminSessionService } from "@openauthjs/openauth/session"
+import { AdminSessionService } from "@al-ummah-now/openauth/session"
 
 const adminService = new AdminSessionService({ database: env.DB })
 

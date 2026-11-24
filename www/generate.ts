@@ -707,6 +707,10 @@ function renderTypescriptType(type: TypeDoc.ReferenceType) {
   // ie. Partial<Foo> => just render Foo
   if (type.name === "Partial") return renderType(type.typeArguments![0])
 
+  // ie. Request, FormData: no arguments, no brackets
+  if (!type.typeArguments?.length)
+    return `<code class="type">${type.name}</code>`
+
   // ie. Record<string, string>
   return [
     `<code class="primitive">${type.name}</code>`,
@@ -742,6 +746,8 @@ function renderOpenAuthType(type: TypeDoc.ReferenceType) {
       return `[<code class="type">${t.name}</code>](/docs/subject#${t.name.toLowerCase()})`
     if (fileName?.startsWith("packages/openauth/src/error.ts"))
       return `[<code class="type">${t.name}</code>](/docs/issuer#${t.name.toLowerCase()})`
+    if (fileName?.startsWith("packages/openauth/src/ui/theme.ts"))
+      return `[<code class="type">${t.name}</code>](/docs/ui/theme#${t.name.toLowerCase()})`
     if (fileName?.startsWith("packages/openauth/src/provider/")) {
       const provider = fileName.split("/").pop()?.split(".")[0]
       return `[<code class="type">${t.name}</code>](/docs/provider/${provider}#${t.name.toLowerCase()})`
@@ -818,7 +824,12 @@ function saveFile(moduleName: string, content: any[]) {
   const filePath = path.join(OUTPUT_DIR, `${moduleName}.mdx`)
   if (!fs.existsSync(path.dirname(filePath)))
     fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, content.flat(Infinity).join("\n"))
+  // The comments in the source name upstream's package; readers install ours
+  const text = content
+    .flat(Infinity)
+    .join("\n")
+    .replaceAll(config.sourcePackage, config.package)
+  fs.writeFileSync(filePath, text)
 }
 
 function configureLogger() {

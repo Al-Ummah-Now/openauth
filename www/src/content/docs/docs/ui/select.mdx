@@ -1,6 +1,6 @@
 ---
 title: Select
-editUrl: https://github.com/toolbeam/openauth/blob/master/packages/openauth/src/ui/select.tsx
+editUrl: https://github.com/Al-Ummah-Now/openauth/blob/master/packages/openauth/src/ui/select.tsx
 description: Reference doc for the `Select` UI.
 ---
 
@@ -13,7 +13,7 @@ The UI that's displayed when loading the root page of the OpenAuth server. You c
 which providers should be displayed in the select UI.
 
 ```ts
-import { Select } from "@openauthjs/openauth/ui/select"
+import { Select } from "@al-ummah-now/openauth/ui/select"
 
 export default issuer({
   select: Select({
@@ -44,7 +44,7 @@ Select(props?)
 - <p><code class="key">props?</code> [<code class="type">SelectProps</code>](#selectprops)</p>
 </Section>
 <InlineSection>
-**Returns** <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
+**Returns** <code class="primitive">(providers: <code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">, </code><code class="primitive">string</code><code class="symbol">&gt;</code>, req: <code class="type">Request</code>, render?: <code class="type">RenderOptions</code>) => <code class="primitive">Promise</code><code class="symbol">&lt;</code><code class="type">Response</code><code class="symbol">&gt;</code></code>
 </InlineSection>
 </Segment>
 ## SelectProps

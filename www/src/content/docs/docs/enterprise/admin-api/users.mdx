@@ -712,8 +712,8 @@ CREATE INDEX idx_identities_tenant_provider
 For server-side operations, you can use the `UserService` directly:
 
 ```ts title="user-service.ts"
-import { UserServiceImpl } from "@openauthjs/openauth/user"
-import { D1UserAdapter } from "@openauthjs/openauth/user"
+import { UserServiceImpl } from "@al-ummah-now/openauth/user"
+import { D1UserAdapter } from "@al-ummah-now/openauth/user"
 
 const userService = new UserServiceImpl({
   storage: env.KV,

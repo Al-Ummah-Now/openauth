@@ -67,7 +67,7 @@ interface Tenant {
 Use the tenant service to manage tenants:
 
 ```ts
-import { D1TenantService } from "@openauthjs/openauth/tenant"
+import { D1TenantService } from "@al-ummah-now/openauth/tenant"
 
 const tenantService = new D1TenantService(env.DB)
 
@@ -113,7 +113,7 @@ DELETE /tenants/:id      Delete tenant
 Data is automatically isolated per tenant using prefixed keys:
 
 ```ts
-import { createTenantStorage } from "@openauthjs/openauth/tenant"
+import { createTenantStorage } from "@al-ummah-now/openauth/tenant"
 
 // Wraps your storage with tenant prefixing
 const tenantStorage = createTenantStorage(storage, tenantId)
