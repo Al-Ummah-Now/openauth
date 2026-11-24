@@ -161,7 +161,7 @@ export interface EnterpriseIssuerConfig<
    * Request-derived values (Host, X-Forwarded-Host/Proto/Port) are then
    * ignored for the issuer and for the default redirect_uri allow check.
    *
-   * When not set, the issuer is derived from the request (legacy behaviour).
+   * When not set, the issuer is derived from the request (legacy behavior).
    */
   issuer?: string
 

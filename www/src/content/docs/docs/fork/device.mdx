@@ -1,0 +1,66 @@
+---
+title: Device sign-in
+description: Sign in on a TV or console with a code entered on a phone.
+---
+
+The device authorization grant (RFC 8628). The device shows a short code, the person enters it on a phone, and the device gets its tokens.
+
+```ts title="issuer.ts"
+import { issuer } from "@al-ummah-now/openauth"
+
+issuer({
+  clientDb: env.AUTH_DB,
+  device: {
+    expiresIn: 600,
+    interval: 5,
+    ipHeader: "cf-connecting-ip",
+  },
+  // ...
+})
+```
+
+It needs `clientDb`. Only a client registered with the `urn:ietf:params:oauth:grant-type:device_code` grant may use it.
+
+---
+
+## On the device
+
+```ts title="tv.ts"
+import { createClient } from "@al-ummah-now/openauth/client"
+
+const client = createClient({
+  clientID: "my-tv-app",
+  issuer: "https://auth.example.com",
+})
+
+const started = await client.device.start()
+
+if (!started.err) {
+  show(started.device.userCode, started.device.verificationURI)
+
+  const approved = await client.device.poll(started.device)
+  if (!approved.err) save(approved.tokens)
+}
+```
+
+`poll` waits as long as the server asks, slows down when it is told to, keeps going through a lost connection, and stops when the code expires.
+
+---
+
+## On the phone
+
+`/activate` is served by the issuer, in English and Arabic. The person enters the code, confirms the app's name, and signs in through the normal flow, so single sign-on and the account picker work as always.
+
+---
+
+## Limits
+
+| Setting | Default | What it limits |
+|---------|---------|----------------|
+| `expiresIn` | 600 seconds | How long both codes live |
+| `interval` | 5 seconds | How often a device may poll |
+| `requestsPerMinute` | 10 | New codes for one client and address |
+| `lookupsPerMinute` | 10 | Codes tried from one address |
+| `failedLookupsPerNetworkPerMinute` | 30 | Wrong codes from one network |
+
+The address comes from `ipHeader`. Use a header your proxy sets and callers can't.
