@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { problems } from "./check-links"
+import { decode, problems } from "./check-links"
 
 test("a missing page, a missing heading and a link without the base are found", () => {
   const files = new Map([
@@ -17,4 +17,10 @@ test("a missing page, a missing heading and a link without the base are found", 
     "docs/a/index.html: /openauth/docs/b/#nope has no such heading",
     "docs/a/index.html: #nope has no such heading",
   ])
+})
+
+test("entities are decoded once", () => {
+  expect(decode("&amp;quot;")).toBe("&quot;")
+  expect(decode("&amp;#39;&#38;amp;")).toBe("&#39;&amp;")
+  expect(decode("a&amp;b &quot;c&#x27;")).toBe("a&b \"c'")
 })

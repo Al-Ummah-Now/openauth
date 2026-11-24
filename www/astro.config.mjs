@@ -4,6 +4,7 @@ import { defineConfig } from "astro/config"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import rehypeBase from "./rehype-base"
+import rehypeSoftBreaks from "./rehype-soft-breaks"
 import config from "./config"
 
 const url = process.env.SITE_URL || "https://al-ummah-now.github.io"
@@ -56,14 +57,14 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image",
-            content: `${url}/social-share.png`,
+            content: `${url}${base}/social-share.png`,
           },
         },
         {
           tag: "meta",
           attrs: {
             property: "twitter:image",
-            content: `${url}/social-share.png`,
+            content: `${url}${base}/social-share.png`,
           },
         },
       ],
@@ -168,6 +169,7 @@ export default defineConfig({
       rehypeHeadingIds,
       [rehypeAutolinkHeadings, { behavior: "wrap" }],
       [rehypeBase, { base }],
+      rehypeSoftBreaks,
     ],
   },
 })

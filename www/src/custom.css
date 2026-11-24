@@ -1,10 +1,44 @@
-/* On a phone a table's long identifiers and paths wrap; unwrapped, they push the last column out of the page */
 @media (max-width: 49.99rem) {
+  /* A long identifier or path in a table wraps where rehype-soft-breaks lets it; a word is never cut */
   .sl-markdown-content table:not(:where(.not-content *)) :is(td, th) {
-    padding-inline: 0 0.625rem;
+    padding-inline: 0 0.5rem;
     font-size: var(--sl-text-sm);
   }
-  .sl-markdown-content table:not(:where(.not-content *)) :is(td, td code) {
+  .sl-markdown-content table:not(:where(.not-content *)) td code {
+    overflow-wrap: normal;
+  }
+  .sl-markdown-content table:not(:where(.not-content *)) th {
+    letter-spacing: 0;
+  }
+
+  /* Code wraps instead of running out of the box, and the copy button has a row of its own */
+  .sl-markdown-content .expressive-code pre > code {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .sl-markdown-content .expressive-code .ec-line .code {
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  .sl-markdown-content .expressive-code :nth-child(1 of .ec-line) .code {
+    padding-inline-end: var(--ec-codePadInl);
+  }
+  .sl-markdown-content .expressive-code .frame .copy {
+    inset-block-start: 0.0625rem;
+  }
+  .sl-markdown-content .expressive-code .frame.has-title .header {
+    padding-inline-end: 3rem;
+  }
+  .sl-markdown-content .expressive-code .frame:not(.has-title, .is-terminal) .copy {
+    inset-block-start: 0.3125rem;
+  }
+  .sl-markdown-content .expressive-code .frame:not(.has-title, .is-terminal) pre > code {
+    padding-block-start: 2.75rem;
+  }
+}
+
+@media (max-width: 22.5rem) {
+  .sl-markdown-content table:not(:where(.not-content *)) :is(td, th) {
+    padding-inline: 0 0.3125rem;
   }
 }
