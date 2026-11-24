@@ -1,0 +1,64 @@
+---
+title: Refresh and revocation
+description: Rotation, reuse, current claims and ending a sign-in.
+---
+
+## Rotation
+
+Each refresh returns a new refresh token. The old one works again only for `ttl.reuse` seconds, 120 by default, so two tabs that refresh at once both succeed.
+
+After that window, using it again means it was copied. The issuer revokes that token's family, which is every token that came from the same sign-in on that client, and leaves the person's other sign-ins alone.
+
+| Setting | Default | What it sets |
+|---------|---------|--------------|
+| `ttl.access` | 30 days | How long an access token lives |
+| `ttl.refresh` | 1 year | How long a refresh token lives |
+| `ttl.reuse` | 120 seconds | How long a used refresh token still answers |
+| `ttl.retention` | 0 seconds | How long after that a reuse is still recognized |
+
+Set a short `ttl.access`, and a `ttl.retention` so a late reuse is recognized.
+
+---
+
+## Current claims
+
+Without a `refresh` callback, a refreshed token carries the claims of the sign-in for as long as it is refreshed. A role taken away would stay.
+
+```ts title="issuer.ts"
+import { issuer } from "@al-ummah-now/openauth"
+
+issuer({
+  refresh: async ({ properties }) => {
+    const user = await db.user(properties.id)
+    if (!user || user.suspended) return { revoke: true }
+    return { properties: { ...properties, roles: user.roles } }
+  },
+  // ...
+})
+```
+
+| It returns | The client gets |
+|------------|-----------------|
+| `properties` | New tokens with these claims |
+| `revoke: true` | `invalid_grant`, and the family is revoked |
+| It throws | `503`, and the refresh token is still good |
+
+---
+
+## Revoke
+
+`POST /token/revoke` (RFC 7009) needs `clientDb` and a client with a secret.
+
+```ts
+import { createClient } from "@al-ummah-now/openauth/client"
+
+const client = createClient({
+  clientID: "web-app",
+  issuer: "https://auth.example.com",
+  clientSecret: process.env.CLIENT_SECRET,
+})
+
+await client.revoke(tokens.refresh)
+```
+
+An access token is verified without asking the issuer, so it works until it expires. Keep `ttl.access` short.

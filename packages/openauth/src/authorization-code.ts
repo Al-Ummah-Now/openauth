@@ -15,7 +15,7 @@
  *   revokes that grant (RFC 6749 §4.1.2: "SHOULD revoke … all tokens
  *   previously issued based on that authorization code").
  *
- * Without an atomic store this degrades to the old read-then-write behaviour,
+ * Without an atomic store this degrades to the old read-then-write behavior,
  * which is only single-use within one process.
  */
 import { Storage, type StorageAdapter } from "./storage/storage.js"

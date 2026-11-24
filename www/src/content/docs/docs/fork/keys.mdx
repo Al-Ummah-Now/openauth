@@ -1,0 +1,60 @@
+---
+title: Signing keys
+description: Rotate the signing key without refusing a token.
+---
+
+Tokens are signed with ES256. The public keys are at `/.well-known/jwks.json`.
+
+A key is rotated in three steps. Each can be repeated safely, and only one rotation runs at a time.
+
+---
+
+## 1. Publish
+
+Add a key that starts signing later. It is in the JWKS at once, so every verifier's cache has it before the first token that needs it.
+
+```ts title="rotate.ts"
+import { addPendingSigningKey } from "@al-ummah-now/openauth/keys"
+
+const HOUR = 60 * 60 * 1000
+
+await addPendingSigningKey(storage, Date.now() + HOUR)
+```
+
+It returns `null` when a pending key is already there.
+
+---
+
+## 2. Switch
+
+Nothing to do. From its time on, the newest live key signs, and the previous one still verifies.
+
+---
+
+## 3. Retire
+
+Once every token the old key signed has expired, retire it. It leaves the JWKS and its private key is deleted.
+
+```ts title="rotate.ts"
+import {
+  listSigningKeys,
+  retireSigningKey,
+} from "@al-ummah-now/openauth/keys"
+
+for (const key of await listSigningKeys(storage)) {
+  if (isDue(key)) await retireSigningKey(storage, key.id)
+}
+```
+
+The key in use can't be retired: the call returns `false`.
+
+---
+
+## How long to wait
+
+| Step | Wait at least |
+|------|---------------|
+| Publish to switch | As long as any verifier caches the JWKS |
+| Switch to retire | The longest lifetime of a token the old key signed |
+
+By default the issuer caches its keys for five minutes, and the client for ten.

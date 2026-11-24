@@ -1,0 +1,82 @@
+---
+title: Passkeys
+description: Sign in with a passkey, in a browser or in a native app.
+---
+
+Passkeys are discoverable and need user verification. There is no attestation, and the algorithms are ES256 and RS256. You store the credentials.
+
+---
+
+## In a browser
+
+The provider has no page of its own. Another sign-in page offers the passkey and posts to it.
+
+```ts title="issuer.ts"
+import { issuer } from "@al-ummah-now/openauth"
+import {
+  PasskeyProvider,
+} from "@al-ummah-now/openauth/provider/passkey"
+
+issuer({
+  providers: {
+    passkey: PasskeyProvider({
+      rpID: () => "example.com",
+      origins: (req) => [new URL(req.url).origin],
+      store: {
+        get: (id) => db.passkey(id),
+        touch: (id, counter) => db.touchPasskey(id, counter),
+      },
+    }),
+  },
+  // ...
+})
+```
+
+A successful sign-in reaches `success` with `userID` and `credentialID`, and the token's `amr` is `passkey`.
+
+---
+
+## Add a passkey
+
+Your app registers passkeys for a person who is already signed in. Ask for a recent sign-in first.
+
+```ts title="register.ts"
+import {
+  registrationOptions,
+  verifyRegistration,
+} from "@al-ummah-now/openauth/passkey"
+
+const options = await registrationOptions({
+  rpID: "example.com",
+  rpName: "Example",
+  userID: user.id,
+  userName: user.email,
+  exclude: await db.passkeysOf(user.id),
+})
+// keep options.challenge, and send options to the browser
+
+const passkey = await verifyRegistration({
+  response,
+  challenge,
+  rpID: "example.com",
+  origins: ["https://example.com"],
+})
+await db.savePasskey(user.id, passkey)
+```
+
+`userID` becomes the WebAuthn user handle. Use a stable id, never an email.
+
+---
+
+## In a native app
+
+With `nativePasskey` set, an app runs the ceremony with the platform's own API and gets an ordinary code to exchange with PKCE.
+
+| Call | Send | Get |
+|------|------|-----|
+| `POST /native/passkey/options` | `client_id`, `code_challenge`, `code_challenge_method` | `challenge_id`, `publicKey` |
+| `POST /native/passkey/verify` | `client_id`, `challenge_id`, `credential` | `code` |
+
+A challenge works once, for two minutes, and only for the client, code challenge and redirect it was made for. Every refused sign-in is the same `401 invalid_credential`, so an answer never says whether an account exists.
+
+`origins` must list `https://<rpID>` for Apple and Windows, and `android:apk-key-hash:…` for each Android signing certificate.

@@ -27,7 +27,7 @@ export const FLOW_PARAM = "auth_flow"
 export const FLOW_BIND_COOKIE = "oa_flow_bind"
 /** Current FlowRecord schema version. */
 export const FLOW_RECORD_VERSION = 1
-/** How long a completed flow is remembered (to recognise a resubmitted form). */
+/** How long a completed flow is remembered (to recognize a resubmitted form). */
 export const FLOW_COMPLETED_TTL = 60 * 60
 
 export interface FlowRecord<A = unknown> {

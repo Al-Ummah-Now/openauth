@@ -1,0 +1,58 @@
+---
+title: Native apps
+description: Redirects and PKCE for phone, desktop and TV apps.
+---
+
+A native app can't keep a secret, so it is a public client that uses PKCE and opens the sign-in in the system browser.
+
+Register it in `clientDb` with no secret and `metadata.type` set to `native`. That alone makes PKCE mandatory for it.
+
+---
+
+## Redirects
+
+A redirect must match a registered one exactly, with one exception.
+
+| Redirect | Example | Matching |
+|----------|---------|----------|
+| A private-use scheme | `com.example.app:/callback` | Exact |
+| Loopback | `http://127.0.0.1/callback` | Exact, except the port: the app picks a free one |
+| A claimed `https` link | `https://example.com/app/callback` | Exact |
+
+`javascript:`, `data:`, `file:`, `blob:` and similar schemes are never accepted.
+
+The same rules are exported, for an `allow` callback of your own.
+
+```ts
+import {
+  redirectUriMatches,
+} from "@al-ummah-now/openauth/client/native"
+
+redirectUriMatches(
+  ["http://127.0.0.1/callback"],
+  "http://127.0.0.1:53124/callback",
+) // true
+```
+
+---
+
+## Sign in
+
+```ts title="app.ts"
+import { createClient } from "@al-ummah-now/openauth/client"
+
+const client = createClient({
+  clientID: "my-app",
+  issuer: "https://auth.example.com",
+})
+
+const { challenge, url } = await client.authorize(
+  "com.example.app:/callback",
+  "code",
+  { pkce: true },
+)
+```
+
+Keep `challenge.state` and `challenge.verifier` on the device until the app is called back. Compare the state, then exchange the code with the verifier.
+
+A device without a browser signs in with a code instead. See [Device sign-in](/docs/fork/device/).
