@@ -8,6 +8,24 @@ test("long tokens break after _ and before /, short ones never", () => {
     "denied",
   ])
   expect(pieces("/users/:id/roles")).toEqual(["/users", "/:id", "/roles"])
+  expect(pieces("pkce.requireForCodeExchange")).toEqual([
+    "pkce.",
+    "require",
+    "For",
+    "Code",
+    "Exchange",
+  ])
+  expect(pieces("http://127.0.0.1/callback")).toEqual([
+    "http:",
+    "//127.0.0.1",
+    "/callback",
+  ])
+  expect(pieces("com.example.app:/callback")).toEqual([
+    "com.",
+    "example.",
+    "app:",
+    "/callback",
+  ])
   for (const short of ["start", "code", "a_b", "/roles/:id", "authorize"])
     expect(pieces(short)).toEqual([short])
 })

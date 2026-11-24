@@ -1,6 +1,6 @@
 /**
- * Lets a long identifier or path in a table cell break after "_" and before "/",
- * so a narrow column wraps it there and never in the middle of a word.
+ * Lets a long identifier or path in a table cell break between its words (after
+ * "_", before "/", in camelCase, after a dot), never in the middle of one.
  */
 interface Node {
   type: string
@@ -12,10 +12,12 @@ interface Node {
 const LONG = 12
 const wbr = (): Node => ({ type: "element", tagName: "wbr", children: [] })
 
-/** Where one word may break: after "_" and before "/". */
+/** The parts of one identifier or path, in the order they are read. */
 export function pieces(word: string): string[] {
   if (word.length < LONG) return [word]
-  return word.split(/(?<=_)(?=[^_])|(?<=[^/])(?=\/)/)
+  return word.split(
+    /(?<=_)(?=[^_])|(?<=[^/])(?=\/)|(?<=[a-z])(?=[A-Z])|(?<=[a-z]\.)(?=[a-z])/,
+  )
 }
 
 /** Text broken into text and <wbr>. */

@@ -100,6 +100,17 @@ export default defineConfig({
           items: ["docs/client", "docs/issuer", "docs/subject"],
         },
         {
+          label: "In this fork",
+          items: [
+            { label: "Clients and PKCE", slug: "docs/fork/clients" },
+            { label: "Native apps", slug: "docs/fork/native" },
+            { label: "Device sign-in", slug: "docs/fork/device" },
+            { label: "Passkeys", slug: "docs/fork/passkeys" },
+            { label: "Refresh and revocation", slug: "docs/fork/refresh" },
+            { label: "Signing keys", slug: "docs/fork/keys" },
+          ],
+        },
+        {
           label: "Providers",
           items: [
             { label: "Code", slug: "docs/provider/code" },
