@@ -26,3 +26,11 @@ $ bun dev
 Now visit `http://localhost:4321` (the astro app) and experience the auth flow.
 
 Or head over to `http://localhost:3000/password/authorize` to try the password flow directly.
+
+## Python and Go
+
+[`client/python`](client/python) and [`client/go`](client/go) use standard OAuth libraries instead of an SDK. CI runs their tests against an issuer it starts; run them yourself with:
+
+```shell
+$ bun examples/test/run.ts
+```
