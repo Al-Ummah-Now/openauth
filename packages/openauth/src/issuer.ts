@@ -2699,6 +2699,15 @@ export function issuer<
         const tokenId = splits.pop()!
         const subject = splits.join(":")
 
+        // SECURITY: only the client the token was issued to may revoke it.
+        // Per RFC 7009, the answer does not say whose token it was, or
+        // whether it exists.
+        const payload = await loadRefreshToken(
+          storage,
+          refreshKey(subject, tokenId),
+        )
+        if (payload?.clientID !== credentials.clientId) return c.json({})
+
         await revocationService.revokeRefreshToken(subject, tokenId)
 
         // Fire audit event if configured

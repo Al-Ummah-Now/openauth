@@ -429,6 +429,41 @@ describe("Enterprise Endpoints", () => {
       expect(body.error).toBe("invalid_grant")
     })
 
+    test("revocation checks client ownership, and answers the same either way", async () => {
+      const own = mockClientDb._mockClients.get("test-client")
+      mockClientDb._mockClients.set("other-client", {
+        ...own,
+        id: "other-client",
+      })
+      const logSpy = spyOn(mockAuditDb, "prepare")
+      const revoke = (token: string, hint?: string) =>
+        auth.request(`${BASE_URL}/token/revoke`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization: `Basic ${btoa("other-client:test-secret")}`,
+          },
+          body: new URLSearchParams({
+            token,
+            ...(hint ? { token_type_hint: hint } : {}),
+          }),
+        })
+      for (const [token, hint] of [
+        [tokens.refresh, "refresh_token"],
+        [tokens.refresh, undefined],
+        ["user:nobody:unknown", "refresh_token"],
+        [tokens.access, undefined],
+      ] as const) {
+        const response = await revoke(token, hint)
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({})
+      }
+      expect(logSpy).not.toHaveBeenCalled()
+
+      const refreshed = await client.refresh(tokens.refresh)
+      expect(refreshed.err).toBe(false)
+    })
+
     test("returns success even for non-existent token (RFC 7009)", async () => {
       const credentials = btoa("test-client:test-secret")
 
