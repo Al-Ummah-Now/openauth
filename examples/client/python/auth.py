@@ -111,6 +111,7 @@ class Auth:
             or claims.get("type") != "user"
             or not isinstance(properties, dict)
             or not isinstance(properties.get("id"), str)
+            or not properties["id"]
         ):
             raise InvalidToken("not a user access token")
         return User(properties["id"], properties)

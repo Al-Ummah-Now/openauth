@@ -31,12 +31,24 @@ const suites: Record<string, { dir: string; command: string[] }> = {
   },
 }
 
+// Interrupted (Ctrl-C, a cancelled job): no issuer is left behind
+let running: ReturnType<typeof Bun.spawn> | undefined
+for (const [signal, code] of [
+  ["SIGINT", 130],
+  ["SIGTERM", 143],
+] as const)
+  process.on(signal, () => {
+    running?.kill()
+    process.exit(code)
+  })
+
 async function run(name: string) {
   const { dir, command } = suites[name]!
   const issuer = Bun.spawn(["bun", join(import.meta.dir, "issuer.ts")], {
     stdout: "pipe",
     stderr: "inherit",
   })
+  running = issuer
   try {
     // Keep reading: an issuer whose output nobody reads would stop on a full pipe
     const reader = issuer.stdout.getReader()
