@@ -419,7 +419,7 @@ export interface IssuerInput<
    * and for the default redirect_uri allow check.
    *
    * When not set, the issuer is derived from the request URL and forwarded
-   * headers (legacy behaviour).
+   * headers (legacy behavior).
    */
   issuer?: string
   /**
@@ -1676,7 +1676,7 @@ export function issuer<
         }
         // SECURITY: if the caller identifies itself (client_id in the form or
         // HTTP Basic auth), it must be the client the token was issued to.
-        // Callers that send no client_id keep working (legacy behaviour).
+        // Callers that send no client_id keep working (legacy behavior).
         // Checked before any reuse bookkeeping so a mismatched request does
         // not consume the token.
         const presentedClientIds = getPresentedClientIds(c, form)

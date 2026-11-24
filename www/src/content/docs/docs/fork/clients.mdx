@@ -1,0 +1,53 @@
+---
+title: Clients and PKCE
+description: Who must use PKCE, and who must prove itself with a secret.
+---
+
+Register your clients in a D1 database and pass it as `clientDb`. The issuer then knows which clients have a secret, which redirects they may use and which grants they may ask for.
+
+```ts title="issuer.ts"
+import { issuer } from "@al-ummah-now/openauth"
+
+issuer({
+  clientDb: env.AUTH_DB,
+  pkce: {
+    requireForPublicClients: true,
+    requireForCodeExchange: true,
+  },
+  requireClientAuthentication: ["web-app"],
+  // ...
+})
+```
+
+Create and rotate clients with the [admin API](/docs/enterprise/admin-api/clients/).
+
+---
+
+## PKCE
+
+Only `S256` is accepted. `plain` is refused everywhere.
+
+| Setting | Who it covers | What it asks |
+|---------|---------------|--------------|
+| `pkce.requireForPublicClients` | Clients with no secret | A code challenge at `/authorize` |
+| `pkce.requireForCodeExchange` | Everyone, a list of client ids, or a function | PKCE or the client's secret at `/token` |
+| The client's `metadata.pkce` is `required` | That client | A code challenge at `/authorize`, whatever the issuer's policy |
+| The client's `metadata.type` is `native` | That client | The same. See [Native apps](/docs/fork/native/) |
+
+Both issuer settings are off by default. Turn them on once every client sends PKCE.
+
+---
+
+## Client secrets
+
+A client listed in `requireClientAuthentication` must send its secret when it exchanges a code and when it refreshes, with or without PKCE. A stolen code or refresh token is then useless on its own.
+
+Send the secret with HTTP Basic, or as `client_secret` in the form. A secret that is sent must be right, whatever the settings.
+
+---
+
+## Codes
+
+A code works once. `ttl.code` sets how long it can be redeemed: 60 seconds by default, at most 600.
+
+Using a code a second time revokes the refresh tokens its first use returned.

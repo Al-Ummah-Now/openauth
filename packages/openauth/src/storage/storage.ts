@@ -164,7 +164,7 @@ async function incrementWithCas(
   }
 }
 
-/** Read-then-write emulation: the behaviour before atomic adapters existed. */
+/** Read-then-write emulation: the behavior before atomic adapters existed. */
 function emulateAtomic(adapter: StorageAdapter): AtomicStorageAdapter {
   return {
     get: (key) => adapter.get(key),
