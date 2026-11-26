@@ -21,6 +21,7 @@ jobs:
       - run: bun install
       - run: cd packages/openauth && bun run build
       - run: cd packages/openauth && bun test
+      - run: bun test examples/client/nextjs/app/components/__tests__/no-browser-prompts.test.ts
       - run: bun test ./www
       - run: bun www/check-samples.ts
       - run: bun test ./scripts/release
