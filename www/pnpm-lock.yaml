@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  minimatch: ">=11.0.1"
+
 dependencies:
   "@astrojs/markdown-remark":
     specifier: ^7.3.10
@@ -1181,6 +1184,13 @@ packages:
     dev: false
     optional: true
 
+  /@isaacs/nonrecursive-glob-match@1.1.0:
+    resolution:
+      {
+        integrity: sha512-GPm/Dbvk5RLmhRnxXIa7nTpK0xtl4E0wj0MslsuNiJ1FIROU+2+9lgUC/dgF7Ey4QCWhfEsgxilMRMCdHPfDfw==,
+      }
+    dev: true
+
   /@jridgewell/sourcemap-codec@1.6.0:
     resolution:
       {
@@ -2197,11 +2207,12 @@ packages:
       }
     dev: false
 
-  /balanced-match@1.0.2:
+  /balanced-match@4.0.4:
     resolution:
       {
-        integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==,
+        integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==,
       }
+    engines: { node: 18 || 20 || >=22 }
     dev: true
 
   /bcp-47-match@2.0.3:
@@ -2229,13 +2240,14 @@ packages:
       }
     dev: false
 
-  /brace-expansion@2.1.8:
+  /brace-expansion@5.1.0:
     resolution:
       {
-        integrity: sha512-BnlDzDYQoplTsZSvPi86CNzmbcb07X8ufR8fk1zivaiEJlXJkiq1MQyDCVmlWcsWbj6aWXqHnrwwevbrm/Saig==,
+        integrity: sha512-aa11Dv491GKnYqxaul3aRJ0szew7yMJMfZPnqD44NjGrZXoj62l41OEDDpdpC4eE2P88vBFfLuSyRhpG91NUvg==,
       }
+    engines: { node: 20 || >=22 }
     dependencies:
-      balanced-match: 1.0.2
+      balanced-match: 4.0.4
     dev: true
 
   /ccount@2.0.1:
@@ -4227,14 +4239,15 @@ packages:
       - supports-color
     dev: false
 
-  /minimatch@9.0.9:
+  /minimatch@11.0.9:
     resolution:
       {
-        integrity: sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==,
+        integrity: sha512-KCFkfyjqerNlSstjlhIGNXIKZGA/6O4V4RlhZ+Dsr621SPPw0mzlypE9D9ZOoPiVefHID+j7/XuMMlqfD/F60Q==,
       }
-    engines: { node: ">=16 || 14 >=14.17" }
+    engines: { node: 20 || >=22 }
     dependencies:
-      brace-expansion: 2.1.8
+      "@isaacs/nonrecursive-glob-match": 1.1.0
+      brace-expansion: 5.1.0
     dev: true
 
   /mri@1.2.0:
@@ -5215,7 +5228,7 @@ packages:
       "@gerrit0/mini-shiki": 1.27.2
       lunr: 2.3.9
       markdown-it: 14.3.3
-      minimatch: 9.0.9
+      minimatch: 11.0.9
       typescript: 5.8.3
       yaml: 2.9.1
     dev: true
