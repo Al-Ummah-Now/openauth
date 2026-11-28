@@ -56,7 +56,6 @@
 import { sessionTokenId } from "../session/token-id.js"
 import { Hono } from "hono/tiny"
 import { cors } from "hono/cors"
-import { logger } from "hono/logger"
 import type { Context, MiddlewareHandler, Next } from "hono"
 
 import type {
@@ -330,7 +329,8 @@ export function createMultiTenantIssuer<
     // A native passkey sign-in (native-passkey.ts) brings its own
     // authorization and never gets a browser session: the app has no cookies
     const nativeAuthorization = c?.get(NATIVE_AUTHORIZATION_KEY as never) as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
     let browserSession = nativeAuthorization ? null : ctx.browserSession
     const authorization = nativeAuthorization ?? ctx.authorization
 
@@ -683,7 +683,6 @@ export function createMultiTenantIssuer<
   }>()
 
   // Add logging
-  app.use(logger())
 
   // ============================================
   // 1. APPLY GLOBAL CORS (if configured)
@@ -781,7 +780,8 @@ export function createMultiTenantIssuer<
       ctx.set("activeAccount", null)
     }
     const authorization = ctx.get("authorization") as
-      EnterpriseAuthorizationState | undefined
+      | EnterpriseAuthorizationState
+      | undefined
 
     if (tenant) {
       ctx.set(ENTERPRISE_CONTEXT_KEY, {
@@ -860,12 +860,21 @@ export function createMultiTenantIssuer<
       nonce: c.req.query("nonce"),
     }
 
-    c.set("authorization", authorization)
-
     // Missing core parameters: let the base issuer produce its standard errors
     // (no prompt / silent-auth handling without a validated redirect_uri).
     if (!authorization.redirect_uri || !authorization.client_id) {
       return forwardRequest(baseIssuer, c)
+    }
+
+    if (!isAllowedRedirectScheme(authorization.redirect_uri)) {
+      return c.json(
+        {
+          error: "unauthorized_client",
+          error_description:
+            "Client is not authorized to use this redirect_uri",
+        },
+        400,
+      )
     }
 
     // SECURITY: validate client_id/redirect_uri BEFORE any prompt handling.
@@ -920,8 +929,6 @@ export function createMultiTenantIssuer<
             event: "authorize_client_rejected",
             mode: config.clientRegistry.mode,
             reason,
-            client_id: authorization.client_id,
-            redirect_uri: authorization.redirect_uri,
             tenant: tenant.id,
           }),
         )
@@ -936,6 +943,7 @@ export function createMultiTenantIssuer<
       }
     }
 
+    c.set("authorization", authorization)
     // PKCE: only S256 is supported
     const challengeMethod = c.req.query("code_challenge_method")
     if (challengeMethod && challengeMethod !== "S256") {
@@ -1272,7 +1280,8 @@ export function createMultiTenantIssuer<
 
     if (err instanceof OauthError) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       if (authorization?.redirect_uri) {
         const url = new URL(authorization.redirect_uri)
         url.searchParams.set("error", err.error)
@@ -1301,7 +1310,8 @@ export function createMultiTenantIssuer<
     }
     if (wantsHtml(c.req.raw)) {
       const authorization = c.get("authorization") as
-        EnterpriseAuthorizationState | undefined
+        | EnterpriseAuthorizationState
+        | undefined
       let locale: string | undefined
       try {
         locale = authorization?.redirect_uri
