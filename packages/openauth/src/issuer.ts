@@ -213,7 +213,6 @@ export type Prettify<T> = {
 import {
   MissingParameterError,
   OauthError,
-  UnauthorizedClientError,
   UnknownStateError,
 } from "./error.js"
 import { compactDecrypt, CompactEncrypt, jwtVerify, SignJWT } from "jose"
@@ -251,7 +250,7 @@ import {
   removeRefreshToken,
   storeRefreshToken,
 } from "./refresh-token.js"
-import { clientRequiresPkce } from "./client/native.js"
+import { clientRequiresPkce, isAllowedRedirectScheme } from "./client/native.js"
 import {
   DEVICE_CODE_GRANT,
   registerDeviceFlow,
@@ -294,12 +293,17 @@ import { getRelativeUrl, isDomainMatch, lazy } from "./util.js"
 import { DynamoStorage } from "./storage/dynamo.js"
 import { MemoryStorage } from "./storage/memory.js"
 import { cors } from "hono/cors"
-import { logger } from "hono/logger"
 import type { D1Database } from "@cloudflare/workers-types"
 import { ClientD1Adapter } from "./client/client-d1-adapter.js"
 import { ClientAuthenticator } from "./client/authenticator.js"
 import { AuditService, type TokenUsageEvent } from "./services/audit.js"
 import { RevocationService } from "./revocation.js"
+import {
+  TOKEN_LIMITS,
+  validFormFields,
+  validScopeString,
+  validScopeToken,
+} from "./request-input.js"
 import { validateScopes, parseScopes, generateM2MToken } from "./m2m/index.js"
 import type { M2MConfig } from "./m2m/types.js"
 
@@ -473,7 +477,9 @@ export interface IssuerInput<
      * @default false
      */
     requireForCodeExchange?:
-      boolean | readonly string[] | ((clientId: string) => boolean)
+      | boolean
+      | readonly string[]
+      | ((clientId: string) => boolean)
   }
   /**
    * Confidential clients that must authenticate with their client secret
@@ -483,7 +489,8 @@ export interface IssuerInput<
    * sends its secret. Needs `clientDb`.
    */
   requireClientAuthentication?:
-    readonly string[] | ((clientId: string) => boolean)
+    | readonly string[]
+    | ((clientId: string) => boolean)
   /**
    * Set the TTL, in seconds, for access and refresh tokens.
    *
@@ -742,7 +749,8 @@ export interface RefreshHookInput {
 
 /** Result of {@link IssuerInput.refresh}. */
 export type RefreshHookResult =
-  { properties: any; revoke?: undefined } | { revoke: true; reason?: string }
+  | { properties: any; revoke?: undefined }
+  | { revoke: true; reason?: string }
 
 export type RefreshHook = (
   input: RefreshHookInput,
@@ -1144,7 +1152,8 @@ export function issuer<
     // A native passkey sign-in carries its own authorization (never a
     // browser's cookie or flow)
     const native = ctx.get(NATIVE_AUTHORIZATION_KEY) as
-      NativeAuthorization | undefined
+      | NativeAuthorization
+      | undefined
     if (native) return native as AuthorizationState
     const flow = await loadFlow(ctx)
     if (flow) {
@@ -1158,7 +1167,8 @@ export function issuer<
       // Storage may lag right after /authorize: accept the legacy cookie, but
       // only when it was written for this same flow (it is browser-bound).
       const cookie = (await auth.get(ctx, "authorization")) as
-        AuthorizationState | undefined
+        | AuthorizationState
+        | undefined
       if (cookie?.flow && cookie.flow === flow.id) return cookie
       throw flowError(
         flow.record ? "mismatch" : "expired",
@@ -1195,7 +1205,8 @@ export function issuer<
       await saveFlow(flow.id, flow.record)
     }
     const cookie = (await auth.get(ctx, "authorization")) as
-      AuthorizationState | undefined
+      | AuthorizationState
+      | undefined
     if (cookie?.flow === flow.id) deleteCookie(ctx, "authorization")
   }
 
@@ -1392,7 +1403,7 @@ export function issuer<
       authorization: AuthorizationState
       resolvedTheme?: Theme
     }
-  }>().use(logger())
+  }>()
 
   // The theme travels with the request. The enterprise issuer has already set
   // this request's tenant theme (and tenant context) when it mounts or forwards
@@ -1523,7 +1534,16 @@ export function issuer<
       credentials: false,
     }),
     async (c) => {
-      const form = await c.req.formData()
+      const form = await c.req.formData().catch(() => null)
+      if (!form || !validFormFields(form, TOKEN_LIMITS)) {
+        return c.json(
+          {
+            error: "invalid_request",
+            error_description: "Invalid token request",
+          },
+          400,
+        )
+      }
       const grantType = form.get("grant_type")
 
       if (grantType === DEVICE_CODE_GRANT && deviceToken) {
@@ -1947,8 +1967,22 @@ export function issuer<
           }
 
           // Parse and validate scopes
-          const requestedScopes = parseScopes(form.get("scope")?.toString())
-          const allowedScopes = client.scopes || []
+          const scope = form.get("scope")
+          if (typeof scope === "string" && !validScopeString(scope)) {
+            return c.json(
+              {
+                error: "invalid_scope",
+                error_description: "Invalid scope syntax",
+              },
+              400,
+            )
+          }
+          const requestedScopes = parseScopes(
+            typeof scope === "string" ? scope : undefined,
+          )
+          const allowedScopes = (client.scopes || []).filter(
+            (scope) => typeof scope === "string" && validScopeToken(scope),
+          )
 
           const scopeResult = validateScopes(requestedScopes, allowedScopes)
           if (!scopeResult.valid) {
@@ -2062,8 +2096,6 @@ export function issuer<
             }
           : undefined,
     } as AuthorizationState
-    c.set("authorization", authorization)
-
     if (!redirect_uri) {
       return c.text("Missing redirect_uri", { status: 400 })
     }
@@ -2076,11 +2108,8 @@ export function issuer<
       throw new MissingParameterError("client_id")
     }
 
-    if (input.start) {
-      await input.start(c.req.raw)
-    }
-
     if (
+      !isAllowedRedirectScheme(redirect_uri) ||
       !(await allow()(
         {
           clientID: client_id,
@@ -2091,7 +2120,21 @@ export function issuer<
         c,
       ))
     )
-      throw new UnauthorizedClientError(client_id, redirect_uri)
+      return c.json(
+        {
+          error: "unauthorized_client",
+          error_description:
+            "Client is not authorized to use this redirect_uri",
+        },
+        400,
+      )
+
+    c.set("authorization", authorization)
+    if (provider && !Object.hasOwn(input.providers, provider)) {
+      throw new OauthError("invalid_request", "Unknown provider")
+    }
+    if (input.start) await input.start(c.req.raw)
+
     // PKCE: only S256 is supported (and advertised). Reject other methods
     // up-front instead of failing later at the token endpoint.
     if (code_challenge_method && code_challenge_method !== "S256") {
