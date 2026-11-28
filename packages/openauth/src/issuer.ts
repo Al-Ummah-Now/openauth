@@ -477,9 +477,7 @@ export interface IssuerInput<
      * @default false
      */
     requireForCodeExchange?:
-      | boolean
-      | readonly string[]
-      | ((clientId: string) => boolean)
+      boolean | readonly string[] | ((clientId: string) => boolean)
   }
   /**
    * Confidential clients that must authenticate with their client secret
@@ -489,8 +487,7 @@ export interface IssuerInput<
    * sends its secret. Needs `clientDb`.
    */
   requireClientAuthentication?:
-    | readonly string[]
-    | ((clientId: string) => boolean)
+    readonly string[] | ((clientId: string) => boolean)
   /**
    * Set the TTL, in seconds, for access and refresh tokens.
    *
@@ -749,8 +746,7 @@ export interface RefreshHookInput {
 
 /** Result of {@link IssuerInput.refresh}. */
 export type RefreshHookResult =
-  | { properties: any; revoke?: undefined }
-  | { revoke: true; reason?: string }
+  { properties: any; revoke?: undefined } | { revoke: true; reason?: string }
 
 export type RefreshHook = (
   input: RefreshHookInput,
@@ -1152,8 +1148,7 @@ export function issuer<
     // A native passkey sign-in carries its own authorization (never a
     // browser's cookie or flow)
     const native = ctx.get(NATIVE_AUTHORIZATION_KEY) as
-      | NativeAuthorization
-      | undefined
+      NativeAuthorization | undefined
     if (native) return native as AuthorizationState
     const flow = await loadFlow(ctx)
     if (flow) {
@@ -1167,8 +1162,7 @@ export function issuer<
       // Storage may lag right after /authorize: accept the legacy cookie, but
       // only when it was written for this same flow (it is browser-bound).
       const cookie = (await auth.get(ctx, "authorization")) as
-        | AuthorizationState
-        | undefined
+        AuthorizationState | undefined
       if (cookie?.flow && cookie.flow === flow.id) return cookie
       throw flowError(
         flow.record ? "mismatch" : "expired",
@@ -1205,8 +1199,7 @@ export function issuer<
       await saveFlow(flow.id, flow.record)
     }
     const cookie = (await auth.get(ctx, "authorization")) as
-      | AuthorizationState
-      | undefined
+      AuthorizationState | undefined
     if (cookie?.flow === flow.id) deleteCookie(ctx, "authorization")
   }
 
