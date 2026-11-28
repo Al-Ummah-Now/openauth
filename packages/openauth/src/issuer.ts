@@ -300,6 +300,7 @@ import { AuditService, type TokenUsageEvent } from "./services/audit.js"
 import { RevocationService } from "./revocation.js"
 import {
   TOKEN_LIMITS,
+  TOKEN_LOOKUP_LIMITS,
   validFormFields,
   validScopeString,
   validScopeToken,
@@ -2536,7 +2537,16 @@ export function issuer<
       )
     }
 
-    const form = await c.req.formData()
+    const form = await c.req.formData().catch(() => null)
+    if (!form || !validFormFields(form, TOKEN_LOOKUP_LIMITS)) {
+      return c.json(
+        {
+          error: "invalid_request",
+          error_description: "Invalid token request",
+        },
+        400,
+      )
+    }
     const token = form.get("token")?.toString()
 
     if (!token) {
@@ -2668,7 +2678,16 @@ export function issuer<
       )
     }
 
-    const form = await c.req.formData()
+    const form = await c.req.formData().catch(() => null)
+    if (!form || !validFormFields(form, TOKEN_LOOKUP_LIMITS)) {
+      return c.json(
+        {
+          error: "invalid_request",
+          error_description: "Invalid token request",
+        },
+        400,
+      )
+    }
     const token = form.get("token")?.toString()
     const tokenTypeHint = form.get("token_type_hint")?.toString()
 

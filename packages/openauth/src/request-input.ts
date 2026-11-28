@@ -12,7 +12,14 @@ export const TOKEN_LIMITS: Readonly<Record<string, number>> = {
   install_id: 256,
 }
 
-const KEY_FIELDS = new Set(["code", "refresh_token", "device_code"])
+export const TOKEN_LOOKUP_LIMITS: Readonly<Record<string, number>> = {
+  token: 16384,
+  token_type_hint: 64,
+  client_id: TOKEN_LIMITS.client_id!,
+  client_secret: TOKEN_LIMITS.client_secret!,
+}
+
+const KEY_FIELDS = new Set(["code", "refresh_token", "device_code", "token"])
 const CONTROL = /[\x00-\x1f\x7f-\x9f\u2028\u2029]/
 const SCOPE_TOKEN = /^[\x21\x23-\x5b\x5d-\x7e]+$/
 
@@ -28,7 +35,7 @@ export function validFormFields(
         (value) =>
           typeof value === "string" &&
           value.length <= length &&
-          !CONTROL.test(value) &&
+          (key === "scope" || !CONTROL.test(value)) &&
           (!KEY_FIELDS.has(key) || !value.includes("::")),
       )
     )

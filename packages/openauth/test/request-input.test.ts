@@ -7,6 +7,7 @@ import { PasswordProvider } from "../src/provider/password.js"
 import { PasswordUI } from "../src/ui/password.js"
 import {
   TOKEN_LIMITS,
+  TOKEN_LOOKUP_LIMITS,
   validFormFields,
   validScopeString,
 } from "../src/request-input.js"
@@ -82,6 +83,10 @@ describe("issuer input boundaries", () => {
     expect(validFormFields(form, TOKEN_LIMITS)).toBe(false)
     form.set("refresh_token", "user::code")
     expect(validFormFields(form, TOKEN_LIMITS)).toBe(false)
+    form.set("token", "user:code")
+    expect(validFormFields(form, TOKEN_LOOKUP_LIMITS)).toBe(true)
+    form.append("token", "another")
+    expect(validFormFields(form, TOKEN_LOOKUP_LIMITS)).toBe(false)
     expect(validScopeString("read:public write:private")).toBe(true)
     expect(validScopeString("read:public\nwrite:private")).toBe(false)
   })
