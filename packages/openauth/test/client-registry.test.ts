@@ -216,10 +216,11 @@ describe("client registry (report / off)", () => {
         }
       })
       .find((e) => e?.event === "authorize_client_rejected")
+    expect(entry).not.toHaveProperty("redirect_uri")
+    expect(entry).not.toHaveProperty("client_id")
     expect(entry).toMatchObject({
       mode: "report",
       reason: "unknown_client",
-      client_id: "undefined",
     })
   })
 

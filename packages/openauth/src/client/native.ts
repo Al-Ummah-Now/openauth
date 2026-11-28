@@ -61,8 +61,10 @@ export function isLoopbackRedirect(uri: string): boolean {
 
 /** Schemes a registered redirect may use: https, loopback http, or a private-use scheme. */
 export function isAllowedRedirectScheme(uri: string): boolean {
+  if (uri.length > 4096 || /[\s\\]/u.test(uri) || uri.includes("#"))
+    return false
   const url = parse(uri)
-  if (!url) return false
+  if (!url || url.username || url.password) return false
   if (url.protocol === "https:") return true
   if (url.protocol === "http:")
     return LOOPBACK_HOSTS.has(url.hostname) || url.hostname === "localhost"

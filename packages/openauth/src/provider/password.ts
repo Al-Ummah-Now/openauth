@@ -39,6 +39,7 @@
  */
 import { Storage } from "../storage/storage.js"
 import { Provider } from "./provider.js"
+import { isAllowedRedirectScheme } from "../client/native.js"
 import { renderOptions, type RenderOptions } from "../ui/render.js"
 import { generateUnbiasedDigits, timingSafeCompare } from "../random.js"
 import { v1 } from "@standard-schema/spec"
@@ -52,6 +53,12 @@ export interface PasswordHasher<T> {
 }
 
 export interface PasswordConfig {
+  /** Explicitly approve a password-reset return URL outside the issuer origin. */
+  allowChangeRedirect?: (
+    redirectUri: string,
+    request: Request,
+  ) => boolean | Promise<boolean>
+
   /**
    * @internal
    */
@@ -340,6 +347,46 @@ export type PasswordLoginError =
       type: "invalid_email"
     }
 
+type StoredChangeState = PasswordChangeState & {
+  approvedExternalRedirect?: true
+}
+
+// One mailbox and no characters reserved in storage keys.
+const EMAIL =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
+function formText(
+  form: FormData,
+  key: string,
+  limit: number,
+): string | undefined {
+  const entries = form.getAll(key)
+  const [value] = entries
+  return entries.length === 1 &&
+    typeof value === "string" &&
+    value.length <= limit
+    ? value
+    : undefined
+}
+
+function formEmail(form: FormData): string | undefined {
+  const value = formText(form, "email", 254)?.trim().toLowerCase()
+  return value && EMAIL.test(value) ? value : undefined
+}
+
+function sameOriginReturn(target: unknown, source: string): boolean {
+  if (
+    typeof target !== "string" ||
+    /[\x00-\x1f\x7f-\x9f\s\\]/u.test(target) ||
+    target.length > 4096 ||
+    target.startsWith("//")
+  )
+    return false
+  if (target.startsWith("/")) return true
+  if (!isAllowedRedirectScheme(target)) return false
+  return new URL(target).origin === new URL(source).origin
+}
+
 export function PasswordProvider(
   config: PasswordConfig,
 ): Provider<{ email: string }> {
@@ -375,14 +422,14 @@ export function PasswordProvider(
             await config.login(c.req.raw, fd, err, renderOptions(c)),
           )
         }
-        const email = fd.get("email")?.toString()?.toLowerCase()
+        const email = formEmail(fd)
         if (!email) return error({ type: "invalid_email" })
         const hash = await Storage.get<HashedPassword>(ctx.storage, [
           "email",
           email,
           "password",
         ])
-        const password = fd.get("password")?.toString()
+        const password = formText(fd, "password", 4096)
         if (!password || !hash || !(await hasher.verify(password, hash)))
           return error({ type: "invalid_password" })
 
@@ -444,8 +491,8 @@ export function PasswordProvider(
 
       routes.post("/register", async (c) => {
         const fd = await c.req.formData()
-        const email = fd.get("email")?.toString()?.toLowerCase()
-        const action = fd.get("action")?.toString()
+        const email = formEmail(fd)
+        const action = formText(fd, "action", 32)
         // No state (stale tab, expired or cleared cookie): restart the
         // registration form instead of failing.
         const provider: PasswordRegisterState = (await ctx.get<
@@ -469,8 +516,8 @@ export function PasswordProvider(
         }
 
         if (action === "register" && provider.type === "start") {
-          const password = fd.get("password")?.toString()
-          const repeat = fd.get("repeat")?.toString()
+          const password = formText(fd, "password", 4096)
+          const repeat = formText(fd, "repeat", 4096)
           if (!email) return transition(provider, { type: "invalid_email" })
           if (!password)
             return transition(provider, { type: "invalid_password" })
@@ -531,7 +578,7 @@ export function PasswordProvider(
         }
 
         if (action === "verify" && provider.type === "code") {
-          const code = fd.get("code")?.toString()
+          const code = formText(fd, "code", 32)
           if (!(await codeAccepted(provider.email, code, provider.code)))
             return transition(provider, { type: "invalid_code" })
           const existing = await Storage.get(ctx.storage, [
@@ -555,12 +602,24 @@ export function PasswordProvider(
       })
 
       routes.get("/change", async (c) => {
-        let redirect =
-          c.req.query("redirect_uri") ||
-          withFlowParams(getRelativeUrl(c, "./authorize"), c.req.url)
-        const state: PasswordChangeState = {
+        const redirects = c.req.queries("redirect_uri") ?? []
+        const requested = redirects.length === 1 ? redirects[0] : undefined
+        const internal = requested && sameOriginReturn(requested, c.req.url)
+        const external =
+          requested &&
+          !internal &&
+          isAllowedRedirectScheme(requested) &&
+          (await config.allowChangeRedirect?.(requested, c.req.raw))
+        const state: StoredChangeState = {
           type: "start",
-          redirect,
+          redirect:
+            (internal || external) && requested
+              ? requested
+              : withFlowParams(
+                  new URL("./authorize", c.req.url).toString(),
+                  c.req.url,
+                ),
+          ...(external ? { approvedExternalRedirect: true } : {}),
         }
         await ctx.set(c, "provider", 60 * 60 * 24, state)
         return ctx.forward(
@@ -577,21 +636,35 @@ export function PasswordProvider(
 
       routes.post("/change", async (c) => {
         const fd = await c.req.formData()
-        const action = fd.get("action")?.toString()
+        const action = formText(fd, "action", 32)
         // No state (stale tab, expired or cleared cookie): restart the
         // change-password form instead of failing.
-        const provider: PasswordChangeState = (await ctx.get<
-          PasswordChangeState | undefined
-        >(c, "provider")) ?? {
-          type: "start",
-          redirect: withFlowParams(getRelativeUrl(c, "./authorize"), c.req.url),
-        }
+        const fallback = withFlowParams(
+          new URL("./authorize", c.req.url).toString(),
+          c.req.url,
+        )
+        const provider: StoredChangeState = (await ctx.get<
+          StoredChangeState | undefined
+        >(c, "provider")) ?? { type: "start", redirect: fallback }
+        const redirect =
+          sameOriginReturn(provider.redirect, c.req.url) ||
+          (provider.approvedExternalRedirect &&
+            config.allowChangeRedirect &&
+            isAllowedRedirectScheme(provider.redirect))
+            ? provider.redirect
+            : fallback
 
         async function transition(
           next: PasswordChangeState,
           err?: PasswordChangeError,
         ) {
-          await ctx.set<PasswordChangeState>(c, "provider", 60 * 60 * 24, next)
+          await ctx.set<StoredChangeState>(c, "provider", 60 * 60 * 24, {
+            ...next,
+            redirect,
+            ...(provider.approvedExternalRedirect
+              ? { approvedExternalRedirect: true }
+              : {}),
+          })
           return ctx.forward(
             c,
             await config.change(c.req.raw, next, fd, err, renderOptions(c)),
@@ -599,7 +672,7 @@ export function PasswordProvider(
         }
 
         if (action === "code") {
-          const email = fd.get("email")?.toString()?.toLowerCase()
+          const email = formEmail(fd)
           if (!email)
             return transition(
               { type: "start", redirect: provider.redirect },
@@ -622,7 +695,7 @@ export function PasswordProvider(
         }
 
         if (action === "verify" && provider.type === "code") {
-          const code = fd.get("code")?.toString()
+          const code = formText(fd, "code", 32)
           if (!(await codeAccepted(provider.email, code, provider.code)))
             return transition(provider, { type: "invalid_code" })
           return transition({
@@ -638,10 +711,10 @@ export function PasswordProvider(
             provider.email,
             "password",
           ])
-          if (!existing) return c.redirect(provider.redirect, 302)
+          if (!existing) return c.redirect(redirect, 302)
 
-          const password = fd.get("password")?.toString()
-          const repeat = fd.get("repeat")?.toString()
+          const password = formText(fd, "password", 4096)
+          const repeat = formText(fd, "repeat", 4096)
           if (!password)
             return transition(provider, { type: "invalid_password" })
           if (password !== repeat)
@@ -690,7 +763,7 @@ export function PasswordProvider(
             await config.onPasswordChanged(provider.email)
           }
 
-          return c.redirect(provider.redirect, 302)
+          return c.redirect(redirect, 302)
         }
 
         return transition({ type: "start", redirect: provider.redirect })

@@ -56,7 +56,6 @@
 import { sessionTokenId } from "../session/token-id.js"
 import { Hono } from "hono/tiny"
 import { cors } from "hono/cors"
-import { logger } from "hono/logger"
 import type { Context, MiddlewareHandler, Next } from "hono"
 
 import type {
@@ -683,7 +682,6 @@ export function createMultiTenantIssuer<
   }>()
 
   // Add logging
-  app.use(logger())
 
   // ============================================
   // 1. APPLY GLOBAL CORS (if configured)
@@ -860,12 +858,21 @@ export function createMultiTenantIssuer<
       nonce: c.req.query("nonce"),
     }
 
-    c.set("authorization", authorization)
-
     // Missing core parameters: let the base issuer produce its standard errors
     // (no prompt / silent-auth handling without a validated redirect_uri).
     if (!authorization.redirect_uri || !authorization.client_id) {
       return forwardRequest(baseIssuer, c)
+    }
+
+    if (!isAllowedRedirectScheme(authorization.redirect_uri)) {
+      return c.json(
+        {
+          error: "unauthorized_client",
+          error_description:
+            "Client is not authorized to use this redirect_uri",
+        },
+        400,
+      )
     }
 
     // SECURITY: validate client_id/redirect_uri BEFORE any prompt handling.
@@ -920,8 +927,6 @@ export function createMultiTenantIssuer<
             event: "authorize_client_rejected",
             mode: config.clientRegistry.mode,
             reason,
-            client_id: authorization.client_id,
-            redirect_uri: authorization.redirect_uri,
             tenant: tenant.id,
           }),
         )
@@ -936,6 +941,7 @@ export function createMultiTenantIssuer<
       }
     }
 
+    c.set("authorization", authorization)
     // PKCE: only S256 is supported
     const challengeMethod = c.req.query("code_challenge_method")
     if (challengeMethod && challengeMethod !== "S256") {
