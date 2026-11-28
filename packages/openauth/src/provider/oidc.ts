@@ -43,6 +43,8 @@ export interface OidcConfig {
    * ```
    */
   clientID: string
+  /** Additional trusted HTTPS origins serving the issuer’s JWKS document. */
+  jwksOrigins?: string[]
   /**
    * The URL of your authorization server.
    *
@@ -105,21 +107,50 @@ export function OidcProvider(
   const query = config.query || {}
   const scopes = config.scopes || []
 
-  const wk = lazy(() =>
-    fetch(config.issuer + "/.well-known/openid-configuration").then(
-      async (r) => {
-        if (!r.ok) throw new Error(await r.text())
-        return r.json() as Promise<WellKnown>
-      },
-    ),
+  const issuer = new URL(config.issuer)
+  const isLoopback = ["localhost", "127.0.0.1", "[::1]"].includes(
+    issuer.hostname,
   )
+  const secure = (url: URL) =>
+    url.protocol === "https:" ||
+    (isLoopback && url.protocol === "http:" && url.origin === issuer.origin)
+  if (
+    !secure(issuer) ||
+    issuer.username ||
+    issuer.password ||
+    issuer.search ||
+    issuer.hash
+  ) {
+    throw new Error("OIDC issuer URL is not trusted")
+  }
+  const trustedJwksOrigins = new Set([
+    issuer.origin,
+    ...(config.jwksOrigins ?? []),
+  ])
+  const wk = lazy(async () => {
+    const r = await fetch(
+      config.issuer.replace(/\/$/, "") + "/.well-known/openid-configuration",
+      { redirect: "error" },
+    )
+    if (!r.ok) throw new Error("OIDC discovery failed")
+    return r.json() as Promise<WellKnown>
+  })
 
   const jwks = lazy(() =>
     wk()
       .then((r) => r.jwks_uri)
       .then(async (uri) => {
-        const r = await fetch(uri)
-        if (!r.ok) throw new Error(await r.text())
+        const endpoint = new URL(uri)
+        if (
+          !secure(endpoint) ||
+          endpoint.username ||
+          endpoint.password ||
+          !trustedJwksOrigins.has(endpoint.origin)
+        ) {
+          throw new Error("OIDC JWKS origin is not trusted")
+        }
+        const r = await fetch(endpoint, { redirect: "error" })
+        if (!r.ok) throw new Error("OIDC JWKS request failed")
         return createLocalJWKSet((await r.json()) as JSONWebKeySet)
       }),
   )
@@ -137,6 +168,17 @@ export function OidcProvider(
         const authorization = new URL(
           await wk().then((r) => r.authorization_endpoint),
         )
+        if (
+          !secure(authorization) ||
+          authorization.username ||
+          authorization.password ||
+          authorization.hash
+        ) {
+          throw new OauthError("server_error", "Invalid authorization endpoint")
+        }
+        for (const [key, value] of Object.entries(query)) {
+          authorization.searchParams.set(key, value)
+        }
         authorization.searchParams.set("client_id", config.clientID)
         authorization.searchParams.set("response_type", "id_token")
         authorization.searchParams.set("response_mode", "form_post")
@@ -144,26 +186,36 @@ export function OidcProvider(
         authorization.searchParams.set("nonce", provider.nonce)
         authorization.searchParams.set("redirect_uri", provider.redirect)
         authorization.searchParams.set("scope", ["openid", ...scopes].join(" "))
-        for (const [key, value] of Object.entries(query)) {
-          authorization.searchParams.set(key, value)
-        }
         return c.redirect(authorization.toString())
       })
 
       routes.post("/callback", async (c) => {
         const provider = await ctx.get<ProviderState>(c, "provider")
         if (!provider) return c.redirect(getRelativeUrl(c, "./authorize"))
-        const body = await c.req.formData()
-        const error = body.get("error")
-        if (error)
+        const body = await c.req.formData().catch(() => null)
+        if (
+          !body ||
+          body.getAll("state").length !== 1 ||
+          body.get("state") !== provider.state
+        ) {
+          throw new OauthError("invalid_request", "Invalid state")
+        }
+        if (body.has("error")) {
           throw new OauthError(
-            error.toString() as any,
-            body.get("error_description")?.toString() || "",
+            "access_denied",
+            "The provider rejected authorization",
           )
+        }
         const idToken = body.get("id_token")
-        if (!idToken)
+        if (
+          body.getAll("id_token").length !== 1 ||
+          typeof idToken !== "string" ||
+          !idToken ||
+          idToken.length > 16384
+        )
           throw new OauthError("invalid_request", "Missing id_token")
-        const result = await jwtVerify(idToken.toString(), await jwks(), {
+        const result = await jwtVerify(idToken, await jwks(), {
+          issuer: config.issuer,
           audience: config.clientID,
         })
         if (result.payload.nonce !== provider.nonce) {
